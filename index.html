@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>星环闪避</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-bg" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-radial bg-radial-a"></div>
+    <div class="bg-radial bg-radial-b"></div>
+  </div>
+
+  <main class="app">
+    <section class="topbar">
+      <div class="brand-block">
+        <p class="kicker">Arcade / Survival Run</p>
+        <div class="brand-row">
+          <h1>星环闪避</h1>
+          <span class="build-tag">v1.1</span>
+        </div>
+        <p class="subtitle">在封锁航道中机动穿梭，规避陨石流，回收高能核心并主动清障。</p>
+      </div>
+
+      <div class="top-stats">
+        <article class="metric-card">
+          <span class="metric-label">分数</span>
+          <strong class="metric-value" id="score">0</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">生命</span>
+          <strong class="metric-value" id="health">3</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">最高</span>
+          <strong class="metric-value" id="best">0</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="stage-layout">
+      <aside class="side-panel">
+        <section class="info-panel">
+          <p class="panel-label">任务概要</p>
+          <div class="mission-stack">
+            <div class="mission-item">
+              <span class="mission-index" style="--i: 0">01</span>
+              <div>
+                <h2>生存</h2>
+                <p>持续规避追踪陨石，维持机体完整度。</p>
+              </div>
+            </div>
+            <div class="mission-item">
+              <span class="mission-index" style="--i: 1">02</span>
+              <div>
+                <h2>回收</h2>
+                <p>接触蓝色能量核以获得高额分数补给。</p>
+              </div>
+            </div>
+            <div class="mission-item">
+              <span class="mission-index" style="--i: 2">03</span>
+              <div>
+                <h2>火力</h2>
+                <p>使用激光清除障碍，优先处理大型陨石。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="control-panel">
+          <p class="panel-label">操作</p>
+          <div class="key-grid wasd-grid">
+            <div class="key empty"></div>
+            <div class="key move-key">W</div>
+            <div class="key empty"></div>
+            <div class="key move-key">A</div>
+            <div class="key move-key">S</div>
+            <div class="key move-key">D</div>
+          </div>
+          <div class="key-grid action-grid">
+            <div class="key fire-key" title="发射激光">J</div>
+            <div class="key wide action-key">Space</div>
+            <div class="key action-key">P</div>
+            <div class="key action-key">Esc</div>
+            <div class="key empty"></div>
+          </div>
+          <div class="control-notes">
+            <p>方向键或 WASD 移动</p>
+            <p>J 发射激光</p>
+            <p>Space 开始或重开，P 或 Esc 暂停</p>
+          </div>
+        </section>
+      </aside>
+
+      <section class="playfield-shell">
+        <div class="stage-frame">
+          <div class="stage-head">
+            <div>
+              <p class="panel-label">战术视图</p>
+              <p class="stage-caption">Hazard Field Monitor</p>
+            </div>
+            <div class="signal-group" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+
+          <div class="playfield">
+            <canvas id="game" width="960" height="600" aria-label="游戏画面"></canvas>
+            <div class="scanlines" aria-hidden="true"></div>
+            <div class="touch-controls" aria-label="触控操作">
+              <div class="touch-dpad">
+                <button class="touch-button touch-empty" type="button" aria-hidden="true" tabindex="-1"></button>
+                <button class="touch-button" type="button" data-touch-key="ArrowUp" aria-label="向上">▲</button>
+                <button class="touch-button touch-empty" type="button" aria-hidden="true" tabindex="-1"></button>
+                <button class="touch-button" type="button" data-touch-key="ArrowLeft" aria-label="向左">◀</button>
+                <button class="touch-button" type="button" data-touch-key="ArrowDown" aria-label="向下">▼</button>
+                <button class="touch-button" type="button" data-touch-key="ArrowRight" aria-label="向右">▶</button>
+              </div>
+              <div class="touch-actions">
+                <button class="touch-button touch-fire" type="button" data-touch-action="fire" aria-label="发射">J</button>
+                <button class="touch-button" type="button" data-touch-action="pause" aria-label="暂停">P</button>
+              </div>
+            </div>
+
+            <div class="overlay" id="overlay">
+              <div class="overlay-panel">
+                <p class="panel-label">Web Arcade</p>
+                <h2 id="overlay-title">按空格开始</h2>
+                <p id="overlay-text">方向键或 WASD 移动，J 发射激光，P 或 Esc 暂停。拾取蓝色能量核得分，激光可以击碎陨石。</p>
+                <div class="overlay-stats hidden" id="overlay-stats" aria-live="polite">
+                  <div class="overlay-stat-grid" id="overlay-stat-grid"></div>
+                  <p class="overlay-record hidden" id="overlay-record">新纪录已建立</p>
+                </div>
+                <button id="start-button" type="button">开始游戏</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
