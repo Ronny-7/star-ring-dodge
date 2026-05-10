@@ -1139,3 +1139,130 @@ body.force-landscape .app {
   transform: rotate(90deg) translateY(-100%);
   transform-origin: top left;
 }
+
+body.force-landscape .topbar {
+  display: none;
+}
+
+body.force-landscape .stage-layout,
+body.force-landscape .playfield-shell,
+body.force-landscape .stage-frame {
+  width: 100%;
+  height: 100%;
+}
+
+body.force-landscape .stage-frame {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #050914;
+  box-shadow: none;
+}
+
+body.force-landscape .stage-frame::before {
+  display: none;
+}
+
+body.force-landscape .stage-head {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  display: block;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+}
+
+body.force-landscape .stage-head > div,
+body.force-landscape .stage-head .signal-group {
+  display: none;
+}
+
+body.force-landscape .orientation-button {
+  height: 32px;
+  padding: 0 10px;
+  border-color: rgba(223, 247, 255, 0.24);
+  background: rgba(6, 13, 25, 0.64);
+  font-size: 0.75rem;
+}
+
+body.force-landscape .playfield {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+body.force-landscape .orientation-hint {
+  display: none;
+}
+
+body.force-landscape .touch-controls {
+  inset: auto 10px 10px;
+  align-items: end;
+}
+
+body.force-landscape .gesture-ring {
+  width: 72px;
+  height: 72px;
+}
+
+body.force-landscape .gesture-thumb {
+  width: 30px;
+  height: 30px;
+}
+
+body.force-landscape .touch-button {
+  width: 40px;
+  height: 40px;
+}
+
+body.force-landscape .touch-fire {
+  width: 54px;
+  height: 54px;
+}
+
+body.force-landscape .overlay {
+  padding: 8px 56px 8px 8px;
+}
+
+body.force-landscape .overlay-panel {
+  width: min(420px, 100%);
+  max-height: calc(100dvw - 16px);
+  padding: 12px;
+}
+
+body.force-landscape .overlay-panel h2 {
+  margin: 6px 0;
+  font-size: 1.3rem;
+}
+
+body.force-landscape .overlay-panel p:last-of-type {
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+body.force-landscape .overlay-stats {
+  margin-top: 10px;
+}
+
+body.force-landscape .overlay-stat-grid {
+  gap: 6px;
+}
+
+body.force-landscape .overlay-stat-card {
+  padding: 7px 8px;
+}
+
+body.force-landscape .overlay-stat-value {
+  margin-top: 4px;
+  font-size: 0.92rem;
+}
+
+body.force-landscape .overlay-panel > button {
+  width: 100%;
+  height: 40px;
+  margin-top: 10px;
+}
