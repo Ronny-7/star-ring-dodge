@@ -685,6 +685,7 @@ button:active {
   border: 1px solid rgba(148, 201, 255, 0.28);
   background: rgba(8, 17, 32, 0.72);
   color: #dff7ff;
+  font-size: 0.82rem;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
   pointer-events: auto;
   user-select: none;
@@ -703,6 +704,7 @@ button:active {
   width: 68px;
   height: 68px;
   color: #08111d;
+  font-size: 0.88rem;
   background: linear-gradient(135deg, #62e4ff 0%, #8affd1 100%);
 }
 
@@ -1096,12 +1098,12 @@ body.landscape-layout .playfield {
 }
 
 body.landscape-layout .touch-controls {
-  inset: auto 8px 8px;
+  inset: auto 22px 18px;
 }
 
 body.landscape-layout .gesture-ring {
-  width: 88px;
-  height: 88px;
+  width: 96px;
+  height: 96px;
 }
 
 body.landscape-layout .gesture-thumb {
@@ -1114,12 +1116,12 @@ body.landscape-layout .gesture-pad span {
 }
 
 body.landscape-layout .touch-button {
-  width: 42px;
-  height: 42px;
+  width: 50px;
+  height: 46px;
 }
 
 body.landscape-layout .touch-fire {
-  width: 58px;
+  width: 62px;
   height: 58px;
 }
 
@@ -1200,13 +1202,13 @@ body.force-landscape .orientation-hint {
 }
 
 body.force-landscape .touch-controls {
-  inset: auto 10px 10px;
+  inset: auto 28px 22px;
   align-items: end;
 }
 
 body.force-landscape .gesture-ring {
-  width: 72px;
-  height: 72px;
+  width: 96px;
+  height: 96px;
 }
 
 body.force-landscape .gesture-thumb {
@@ -1215,13 +1217,13 @@ body.force-landscape .gesture-thumb {
 }
 
 body.force-landscape .touch-button {
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 46px;
 }
 
 body.force-landscape .touch-fire {
-  width: 54px;
-  height: 54px;
+  width: 62px;
+  height: 58px;
 }
 
 body.force-landscape .overlay {

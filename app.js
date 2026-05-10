@@ -55,6 +55,14 @@ function syncLandscapeUi() {
   }
 }
 
+function isForceLandscapeMode() {
+  return document.body.classList.contains("force-landscape");
+}
+
+function isCompactLandscapeMode() {
+  return document.body.classList.contains("landscape-layout");
+}
+
 function refreshCanvasSoon() {
   syncLandscapeUi();
   requestAnimationFrame(() => {
@@ -1338,17 +1346,19 @@ function updateGestureVisual() {
     return;
   }
 
-  const thumbRange = 36;
+  const thumbRange = isCompactLandscapeMode() ? 30 : 36;
   gesturePad.style.setProperty("--gesture-x", `${gestureMovement.dx * thumbRange}px`);
   gesturePad.style.setProperty("--gesture-y", `${gestureMovement.dy * thumbRange}px`);
   gesturePad.classList.toggle("is-active", gestureMovement.active);
 }
 
 function setGestureMovement(event) {
-  const maxDistance = 48;
-  const deadZone = 7;
-  const rawX = event.clientX - gestureMovement.startX;
-  const rawY = event.clientY - gestureMovement.startY;
+  const maxDistance = isCompactLandscapeMode() ? 30 : 48;
+  const deadZone = isCompactLandscapeMode() ? 4 : 7;
+  const screenX = event.clientX - gestureMovement.startX;
+  const screenY = event.clientY - gestureMovement.startY;
+  const rawX = isForceLandscapeMode() ? screenY : screenX;
+  const rawY = isForceLandscapeMode() ? -screenX : screenY;
   const distance = Math.hypot(rawX, rawY);
 
   if (distance < deadZone) {
