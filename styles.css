@@ -368,6 +368,19 @@ body {
   gap: 8px;
 }
 
+.orientation-button {
+  display: none;
+  margin: 0;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 201, 255, 0.3);
+  background: rgba(8, 17, 32, 0.74);
+  color: #dff7ff;
+  box-shadow: none;
+  font-size: 0.8rem;
+}
+
 .signal-group span {
   width: 10px;
   height: 10px;
@@ -407,6 +420,22 @@ canvas {
   background-size: 100% 6px, 100% 100%;
   mix-blend-mode: soft-light;
   animation: scanFlicker 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.orientation-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 3;
+  display: none;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border: 1px solid rgba(148, 201, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(6, 13, 25, 0.7);
+  color: #dff7ff;
+  font-size: 0.82rem;
   pointer-events: none;
 }
 
@@ -573,10 +602,72 @@ button:active {
   pointer-events: none;
 }
 
-.touch-dpad {
+.gesture-pad {
+  --gesture-x: 0px;
+  --gesture-y: 0px;
   display: grid;
-  grid-template-columns: repeat(3, 54px);
   gap: 8px;
+  justify-items: center;
+  color: rgba(223, 247, 255, 0.74);
+  font-size: 0.78rem;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.gesture-ring {
+  position: relative;
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  border: 1px solid rgba(148, 201, 255, 0.28);
+  background:
+    radial-gradient(circle at center, rgba(98, 228, 255, 0.12), transparent 48%),
+    rgba(8, 17, 32, 0.46);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+.gesture-ring::before,
+.gesture-ring::after {
+  content: "";
+  position: absolute;
+  background: rgba(223, 247, 255, 0.18);
+}
+
+.gesture-ring::before {
+  top: 50%;
+  left: 18px;
+  right: 18px;
+  height: 1px;
+}
+
+.gesture-ring::after {
+  top: 18px;
+  bottom: 18px;
+  left: 50%;
+  width: 1px;
+}
+
+.gesture-thumb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(138, 255, 209, 0.5);
+  background: linear-gradient(135deg, rgba(98, 228, 255, 0.9), rgba(138, 255, 209, 0.86));
+  box-shadow: 0 0 24px rgba(98, 228, 255, 0.26);
+  transform: translate(calc(-50% + var(--gesture-x)), calc(-50% + var(--gesture-y)));
+  transition: transform 0.08s ease;
+}
+
+.gesture-pad.is-active .gesture-ring {
+  border-color: rgba(138, 255, 209, 0.62);
+  background:
+    radial-gradient(circle at center, rgba(138, 255, 209, 0.14), transparent 50%),
+    rgba(8, 17, 32, 0.62);
 }
 
 .touch-actions {
@@ -608,11 +699,6 @@ button:active {
   transform: translateY(1px);
 }
 
-.touch-empty {
-  opacity: 0;
-  pointer-events: none;
-}
-
 .touch-fire {
   width: 68px;
   height: 68px;
@@ -623,6 +709,11 @@ button:active {
 @media (pointer: coarse), (max-width: 780px) {
   .touch-controls {
     display: flex;
+  }
+
+  .orientation-button {
+    display: inline-grid;
+    place-items: center;
   }
 }
 
@@ -731,9 +822,9 @@ button:active {
     gap: 10px;
   }
 
-  .touch-dpad {
-    grid-template-columns: repeat(3, 46px);
-    gap: 6px;
+  .gesture-ring {
+    width: 104px;
+    height: 104px;
   }
 
   .touch-actions {
@@ -796,8 +887,117 @@ button:active {
     height: 80dvh;
   }
 
-  .touch-dpad {
-    grid-template-columns: repeat(3, 42px);
+  .touch-button {
+    width: 42px;
+    height: 42px;
+  }
+
+  .touch-fire {
+    width: 58px;
+    height: 58px;
+  }
+}
+
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 780px) {
+  .orientation-hint {
+    display: block;
+  }
+}
+
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 560px) {
+  body {
+    overflow: hidden;
+  }
+
+  .app {
+    height: 100dvh;
+    padding: 6px;
+    overflow: hidden;
+  }
+
+  .topbar {
+    display: grid;
+    grid-template-columns: auto minmax(220px, 1fr);
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .brand-row {
+    margin: 0;
+  }
+
+  .brand-row h1 {
+    font-size: 1.15rem;
+  }
+
+  .build-tag,
+  .kicker,
+  .subtitle {
+    display: none;
+  }
+
+  .top-stats {
+    gap: 6px;
+  }
+
+  .metric-card {
+    padding: 6px 8px;
+  }
+
+  .metric-value {
+    margin-top: 3px;
+    font-size: 1rem;
+  }
+
+  .stage-layout {
+    display: block;
+    min-height: 0;
+  }
+
+  .side-panel {
+    display: none;
+  }
+
+  .stage-frame {
+    height: calc(100dvh - 58px);
+    min-height: 0;
+    padding: 6px;
+  }
+
+  .stage-head {
+    min-height: 0;
+    margin-bottom: 6px;
+    padding: 0 4px;
+  }
+
+  .stage-caption,
+  .stage-head .panel-label,
+  .signal-group {
+    display: none;
+  }
+
+  .playfield {
+    height: calc(100% - 42px);
+    min-height: 0;
+  }
+
+  .touch-controls {
+    inset: auto 8px 8px;
+  }
+
+  .gesture-ring {
+    width: 88px;
+    height: 88px;
+  }
+
+  .gesture-thumb {
+    width: 34px;
+    height: 34px;
+  }
+
+  .gesture-pad span {
+    display: none;
   }
 
   .touch-button {

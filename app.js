@@ -13,7 +13,9 @@ const overlayStatGrid = document.getElementById("overlay-stat-grid");
 const overlayRecord = document.getElementById("overlay-record");
 const startButton = document.getElementById("start-button");
 const playfieldEl = canvas.parentElement;
-const touchControls = document.querySelectorAll("[data-touch-key], [data-touch-action]");
+const touchControls = document.querySelectorAll("[data-touch-action]");
+const gesturePad = document.querySelector("[data-gesture-pad]");
+const orientationButton = document.querySelector("[data-orientation-button]");
 
 function getDisplaySize() {
   const rect = playfieldEl.getBoundingClientRect();
@@ -26,6 +28,15 @@ function getDisplaySize() {
 function scaleEntity(entity, scaleX, scaleY) {
   entity.x *= scaleX;
   entity.y *= scaleY;
+}
+
+function getGameplayScale() {
+  const shortSide = Math.min(canvas.width || 960, canvas.height || 600);
+  return Math.max(0.72, Math.min(1, shortSide / 560));
+}
+
+function getPlayerRadius() {
+  return 22 * getGameplayScale();
 }
 
 function resizeCanvas() {
@@ -47,6 +58,7 @@ function resizeCanvas() {
       scaleEntity(entity, scaleX, scaleY);
     }
   }
+  state.player.radius = getPlayerRadius();
 }
 
 function readBestScore() {
@@ -153,10 +165,19 @@ const state = {
 const keys = new Set();
 const fireKeys = new Set(["j", "J"]);
 let fireHeld = false;
+const gestureMovement = {
+  active: false,
+  pointerId: null,
+  startX: 0,
+  startY: 0,
+  dx: 0,
+  dy: 0
+};
 
 function resetGame() {
   keys.clear();
   fireHeld = false;
+  clearGestureMovement();
   resizeCanvas();
   state.running = true;
   state.paused = false;
@@ -184,6 +205,7 @@ function resetGame() {
   state.stats.shotsFired = 0;
   state.stats.shotsHit = 0;
   state.stats.newBest = false;
+  state.player.radius = getPlayerRadius();
   state.player.x = canvas.width / 2;
   state.player.y = canvas.height / 2;
   state.player.angle = -Math.PI / 2;
@@ -278,7 +300,8 @@ function triggerScreenShake(duration, strength) {
 }
 
 function spawnAsteroid() {
-  const radius = Math.random() * 22 + 20;
+  const scale = getGameplayScale();
+  const radius = (Math.random() * 22 + 20) * scale;
   const minDistance = tuning.safeSpawnDistance + radius + state.player.radius;
   let spawn = sampleAsteroidSpawn(radius);
   let bestDistance = Math.hypot(state.player.x - spawn.x, state.player.y - spawn.y);
@@ -307,7 +330,7 @@ function spawnAsteroid() {
     points: shape.points,
     craters: shape.craters,
     cracks: shape.cracks,
-    hp: radius > 34 ? 2 : 1,
+    hp: radius > 34 * scale ? 2 : 1,
     hitFlash: 0
   });
 }
@@ -356,7 +379,7 @@ function findSafePickupPosition(radius, margin) {
 }
 
 function spawnCore() {
-  const radius = 11;
+  const radius = 11 * getGameplayScale();
   const spawn = findSafePickupPosition(radius, 70);
   state.cores.push({
     x: spawn.x,
@@ -368,7 +391,7 @@ function spawnCore() {
 
 function spawnPowerUp() {
   const type = Math.random() > 0.5 ? "shield" : "double";
-  const radius = 13;
+  const radius = 13 * getGameplayScale();
   const spawn = findSafePickupPosition(radius, 80);
   state.powerUps.push({
     x: spawn.x,
@@ -497,7 +520,7 @@ function updateMessages(dt) {
   });
 }
 
-function movePlayer(dt) {
+function getKeyboardMovement() {
   let dx = 0;
   let dy = 0;
 
@@ -505,6 +528,19 @@ function movePlayer(dt) {
   if (keys.has("ArrowRight") || keys.has("d")) dx += 1;
   if (keys.has("ArrowUp") || keys.has("w")) dy -= 1;
   if (keys.has("ArrowDown") || keys.has("s")) dy += 1;
+
+  return { dx, dy };
+}
+
+function hasActiveMovement() {
+  const keyboard = getKeyboardMovement();
+  return keyboard.dx !== 0 || keyboard.dy !== 0 || gestureMovement.dx !== 0 || gestureMovement.dy !== 0;
+}
+
+function movePlayer(dt) {
+  const keyboard = getKeyboardMovement();
+  const dx = keyboard.dx + gestureMovement.dx;
+  const dy = keyboard.dy + gestureMovement.dy;
 
   if (dx !== 0 || dy !== 0) {
     const length = Math.hypot(dx, dy) || 1;
@@ -879,7 +915,7 @@ function drawPlayer() {
   const pulse = Math.sin(state.pulseTime * 5) * 0.5 + 0.5;
   const invulnerable = state.invulnerabilityTimer > 0;
   const flicker = invulnerable && Math.floor(state.invulnerabilityTimer * 18) % 2 === 0;
-  const thruster = state.running && !state.paused && (keys.has("ArrowLeft") || keys.has("a") || keys.has("ArrowRight") || keys.has("d") || keys.has("ArrowUp") || keys.has("w") || keys.has("ArrowDown") || keys.has("s"));
+  const thruster = state.running && !state.paused && hasActiveMovement();
 
   ctx.save();
   ctx.translate(x, y);
@@ -1269,6 +1305,66 @@ function handleOverlayAction() {
   startGame();
 }
 
+function updateGestureVisual() {
+  if (!gesturePad) {
+    return;
+  }
+
+  const thumbRange = 36;
+  gesturePad.style.setProperty("--gesture-x", `${gestureMovement.dx * thumbRange}px`);
+  gesturePad.style.setProperty("--gesture-y", `${gestureMovement.dy * thumbRange}px`);
+  gesturePad.classList.toggle("is-active", gestureMovement.active);
+}
+
+function setGestureMovement(event) {
+  const maxDistance = 48;
+  const deadZone = 7;
+  const rawX = event.clientX - gestureMovement.startX;
+  const rawY = event.clientY - gestureMovement.startY;
+  const distance = Math.hypot(rawX, rawY);
+
+  if (distance < deadZone) {
+    gestureMovement.dx = 0;
+    gestureMovement.dy = 0;
+    updateGestureVisual();
+    return;
+  }
+
+  const scale = Math.min(1, distance / maxDistance);
+  gestureMovement.dx = (rawX / distance) * scale;
+  gestureMovement.dy = (rawY / distance) * scale;
+  updateGestureVisual();
+}
+
+function clearGestureMovement() {
+  gestureMovement.active = false;
+  gestureMovement.pointerId = null;
+  gestureMovement.dx = 0;
+  gestureMovement.dy = 0;
+  updateGestureVisual();
+}
+
+async function requestLandscapeMode() {
+  if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+    try {
+      await document.documentElement.requestFullscreen();
+    } catch {
+      // Some mobile browsers only allow manual rotation.
+    }
+  }
+
+  if (screen.orientation?.lock) {
+    try {
+      await screen.orientation.lock("landscape");
+    } catch {
+      // iOS Safari and some Android browsers do not expose orientation lock.
+    }
+  }
+
+  resizeCanvas();
+  draw();
+}
+
 function setTouchButtonActive(button, active) {
   button.classList.toggle("is-active", active);
 }
@@ -1317,6 +1413,40 @@ for (const button of touchControls) {
   button.addEventListener("lostpointercapture", () => releaseTouchControl(button));
 }
 
+if (gesturePad) {
+  gesturePad.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    gestureMovement.active = true;
+    gestureMovement.pointerId = event.pointerId;
+    gestureMovement.startX = event.clientX;
+    gestureMovement.startY = event.clientY;
+    gesturePad.setPointerCapture(event.pointerId);
+    setGestureMovement(event);
+  });
+
+  gesturePad.addEventListener("pointermove", (event) => {
+    if (!gestureMovement.active || gestureMovement.pointerId !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    setGestureMovement(event);
+  });
+
+  gesturePad.addEventListener("pointerup", (event) => {
+    if (gestureMovement.pointerId === event.pointerId) {
+      event.preventDefault();
+      clearGestureMovement();
+    }
+  });
+
+  gesturePad.addEventListener("pointercancel", clearGestureMovement);
+  gesturePad.addEventListener("lostpointercapture", clearGestureMovement);
+}
+
+if (orientationButton) {
+  orientationButton.addEventListener("click", requestLandscapeMode);
+}
+
 window.addEventListener("keydown", (event) => {
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
@@ -1357,6 +1487,7 @@ window.addEventListener("keyup", (event) => {
 window.addEventListener("blur", () => {
   keys.clear();
   fireHeld = false;
+  clearGestureMovement();
   if (state.running && !state.paused && !state.gameOver) {
     pauseGame();
   }
