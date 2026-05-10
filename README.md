@@ -6,6 +6,8 @@
 
 ## 运行方式
 
+在线访问：https://ronny-7.github.io/star-ring-dodge/
+
 直接用浏览器打开 `index.html` 即可运行，不需要安装依赖或启动构建工具。
 
 ## 操作
