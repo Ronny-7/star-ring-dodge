@@ -1010,3 +1010,132 @@ button:active {
     height: 58px;
   }
 }
+
+body.landscape-layout {
+  overflow: hidden;
+}
+
+body.landscape-layout .app {
+  height: 100dvh;
+  min-height: 0;
+  padding: 6px;
+  overflow: hidden;
+}
+
+body.landscape-layout .topbar {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+body.landscape-layout .brand-row {
+  margin: 0;
+}
+
+body.landscape-layout .brand-row h1 {
+  font-size: 1.15rem;
+}
+
+body.landscape-layout .build-tag,
+body.landscape-layout .kicker,
+body.landscape-layout .subtitle {
+  display: none;
+}
+
+body.landscape-layout .top-stats {
+  gap: 6px;
+}
+
+body.landscape-layout .metric-card {
+  padding: 6px 8px;
+}
+
+body.landscape-layout .metric-value {
+  margin-top: 3px;
+  font-size: 1rem;
+}
+
+body.landscape-layout .stage-layout {
+  display: block;
+  min-height: 0;
+}
+
+body.landscape-layout .side-panel {
+  display: none;
+}
+
+body.landscape-layout .stage-frame {
+  height: calc(100% - 58px);
+  min-height: 0;
+  padding: 6px;
+}
+
+body.landscape-layout .stage-head {
+  min-height: 0;
+  margin-bottom: 6px;
+  padding: 0 4px;
+}
+
+body.landscape-layout .stage-caption,
+body.landscape-layout .stage-head .panel-label,
+body.landscape-layout .signal-group {
+  display: none;
+}
+
+body.landscape-layout .orientation-button {
+  display: inline-grid;
+  place-items: center;
+}
+
+body.landscape-layout .playfield {
+  height: calc(100% - 42px);
+  min-height: 0;
+  max-height: none;
+}
+
+body.landscape-layout .touch-controls {
+  inset: auto 8px 8px;
+}
+
+body.landscape-layout .gesture-ring {
+  width: 88px;
+  height: 88px;
+}
+
+body.landscape-layout .gesture-thumb {
+  width: 34px;
+  height: 34px;
+}
+
+body.landscape-layout .gesture-pad span {
+  display: none;
+}
+
+body.landscape-layout .touch-button {
+  width: 42px;
+  height: 42px;
+}
+
+body.landscape-layout .touch-fire {
+  width: 58px;
+  height: 58px;
+}
+
+body.force-landscape {
+  position: fixed;
+  inset: 0;
+  width: 100dvw;
+  height: 100dvh;
+}
+
+body.force-landscape .app {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100dvh;
+  height: 100dvw;
+  transform: rotate(90deg) translateY(-100%);
+  transform-origin: top left;
+}

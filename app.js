@@ -16,12 +16,15 @@ const playfieldEl = canvas.parentElement;
 const touchControls = document.querySelectorAll("[data-touch-action]");
 const gesturePad = document.querySelector("[data-gesture-pad]");
 const orientationButton = document.querySelector("[data-orientation-button]");
+const mobileViewportQuery = window.matchMedia("(pointer: coarse), (max-width: 780px)");
 
 function getDisplaySize() {
   const rect = playfieldEl.getBoundingClientRect();
+  const width = playfieldEl.clientWidth || rect.width || canvas.width;
+  const height = playfieldEl.clientHeight || rect.height || canvas.height;
   return {
-    width: Math.max(320, Math.round(rect.width || canvas.width)),
-    height: Math.max(240, Math.round(rect.height || canvas.height))
+    width: Math.max(320, Math.round(width)),
+    height: Math.max(240, Math.round(height))
   };
 }
 
@@ -37,6 +40,31 @@ function getGameplayScale() {
 
 function getPlayerRadius() {
   return 22 * getGameplayScale();
+}
+
+function isPortraitViewport() {
+  return window.innerHeight >= window.innerWidth;
+}
+
+function syncLandscapeUi() {
+  const forced = document.body.classList.contains("force-landscape");
+  const compactLandscape = mobileViewportQuery.matches && (forced || !isPortraitViewport());
+  document.body.classList.toggle("landscape-layout", compactLandscape);
+  if (orientationButton) {
+    orientationButton.textContent = forced ? "退出" : "横屏";
+  }
+}
+
+function refreshCanvasSoon() {
+  syncLandscapeUi();
+  requestAnimationFrame(() => {
+    resizeCanvas();
+    draw();
+  });
+  window.setTimeout(() => {
+    resizeCanvas();
+    draw();
+  }, 220);
 }
 
 function resizeCanvas() {
@@ -1345,6 +1373,22 @@ function clearGestureMovement() {
 }
 
 async function requestLandscapeMode() {
+  if (document.body.classList.contains("force-landscape")) {
+    document.body.classList.remove("force-landscape");
+    if (screen.orientation?.unlock) {
+      screen.orientation.unlock();
+    }
+    if (document.fullscreenElement && document.exitFullscreen) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        // Ignore exit failures; the layout can still return to portrait.
+      }
+    }
+    refreshCanvasSoon();
+    return;
+  }
+
   if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
     try {
       await document.documentElement.requestFullscreen();
@@ -1361,8 +1405,12 @@ async function requestLandscapeMode() {
     }
   }
 
-  resizeCanvas();
-  draw();
+  window.setTimeout(() => {
+    if (mobileViewportQuery.matches && isPortraitViewport()) {
+      document.body.classList.add("force-landscape");
+    }
+    refreshCanvasSoon();
+  }, 320);
 }
 
 function setTouchButtonActive(button, active) {
@@ -1495,10 +1543,17 @@ window.addEventListener("blur", () => {
 
 startButton.addEventListener("click", handleOverlayAction);
 window.addEventListener("resize", () => {
-  resizeCanvas();
-  draw();
+  if (!isPortraitViewport()) {
+    document.body.classList.remove("force-landscape");
+  }
+  refreshCanvasSoon();
 });
+window.addEventListener("orientationchange", refreshCanvasSoon);
+if (mobileViewportQuery.addEventListener) {
+  mobileViewportQuery.addEventListener("change", refreshCanvasSoon);
+}
 
+syncLandscapeUi();
 resizeCanvas();
 showOverlay("start", uiText.startTitle, uiText.startText, uiText.startButton);
 state.stars = Array.from({ length: 90 }, () => makeStar(true));
