@@ -359,6 +359,8 @@ function spawnAsteroid() {
     }
   }
 
+  if (bestDistance < minDistance) return;
+
   const angle = Math.atan2(state.player.y - spawn.y, state.player.x - spawn.x);
   const speed = (Math.random() * 70 + 110) * state.speedScale;
   const shape = makeAsteroidShape(radius);
