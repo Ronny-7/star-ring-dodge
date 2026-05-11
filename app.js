@@ -3,6 +3,62 @@ const ctx = canvas.getContext("2d");
 const { bestKey, tuning, uiText } = window.starRingConfig;
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let musicEnabled = true;
+let musicGain = null;
+let musicNodes = [];
+
+function startMusic() {
+  if (!musicEnabled || musicNodes.length) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const master = audioCtx.createGain();
+  master.gain.setValueAtTime(0.06, audioCtx.currentTime);
+  master.connect(audioCtx.destination);
+  musicGain = master;
+
+  // bass drone
+  const bass = audioCtx.createOscillator();
+  const bassG = audioCtx.createGain();
+  bass.type = "sine";
+  bass.frequency.value = 55;
+  bassG.gain.value = 0.5;
+  bass.connect(bassG); bassG.connect(master);
+  bass.start();
+
+  // mid pad
+  const pad = audioCtx.createOscillator();
+  const padG = audioCtx.createGain();
+  pad.type = "triangle";
+  pad.frequency.value = 110;
+  padG.gain.value = 0.3;
+  pad.connect(padG); padG.connect(master);
+  pad.start();
+
+  // slow LFO on pad volume for breathing effect
+  const lfo = audioCtx.createOscillator();
+  const lfoG = audioCtx.createGain();
+  lfo.frequency.value = 0.18;
+  lfoG.gain.value = 0.15;
+  lfo.connect(lfoG); lfoG.connect(padG.gain);
+  lfo.start();
+
+  musicNodes = [bass, pad, lfo, bassG, padG, lfoG, master];
+}
+
+function stopMusic() {
+  for (const node of musicNodes) {
+    try { node.stop ? node.stop() : node.disconnect(); } catch {}
+  }
+  musicNodes = [];
+  musicGain = null;
+}
+
+function toggleMusic() {
+  musicEnabled = !musicEnabled;
+  if (musicEnabled) startMusic();
+  else stopMusic();
+  const btn = document.getElementById("music-button");
+  if (btn) btn.textContent = musicEnabled ? "音乐 ON" : "音乐 OFF";
+}
 
 const vibrationMap = { shoot: 10, hit: 20, explode: 40, pickup: 15, hurt: 80 };
 
@@ -16,40 +72,50 @@ function playSound(type) {
   gain.connect(audioCtx.destination);
 
   if (type === "shoot") {
-    osc.type = "square";
-    osc.frequency.setValueAtTime(520, now);
-    osc.frequency.exponentialRampToValueAtTime(180, now + 0.08);
-    gain.gain.setValueAtTime(0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-    osc.start(now); osc.stop(now + 0.08);
-  } else if (type === "hit") {
-    osc.type = "sawtooth";
-    osc.frequency.setValueAtTime(260, now);
-    osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
+    // crisp laser zap: triangle + quick pitch drop
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(900, now);
+    osc.frequency.exponentialRampToValueAtTime(300, now + 0.07);
     gain.gain.setValueAtTime(0.12, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-    osc.start(now); osc.stop(now + 0.12);
-  } else if (type === "explode") {
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+    osc.start(now); osc.stop(now + 0.07);
+  } else if (type === "hit") {
+    // dull thud: low sawtooth
     osc.type = "sawtooth";
-    osc.frequency.setValueAtTime(120, now);
-    osc.frequency.exponentialRampToValueAtTime(30, now + 0.25);
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-    osc.start(now); osc.stop(now + 0.25);
-  } else if (type === "pickup") {
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(440, now);
-    osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
-    gain.gain.setValueAtTime(0.1, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-    osc.start(now); osc.stop(now + 0.15);
-  } else if (type === "hurt") {
-    osc.type = "square";
     osc.frequency.setValueAtTime(180, now);
-    osc.frequency.exponentialRampToValueAtTime(60, now + 0.3);
-    gain.gain.setValueAtTime(0.15, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-    osc.start(now); osc.stop(now + 0.3);
+    osc.frequency.exponentialRampToValueAtTime(60, now + 0.1);
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    osc.start(now); osc.stop(now + 0.1);
+  } else if (type === "explode") {
+    // rumble: noise-like via detuned sawtooth + filter
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(80, now);
+    osc.frequency.exponentialRampToValueAtTime(18, now + 0.35);
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 400;
+    osc.disconnect(); osc.connect(filter); filter.connect(gain);
+    gain.gain.setValueAtTime(0.22, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.start(now); osc.stop(now + 0.35);
+  } else if (type === "pickup") {
+    // bright chime: two-tone arpeggio
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(660, now);
+    osc.frequency.setValueAtTime(880, now + 0.08);
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.setValueAtTime(0.1, now + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    osc.start(now); osc.stop(now + 0.22);
+  } else if (type === "hurt") {
+    // harsh buzz: square wave descend
+    osc.type = "square";
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.exponentialRampToValueAtTime(55, now + 0.28);
+    gain.gain.setValueAtTime(0.13, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    osc.start(now); osc.stop(now + 0.28);
   }
 }
 
@@ -87,13 +153,43 @@ function getDisplaySize() {
   };
 }
 
+const dpr = window.devicePixelRatio || 1;
+let cw = 960, ch = 600;
+
+function resizeCanvas() {
+  const { width, height } = getDisplaySize();
+  const physW = Math.round(width * dpr);
+  const physH = Math.round(height * dpr);
+  if (canvas.width === physW && canvas.height === physH) return;
+
+  const previousW = cw;
+  const previousH = ch;
+  cw = width;
+  ch = height;
+  canvas.width = physW;
+  canvas.height = physH;
+  canvas.style.width = width + "px";
+  canvas.style.height = height + "px";
+  ctx.scale(dpr, dpr);
+
+  const scaleX = width / previousW;
+  const scaleY = height / previousH;
+  scaleEntity(state.player, scaleX, scaleY);
+  for (const collection of [state.asteroids, state.cores, state.powerUps, state.stars, state.lasers, state.particles, state.messages]) {
+    for (const entity of collection) {
+      scaleEntity(entity, scaleX, scaleY);
+    }
+  }
+  state.player.radius = getPlayerRadius();
+}
+
 function scaleEntity(entity, scaleX, scaleY) {
   entity.x *= scaleX;
   entity.y *= scaleY;
 }
 
 function getGameplayScale() {
-  const shortSide = Math.min(canvas.width || 960, canvas.height || 600);
+  const shortSide = Math.min((canvas.width || 960) / dpr, (canvas.height || 600) / dpr);
   return Math.max(0.72, Math.min(1, shortSide / 560));
 }
 
@@ -134,27 +230,6 @@ function refreshCanvasSoon() {
   }, 220);
 }
 
-function resizeCanvas() {
-  const { width, height } = getDisplaySize();
-  if (canvas.width === width && canvas.height === height) {
-    return;
-  }
-
-  const previousWidth = canvas.width || width;
-  const previousHeight = canvas.height || height;
-  canvas.width = width;
-  canvas.height = height;
-
-  const scaleX = width / previousWidth;
-  const scaleY = height / previousHeight;
-  scaleEntity(state.player, scaleX, scaleY);
-  for (const collection of [state.asteroids, state.cores, state.powerUps, state.stars, state.lasers, state.particles, state.messages]) {
-    for (const entity of collection) {
-      scaleEntity(entity, scaleX, scaleY);
-    }
-  }
-  state.player.radius = getPlayerRadius();
-}
 
 function readBestScore() {
   try {
@@ -242,8 +317,8 @@ const state = {
     newBest: false
   },
   player: {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
+    x: cw / 2,
+    y: ch / 2,
     radius: tuning.playerRadius,
     speed: tuning.playerSpeed,
     angle: -Math.PI / 2
@@ -277,6 +352,7 @@ function resetGame() {
   state.running = true;
   state.paused = false;
   state.gameOver = false;
+  startMusic();
   state.lastTime = 0;
   state.spawnTimer = 0;
   state.coreTimer = 0;
@@ -301,8 +377,8 @@ function resetGame() {
   state.stats.shotsHit = 0;
   state.stats.newBest = false;
   state.player.radius = getPlayerRadius();
-  state.player.x = canvas.width / 2;
-  state.player.y = canvas.height / 2;
+  state.player.x = cw / 2;
+  state.player.y = ch / 2;
   state.player.angle = -Math.PI / 2;
   state.asteroids = [];
   state.cores = [];
@@ -338,8 +414,8 @@ function showOverlay(mode, title, text, buttonText) {
 
 function makeStar(randomY = false) {
   return {
-    x: Math.random() * canvas.width,
-    y: randomY ? Math.random() * canvas.height : -20,
+    x: Math.random() * cw,
+    y: randomY ? Math.random() * ch : -20,
     radius: Math.random() * 1.8 + 0.4,
     speed: Math.random() * 36 + 12,
     alpha: Math.random() * 0.6 + 0.18,
@@ -375,18 +451,18 @@ function sampleAsteroidSpawn(radius) {
   const edge = Math.floor(Math.random() * 4);
 
   if (edge === 0) {
-    return { x: -radius, y: Math.random() * canvas.height };
+    return { x: -radius, y: Math.random() * ch };
   }
 
   if (edge === 1) {
-    return { x: canvas.width + radius, y: Math.random() * canvas.height };
+    return { x: cw + radius, y: Math.random() * ch };
   }
 
   if (edge === 2) {
-    return { x: Math.random() * canvas.width, y: -radius };
+    return { x: Math.random() * cw, y: -radius };
   }
 
-  return { x: Math.random() * canvas.width, y: canvas.height + radius };
+  return { x: Math.random() * cw, y: ch + radius };
 }
 
 function triggerScreenShake(duration, strength) {
@@ -434,8 +510,8 @@ function spawnAsteroid() {
 
 function samplePickupPosition(margin) {
   return {
-    x: Math.random() * Math.max(1, canvas.width - margin * 2) + margin,
-    y: Math.random() * Math.max(1, canvas.height - margin * 2) + margin
+    x: Math.random() * Math.max(1, cw - margin * 2) + margin,
+    y: Math.random() * Math.max(1, ch - margin * 2) + margin
   };
 }
 
@@ -591,8 +667,8 @@ function updateStars(dt) {
 
   for (const star of state.stars) {
     star.y += star.speed * star.depth * dt;
-    if (star.y > canvas.height + 20) {
-      star.x = Math.random() * canvas.width;
+    if (star.y > ch + 20) {
+      star.x = Math.random() * cw;
       star.y = -12;
     }
   }
@@ -655,8 +731,8 @@ function movePlayer(dt) {
     state.player.angle = Math.atan2(ny, nx) + Math.PI / 2;
   }
 
-  state.player.x = Math.max(state.player.radius, Math.min(canvas.width - state.player.radius, state.player.x));
-  state.player.y = Math.max(state.player.radius, Math.min(canvas.height - state.player.radius, state.player.y));
+  state.player.x = Math.max(state.player.radius, Math.min(cw - state.player.radius, state.player.x));
+  state.player.y = Math.max(state.player.radius, Math.min(ch - state.player.radius, state.player.y));
 }
 
 function moveAsteroids(dt) {
@@ -666,7 +742,7 @@ function moveAsteroids(dt) {
     asteroid.rotation += asteroid.spin;
     asteroid.hitFlash = Math.max(0, asteroid.hitFlash - dt * 4);
 
-    return asteroid.x > -120 && asteroid.x < canvas.width + 120 && asteroid.y > -120 && asteroid.y < canvas.height + 120;
+    return asteroid.x > -120 && asteroid.x < cw + 120 && asteroid.y > -120 && asteroid.y < ch + 120;
   });
 }
 
@@ -675,7 +751,7 @@ function moveLasers(dt) {
     laser.x += laser.vx * dt;
     laser.y += laser.vy * dt;
     laser.life -= dt;
-    return laser.life > 0 && laser.x > -40 && laser.x < canvas.width + 40 && laser.y > -40 && laser.y < canvas.height + 40;
+    return laser.life > 0 && laser.x > -40 && laser.x < cw + 40 && laser.y > -40 && laser.y < ch + 40;
   });
 }
 
@@ -875,6 +951,7 @@ function endGame() {
   state.gameOver = true;
   state.screenShakeTimer = 0;
   state.screenShakeStrength = 0;
+  stopMusic();
 
   const finalScore = Math.floor(state.score);
   state.stats.newBest = finalScore > bestScore;
@@ -906,7 +983,7 @@ function endGame() {
 }
 
 function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, cw, ch);
   ctx.save();
 
   if (state.screenShakeTimer > 0 && state.screenShakeStrength > 0) {
@@ -931,24 +1008,24 @@ function draw() {
 }
 
 function drawBackground() {
-  const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  const bg = ctx.createLinearGradient(0, 0, 0, ch);
   bg.addColorStop(0, "#08111f");
   bg.addColorStop(0.45, "#07101d");
   bg.addColorStop(1, "#030814");
   ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, cw, ch);
 
   const glowA = ctx.createRadialGradient(180, 120, 40, 180, 120, 320);
   glowA.addColorStop(0, "rgba(98, 228, 255, 0.22)");
   glowA.addColorStop(1, "rgba(98, 228, 255, 0)");
   ctx.fillStyle = glowA;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, cw, ch);
 
-  const glowB = ctx.createRadialGradient(canvas.width - 140, canvas.height - 90, 50, canvas.width - 140, canvas.height - 90, 300);
+  const glowB = ctx.createRadialGradient(cw - 140, ch - 90, 50, cw - 140, ch - 90, 300);
   glowB.addColorStop(0, "rgba(123, 140, 255, 0.18)");
   glowB.addColorStop(1, "rgba(123, 140, 255, 0)");
   ctx.fillStyle = glowB;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, cw, ch);
 }
 
 function drawStars() {
@@ -965,7 +1042,7 @@ function drawStars() {
 function drawRings() {
   const pulse = Math.sin(state.pulseTime * 0.8) * 0.5 + 0.5;
   ctx.save();
-  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.translate(cw / 2, ch / 2);
   ctx.strokeStyle = `rgba(108, 171, 255, ${0.08 + pulse * 0.06})`;
   ctx.lineWidth = 1.2;
   for (let i = 0; i < 4; i += 1) {
@@ -981,9 +1058,9 @@ function drawAsteroidWarnings() {
   for (const asteroid of state.asteroids) {
     const isInside =
       asteroid.x >= 0 &&
-      asteroid.x <= canvas.width &&
+      asteroid.x <= cw &&
       asteroid.y >= 0 &&
-      asteroid.y <= canvas.height;
+      asteroid.y <= ch;
 
     if (isInside) {
       continue;
@@ -991,18 +1068,18 @@ function drawAsteroidWarnings() {
 
     const nearHorizontal =
       asteroid.x > -tuning.asteroidWarningDistance &&
-      asteroid.x < canvas.width + tuning.asteroidWarningDistance;
+      asteroid.x < cw + tuning.asteroidWarningDistance;
     const nearVertical =
       asteroid.y > -tuning.asteroidWarningDistance &&
-      asteroid.y < canvas.height + tuning.asteroidWarningDistance;
+      asteroid.y < ch + tuning.asteroidWarningDistance;
 
     if (!nearHorizontal && !nearVertical) {
       continue;
     }
 
-    const x = Math.max(28, Math.min(canvas.width - 28, asteroid.x));
-    const y = Math.max(28, Math.min(canvas.height - 28, asteroid.y));
-    const angle = Math.atan2(canvas.height / 2 - y, canvas.width / 2 - x);
+    const x = Math.max(28, Math.min(cw - 28, asteroid.x));
+    const y = Math.max(28, Math.min(ch - 28, asteroid.y));
+    const angle = Math.atan2(ch / 2 - y, cw / 2 - x);
 
     ctx.save();
     ctx.translate(x, y);
@@ -1033,105 +1110,149 @@ function drawPlayer() {
   ctx.rotate(angle);
   ctx.globalAlpha = flicker ? 0.7 : 1;
 
-  if (thruster) {
-    const flame = 16 + pulse * 12;
-    const flameGradient = ctx.createLinearGradient(0, radius * 0.6, 0, radius + flame);
-    flameGradient.addColorStop(0, "rgba(255, 243, 182, 0.95)");
-    flameGradient.addColorStop(0.4, "rgba(98, 228, 255, 0.92)");
-    flameGradient.addColorStop(1, "rgba(98, 228, 255, 0)");
-    ctx.fillStyle = flameGradient;
+  // dual engine glow
+  const engineL = { x: -radius * 0.32, y: radius * 0.55 };
+  const engineR = { x: radius * 0.32, y: radius * 0.55 };
+  for (const eng of [engineL, engineR]) {
+    const eg = ctx.createRadialGradient(eng.x, eng.y, 0, eng.x, eng.y, radius * 0.38);
+    eg.addColorStop(0, `rgba(98,228,255,${0.55 + pulse * 0.3})`);
+    eg.addColorStop(1, "rgba(98,228,255,0)");
+    ctx.fillStyle = eg;
     ctx.beginPath();
-    ctx.moveTo(-8, radius * 0.58);
-    ctx.quadraticCurveTo(0, radius + flame, 8, radius * 0.58);
-    ctx.closePath();
+    ctx.arc(eng.x, eng.y, radius * 0.38, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  ctx.shadowBlur = state.flashTimer > 0 ? 36 : invulnerable ? 30 : 24;
+  if (thruster) {
+    for (const eng of [engineL, engineR]) {
+      const flame = 14 + pulse * 14;
+      const fg = ctx.createLinearGradient(eng.x, eng.y, eng.x, eng.y + flame);
+      fg.addColorStop(0, "rgba(255,243,182,0.95)");
+      fg.addColorStop(0.35, "rgba(98,228,255,0.88)");
+      fg.addColorStop(1, "rgba(98,228,255,0)");
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.moveTo(eng.x - 5, eng.y);
+      ctx.quadraticCurveTo(eng.x, eng.y + flame, eng.x + 5, eng.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // hull glow
+  ctx.shadowBlur = state.flashTimer > 0 ? 42 : invulnerable ? 36 : 28;
   ctx.shadowColor = state.flashTimer > 0 ? "#ff6f87" : invulnerable ? "#9ff3ff" : "#62e4ff";
 
+  // hull outline
   ctx.strokeStyle = invulnerable
-    ? `rgba(214, 249, 255, ${0.54 + pulse * 0.22})`
-    : `rgba(131, 232, 255, ${0.54 + pulse * 0.18})`;
-  ctx.lineWidth = 2;
+    ? `rgba(214,249,255,${0.6 + pulse * 0.25})`
+    : `rgba(131,232,255,${0.55 + pulse * 0.2})`;
+  ctx.lineWidth = 2.2;
   ctx.beginPath();
-  ctx.moveTo(0, -radius - 18);
-  ctx.lineTo(radius * 0.78, radius * 0.52);
-  ctx.lineTo(radius * 0.42, radius * 0.36);
-  ctx.lineTo(radius * 0.28, radius + 4);
-  ctx.lineTo(0, radius * 0.62);
-  ctx.lineTo(-radius * 0.28, radius + 4);
-  ctx.lineTo(-radius * 0.42, radius * 0.36);
-  ctx.lineTo(-radius * 0.78, radius * 0.52);
+  ctx.moveTo(0, -radius - 20);
+  ctx.lineTo(radius * 0.82, radius * 0.5);
+  ctx.lineTo(radius * 0.44, radius * 0.34);
+  ctx.lineTo(radius * 0.3, radius + 5);
+  ctx.lineTo(0, radius * 0.6);
+  ctx.lineTo(-radius * 0.3, radius + 5);
+  ctx.lineTo(-radius * 0.44, radius * 0.34);
+  ctx.lineTo(-radius * 0.82, radius * 0.5);
   ctx.closePath();
   ctx.stroke();
 
-  const hullGradient = ctx.createLinearGradient(0, -radius - 18, 0, radius + 6);
-  hullGradient.addColorStop(0, "#f7fbff");
-  hullGradient.addColorStop(0.24, "#a5f0ff");
-  hullGradient.addColorStop(0.55, "#65a4ff");
-  hullGradient.addColorStop(1, "#11254b");
+  // hull fill
+  const hullGradient = ctx.createLinearGradient(0, -radius - 20, 0, radius + 6);
+  hullGradient.addColorStop(0, "#f0faff");
+  hullGradient.addColorStop(0.2, "#b8f0ff");
+  hullGradient.addColorStop(0.5, "#4a8fff");
+  hullGradient.addColorStop(1, "#0a1a3a");
   ctx.fillStyle = hullGradient;
   ctx.beginPath();
-  ctx.moveTo(0, -radius - 18);
-  ctx.lineTo(radius * 0.78, radius * 0.52);
-  ctx.lineTo(radius * 0.42, radius * 0.36);
-  ctx.lineTo(radius * 0.28, radius + 4);
-  ctx.lineTo(0, radius * 0.62);
-  ctx.lineTo(-radius * 0.28, radius + 4);
-  ctx.lineTo(-radius * 0.42, radius * 0.36);
-  ctx.lineTo(-radius * 0.78, radius * 0.52);
+  ctx.moveTo(0, -radius - 20);
+  ctx.lineTo(radius * 0.82, radius * 0.5);
+  ctx.lineTo(radius * 0.44, radius * 0.34);
+  ctx.lineTo(radius * 0.3, radius + 5);
+  ctx.lineTo(0, radius * 0.6);
+  ctx.lineTo(-radius * 0.3, radius + 5);
+  ctx.lineTo(-radius * 0.44, radius * 0.34);
+  ctx.lineTo(-radius * 0.82, radius * 0.5);
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = "rgba(8, 16, 31, 0.94)";
+  // cockpit
+  ctx.shadowBlur = 0;
+  const cockpitG = ctx.createRadialGradient(0, -radius * 0.5, 1, 0, -radius * 0.4, radius * 0.52);
+  cockpitG.addColorStop(0, "rgba(200,248,255,0.95)");
+  cockpitG.addColorStop(0.5, "rgba(60,160,255,0.7)");
+  cockpitG.addColorStop(1, "rgba(8,16,31,0.92)");
+  ctx.fillStyle = cockpitG;
   ctx.beginPath();
-  ctx.moveTo(0, -radius * 0.96);
-  ctx.bezierCurveTo(radius * 0.28, -radius * 0.24, radius * 0.24, radius * 0.04, 0, radius * 0.24);
-  ctx.bezierCurveTo(-radius * 0.24, radius * 0.04, -radius * 0.28, -radius * 0.24, 0, -radius * 0.96);
+  ctx.moveTo(0, -radius * 0.98);
+  ctx.bezierCurveTo(radius * 0.3, -radius * 0.22, radius * 0.26, radius * 0.06, 0, radius * 0.26);
+  ctx.bezierCurveTo(-radius * 0.26, radius * 0.06, -radius * 0.3, -radius * 0.22, 0, -radius * 0.98);
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(233, 249, 255, 0.82)";
-  ctx.lineWidth = 1.2;
+  // cockpit highlight
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
   ctx.beginPath();
-  ctx.moveTo(0, -radius - 14);
-  ctx.lineTo(0, radius * 0.54);
-  ctx.moveTo(-radius * 0.52, radius * 0.12);
-  ctx.lineTo(radius * 0.52, radius * 0.12);
+  ctx.ellipse(-radius * 0.08, -radius * 0.72, radius * 0.08, radius * 0.18, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // panel lines
+  ctx.strokeStyle = "rgba(233,249,255,0.7)";
+  ctx.lineWidth = 1.2;
+  ctx.shadowBlur = 0;
+  ctx.beginPath();
+  ctx.moveTo(0, -radius - 16);
+  ctx.lineTo(0, radius * 0.52);
+  ctx.moveTo(-radius * 0.54, radius * 0.1);
+  ctx.lineTo(radius * 0.54, radius * 0.1);
   ctx.stroke();
 
-  ctx.fillStyle = "#d6f9ff";
+  // wings
+  ctx.fillStyle = "#c8f0ff";
+  ctx.shadowBlur = 8;
+  ctx.shadowColor = "#62e4ff";
   ctx.beginPath();
-  ctx.moveTo(-radius * 0.96, radius * 0.54);
-  ctx.lineTo(-radius * 0.36, radius * 0.18);
-  ctx.lineTo(-radius * 0.18, radius * 0.66);
+  ctx.moveTo(-radius * 0.98, radius * 0.52);
+  ctx.lineTo(-radius * 0.38, radius * 0.16);
+  ctx.lineTo(-radius * 0.2, radius * 0.64);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(radius * 0.98, radius * 0.52);
+  ctx.lineTo(radius * 0.38, radius * 0.16);
+  ctx.lineTo(radius * 0.2, radius * 0.64);
   ctx.closePath();
   ctx.fill();
 
-  ctx.beginPath();
-  ctx.moveTo(radius * 0.96, radius * 0.54);
-  ctx.lineTo(radius * 0.36, radius * 0.18);
-  ctx.lineTo(radius * 0.18, radius * 0.66);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "rgba(118, 235, 255, 0.95)";
-  ctx.fillRect(-radius * 0.48, -radius * 0.16, radius * 0.18, radius * 0.44);
-  ctx.fillRect(radius * 0.3, -radius * 0.16, radius * 0.18, radius * 0.44);
+  // engine nozzles
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(118,235,255,0.95)";
+  ctx.fillRect(-radius * 0.5, -radius * 0.18, radius * 0.2, radius * 0.46);
+  ctx.fillRect(radius * 0.3, -radius * 0.18, radius * 0.2, radius * 0.46);
 
   if (state.shieldCharges > 0) {
     ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = `rgba(138, 255, 209, ${0.4 + pulse * 0.25})`;
-    ctx.lineWidth = 2.4;
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = "#8affd1";
+    ctx.strokeStyle = `rgba(138,255,209,${0.45 + pulse * 0.3})`;
+    ctx.lineWidth = 2.8;
     ctx.beginPath();
-    ctx.arc(0, 0, radius + 18 + pulse * 2.5, 0, Math.PI * 2);
+    ctx.arc(0, 0, radius + 20 + pulse * 3, 0, Math.PI * 2);
+    ctx.stroke();
+    // inner ring
+    ctx.globalAlpha = 0.4;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius + 12 + pulse * 2, 0, Math.PI * 2);
     ctx.stroke();
   } else if (invulnerable) {
     ctx.globalAlpha = 0.7;
-    ctx.strokeStyle = `rgba(127, 241, 255, ${0.32 + pulse * 0.22})`;
+    ctx.strokeStyle = `rgba(127,241,255,${0.35 + pulse * 0.25})`;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(0, 0, radius + 14 + pulse * 3, 0, Math.PI * 2);
+    ctx.arc(0, 0, radius + 15 + pulse * 3, 0, Math.PI * 2);
     ctx.stroke();
   }
 
@@ -1144,17 +1265,24 @@ function drawAsteroids() {
     ctx.translate(asteroid.x, asteroid.y);
     ctx.rotate(asteroid.rotation);
 
-    ctx.shadowBlur = 18;
-    ctx.shadowColor = "rgba(15, 21, 38, 0.45)";
+    const hit = asteroid.hitFlash > 0;
+    const isLarge = asteroid.radius > tuning.largeAsteroidThreshold;
 
-    const rock = ctx.createRadialGradient(-asteroid.radius * 0.32, -asteroid.radius * 0.34, 4, 0, 0, asteroid.radius + 12);
-    rock.addColorStop(0, asteroid.hitFlash > 0 ? "#eaf8ff" : "#b9c3d6");
-    rock.addColorStop(0.35, asteroid.hitFlash > 0 ? "#9bdfff" : "#77839a");
-    rock.addColorStop(0.7, "#424b5c");
-    rock.addColorStop(1, "#232a36");
+    // outer glow
+    ctx.shadowBlur = hit ? 32 : isLarge ? 22 : 14;
+    ctx.shadowColor = hit ? "#74ecff" : isLarge ? "rgba(80,100,160,0.7)" : "rgba(60,80,130,0.5)";
+
+    const rock = ctx.createRadialGradient(
+      -asteroid.radius * 0.3, -asteroid.radius * 0.32, 2,
+      asteroid.radius * 0.1, asteroid.radius * 0.1, asteroid.radius * 1.1
+    );
+    rock.addColorStop(0, hit ? "#e8f8ff" : isLarge ? "#c8d4e8" : "#b2bdd0");
+    rock.addColorStop(0.3, hit ? "#8ad8ff" : isLarge ? "#6e7e96" : "#606e84");
+    rock.addColorStop(0.65, "#3a4252");
+    rock.addColorStop(1, "#1c2230");
     ctx.fillStyle = rock;
-    ctx.strokeStyle = "rgba(200, 214, 240, 0.24)";
-    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = hit ? "rgba(111,232,255,0.9)" : isLarge ? "rgba(160,180,220,0.35)" : "rgba(140,160,200,0.22)";
+    ctx.lineWidth = hit ? 2 : 1.4;
 
     ctx.beginPath();
     asteroid.points.forEach((point, index) => {
@@ -1167,25 +1295,35 @@ function drawAsteroids() {
     ctx.fill();
     ctx.stroke();
 
+    // edge highlight (top-left rim light)
     ctx.shadowBlur = 0;
+    ctx.strokeStyle = `rgba(200,220,255,${isLarge ? 0.18 : 0.12})`;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    asteroid.points.forEach((point, index) => {
+      const px = Math.cos(point.angle) * point.distance * 0.92;
+      const py = Math.sin(point.angle) * point.distance * 0.92;
+      if (index === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.stroke();
+
     for (const crater of asteroid.craters) {
-      const craterGradient = ctx.createRadialGradient(
-        crater.x - crater.r * 0.3,
-        crater.y - crater.r * 0.3,
-        1,
-        crater.x,
-        crater.y,
-        crater.r
+      const cg = ctx.createRadialGradient(
+        crater.x - crater.r * 0.3, crater.y - crater.r * 0.3, 1,
+        crater.x, crater.y, crater.r
       );
-      craterGradient.addColorStop(0, "rgba(34, 41, 58, 0.96)");
-      craterGradient.addColorStop(1, "rgba(105, 118, 142, 0.28)");
-      ctx.fillStyle = craterGradient;
+      cg.addColorStop(0, "rgba(20,28,44,0.98)");
+      cg.addColorStop(0.7, "rgba(60,72,92,0.5)");
+      cg.addColorStop(1, "rgba(100,115,140,0.15)");
+      ctx.fillStyle = cg;
       ctx.beginPath();
       ctx.arc(crater.x, crater.y, crater.r, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    ctx.strokeStyle = asteroid.hitFlash > 0 ? "rgba(111, 232, 255, 0.8)" : "rgba(116, 136, 170, 0.42)";
+    ctx.strokeStyle = hit ? "rgba(111,232,255,0.85)" : "rgba(100,120,160,0.38)";
     ctx.lineWidth = 1.1;
     for (const crack of asteroid.cracks) {
       ctx.beginPath();
@@ -1323,65 +1461,65 @@ function drawHudOverlay() {
   ctx.save();
   ctx.strokeStyle = state.flashTimer > 0 ? "rgba(255, 111, 135, 0.32)" : "rgba(111, 170, 255, 0.12)";
   ctx.lineWidth = 1;
-  ctx.strokeRect(14, 14, canvas.width - 28, canvas.height - 28);
+  ctx.strokeRect(14, 14, cw - 28, ch - 28);
 
   ctx.fillStyle = "rgba(190, 210, 255, 0.9)";
   ctx.font = '12px "Segoe UI", sans-serif';
   ctx.fillText("SECTOR A-17", 28, 38);
-  ctx.fillText(`THREAT x${state.asteroids.length}`, canvas.width - 126, 38);
-  ctx.fillText(`LASER ${state.shootCooldown > 0 ? "COOLDOWN" : "READY"}`, 28, canvas.height - 26);
+  ctx.fillText(`THREAT x${state.asteroids.length}`, cw - 126, 38);
+  ctx.fillText(`LASER ${state.shootCooldown > 0 ? "COOLDOWN" : "READY"}`, 28, ch - 26);
   ctx.fillText(`CORE x${state.stats.collectedCores}`, 28, 58);
 
   if (state.shieldCharges > 0) {
     ctx.fillStyle = "rgba(138, 255, 209, 0.96)";
-    ctx.fillText(`SHIELD x${state.shieldCharges}`, canvas.width - 130, canvas.height - 26);
+    ctx.fillText(`SHIELD x${state.shieldCharges}`, cw - 130, ch - 26);
   } else if (state.invulnerabilityTimer > 0) {
     ctx.fillStyle = "rgba(144, 244, 255, 0.95)";
-    ctx.fillText("SHIELDING", canvas.width - 116, canvas.height - 26);
+    ctx.fillText("SHIELDING", cw - 116, ch - 26);
   }
 
   if (state.doubleShotTimer > 0) {
     ctx.fillStyle = "rgba(255, 196, 168, 0.98)";
-    ctx.fillText(`DOUBLE x${Math.ceil(state.doubleShotTimer)}s`, canvas.width - 128, 58);
+    ctx.fillText(`DOUBLE x${Math.ceil(state.doubleShotTimer)}s`, cw - 128, 58);
   }
 
   if (state.paused) {
     ctx.fillStyle = "rgba(224, 237, 255, 0.9)";
     ctx.font = '14px "Segoe UI", sans-serif';
-    ctx.fillText("PAUSED", canvas.width - 88, canvas.height - 24);
+    ctx.fillText("PAUSED", cw - 88, ch - 24);
   }
   ctx.restore();
 }
 
 function drawVignette() {
   const vignette = ctx.createRadialGradient(
-    canvas.width / 2,
-    canvas.height / 2,
-    canvas.height * 0.16,
-    canvas.width / 2,
-    canvas.height / 2,
-    canvas.height * 0.76
+    cw / 2,
+    ch / 2,
+    ch * 0.16,
+    cw / 2,
+    ch / 2,
+    ch * 0.76
   );
   vignette.addColorStop(0, "rgba(0,0,0,0)");
   vignette.addColorStop(1, "rgba(0,0,0,0.52)");
   ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, cw, ch);
 
   if (state.flashTimer > 0) {
     const alpha = state.flashTimer / tuning.hitFlashDuration;
     const damageGlow = ctx.createRadialGradient(
-      canvas.width / 2,
-      canvas.height / 2,
-      canvas.height * 0.18,
-      canvas.width / 2,
-      canvas.height / 2,
-      canvas.height * 0.82
+      cw / 2,
+      ch / 2,
+      ch * 0.18,
+      cw / 2,
+      ch / 2,
+      ch * 0.82
     );
     damageGlow.addColorStop(0, "rgba(255,111,135,0)");
     damageGlow.addColorStop(0.72, `rgba(255,111,135,${0.04 + alpha * 0.08})`);
     damageGlow.addColorStop(1, `rgba(255,111,135,${0.18 + alpha * 0.22})`);
     ctx.fillStyle = damageGlow;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, cw, ch);
   }
 }
 
