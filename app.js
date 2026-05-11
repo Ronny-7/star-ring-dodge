@@ -170,7 +170,7 @@ function resizeCanvas() {
   canvas.height = physH;
   canvas.style.width = width + "px";
   canvas.style.height = height + "px";
-  ctx.scale(dpr, dpr);
+  // scale is reset each draw via setTransform, not here
 
   const scaleX = width / previousW;
   const scaleY = height / previousH;
@@ -983,6 +983,7 @@ function endGame() {
 }
 
 function draw() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cw, ch);
   ctx.save();
 
