@@ -5,6 +5,7 @@ const { bestKey, tuning, uiText } = window.starRingConfig;
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 let musicEnabled = true;
 let sfxEnabled = true;
+let activeSkin = "default";
 let musicGain = null;
 let musicNodes = [];
 
@@ -57,13 +58,13 @@ function toggleMusic() {
   musicEnabled = !musicEnabled;
   if (musicEnabled) startMusic();
   else stopMusic();
-  const btn = document.getElementById("music-button");
+  const btn = document.getElementById("settings-music-btn");
   if (btn) btn.textContent = musicEnabled ? "音乐 ON" : "音乐 OFF";
 }
 
 function toggleSfx() {
   sfxEnabled = !sfxEnabled;
-  const btn = document.getElementById("sfx-button");
+  const btn = document.getElementById("settings-sfx-btn");
   if (btn) btn.textContent = sfxEnabled ? "音效 ON" : "音效 OFF";
 }
 
@@ -407,6 +408,48 @@ function syncHud() {
 
 function hideOverlay() {
   overlay.classList.add("hidden");
+}
+
+const settingsOverlay = document.getElementById("settings-overlay");
+
+function openSettings() {
+  settingsOverlay.classList.remove("hidden");
+}
+
+function closeSettings() {
+  settingsOverlay.classList.add("hidden");
+}
+
+function selectSkin(name) {
+  activeSkin = name;
+  document.querySelectorAll(".skin-card").forEach(el => {
+    el.classList.toggle("active", el.dataset.skin === name);
+  });
+  renderSkinPreviews();
+}
+
+function renderSkinPreviews() {
+  document.querySelectorAll(".skin-preview").forEach(canvas => {
+    const skinName = canvas.closest(".skin-card").dataset.skin;
+    const pctx = canvas.getContext("2d");
+    const r = 18;
+    pctx.clearRect(0, 0, 64, 64);
+    pctx.save();
+    pctx.translate(32, 36);
+    const skin = SKINS[skinName];
+    const hullG = pctx.createLinearGradient(0, -r - 20, 0, r + 6);
+    hullG.addColorStop(0, "#f0faff");
+    hullG.addColorStop(0.5, "#4a8fff");
+    hullG.addColorStop(1, "#0a1a3a");
+    pctx.fillStyle = hullG;
+    skin.drawHull(pctx, r);
+    pctx.fill();
+    pctx.strokeStyle = "rgba(131,232,255,0.8)";
+    pctx.lineWidth = 1.5;
+    skin.drawHull(pctx, r);
+    pctx.stroke();
+    pctx.restore();
+  });
 }
 
 function showOverlay(mode, title, text, buttonText) {
@@ -1107,22 +1150,90 @@ function drawAsteroidWarnings() {
   ctx.restore();
 }
 
+const SKINS = {
+  default: {
+    drawHull(ctx, r) {
+      ctx.beginPath();
+      ctx.moveTo(0, -r - 20);
+      ctx.lineTo(r * 0.82, r * 0.5);
+      ctx.lineTo(r * 0.44, r * 0.34);
+      ctx.lineTo(r * 0.3, r + 5);
+      ctx.lineTo(0, r * 0.6);
+      ctx.lineTo(-r * 0.3, r + 5);
+      ctx.lineTo(-r * 0.44, r * 0.34);
+      ctx.lineTo(-r * 0.82, r * 0.5);
+      ctx.closePath();
+    },
+    drawWings(ctx, r) {
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.98, r * 0.52);
+      ctx.lineTo(-r * 0.38, r * 0.16);
+      ctx.lineTo(-r * 0.2, r * 0.64);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(r * 0.98, r * 0.52);
+      ctx.lineTo(r * 0.38, r * 0.16);
+      ctx.lineTo(r * 0.2, r * 0.64);
+      ctx.closePath();
+      ctx.fill();
+    },
+    hullTop: r => -r - 20,
+    engines: [{ x: -0.32, y: 0.55 }, { x: 0.32, y: 0.55 }],
+    nozzles: [{ x: -0.5, y: -0.18, w: 0.2, h: 0.46 }, { x: 0.3, y: -0.18, w: 0.2, h: 0.46 }]
+  },
+  delta: {
+    drawHull(ctx, r) {
+      ctx.beginPath();
+      ctx.moveTo(0, -r - 8);
+      ctx.lineTo(r * 1.4, r * 0.7);
+      ctx.lineTo(r * 0.5, r * 0.5);
+      ctx.lineTo(r * 0.28, r + 4);
+      ctx.lineTo(0, r * 0.75);
+      ctx.lineTo(-r * 0.28, r + 4);
+      ctx.lineTo(-r * 0.5, r * 0.5);
+      ctx.lineTo(-r * 1.4, r * 0.7);
+      ctx.closePath();
+    },
+    drawWings(ctx, r) {},
+    hullTop: r => -r - 8,
+    engines: [{ x: -0.28, y: 0.6 }, { x: 0.28, y: 0.6 }],
+    nozzles: [{ x: -0.44, y: -0.1, w: 0.18, h: 0.38 }, { x: 0.26, y: -0.1, w: 0.18, h: 0.38 }]
+  },
+  saucer: {
+    drawHull(ctx, r) {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 1.3, r * 0.55, 0, 0, Math.PI * 2);
+    },
+    drawWings(ctx, r) {
+      ctx.strokeStyle = "rgba(200,240,255,0.35)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 1.1, r * 0.42, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    },
+    hullTop: r => -r * 0.55,
+    engines: [{ x: -0.55, y: 0.2 }, { x: 0.55, y: 0.2 }],
+    nozzles: [{ x: -0.7, y: 0.05, w: 0.18, h: 0.28 }, { x: 0.52, y: 0.05, w: 0.18, h: 0.28 }]
+  }
+};
+
 function drawPlayer() {
   const { x, y, radius, angle } = state.player;
   const pulse = Math.sin(state.pulseTime * 5) * 0.5 + 0.5;
   const invulnerable = state.invulnerabilityTimer > 0;
   const flicker = invulnerable && Math.floor(state.invulnerabilityTimer * 18) % 2 === 0;
   const thruster = state.running && !state.paused && hasActiveMovement();
+  const skin = SKINS[activeSkin];
 
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
   ctx.globalAlpha = flicker ? 0.7 : 1;
 
-  // dual engine glow
-  const engineL = { x: -radius * 0.32, y: radius * 0.55 };
-  const engineR = { x: radius * 0.32, y: radius * 0.55 };
-  for (const eng of [engineL, engineR]) {
+  // engine glow + thruster flames
+  const engines = skin.engines.map(e => ({ x: e.x * radius, y: e.y * radius }));
+  for (const eng of engines) {
     const eg = ctx.createRadialGradient(eng.x, eng.y, 0, eng.x, eng.y, radius * 0.38);
     eg.addColorStop(0, `rgba(98,228,255,${0.55 + pulse * 0.3})`);
     eg.addColorStop(1, "rgba(98,228,255,0)");
@@ -1131,9 +1242,8 @@ function drawPlayer() {
     ctx.arc(eng.x, eng.y, radius * 0.38, 0, Math.PI * 2);
     ctx.fill();
   }
-
   if (thruster) {
-    for (const eng of [engineL, engineR]) {
+    for (const eng of engines) {
       const flame = 14 + pulse * 14;
       const fg = ctx.createLinearGradient(eng.x, eng.y, eng.x, eng.y + flame);
       fg.addColorStop(0, "rgba(255,243,182,0.95)");
@@ -1157,89 +1267,71 @@ function drawPlayer() {
     ? `rgba(214,249,255,${0.6 + pulse * 0.25})`
     : `rgba(131,232,255,${0.55 + pulse * 0.2})`;
   ctx.lineWidth = 2.2;
-  ctx.beginPath();
-  ctx.moveTo(0, -radius - 20);
-  ctx.lineTo(radius * 0.82, radius * 0.5);
-  ctx.lineTo(radius * 0.44, radius * 0.34);
-  ctx.lineTo(radius * 0.3, radius + 5);
-  ctx.lineTo(0, radius * 0.6);
-  ctx.lineTo(-radius * 0.3, radius + 5);
-  ctx.lineTo(-radius * 0.44, radius * 0.34);
-  ctx.lineTo(-radius * 0.82, radius * 0.5);
-  ctx.closePath();
+  skin.drawHull(ctx, radius);
   ctx.stroke();
 
   // hull fill
-  const hullGradient = ctx.createLinearGradient(0, -radius - 20, 0, radius + 6);
+  const top = skin.hullTop(radius);
+  const hullGradient = ctx.createLinearGradient(0, top, 0, radius + 6);
   hullGradient.addColorStop(0, "#f0faff");
   hullGradient.addColorStop(0.2, "#b8f0ff");
   hullGradient.addColorStop(0.5, "#4a8fff");
   hullGradient.addColorStop(1, "#0a1a3a");
   ctx.fillStyle = hullGradient;
-  ctx.beginPath();
-  ctx.moveTo(0, -radius - 20);
-  ctx.lineTo(radius * 0.82, radius * 0.5);
-  ctx.lineTo(radius * 0.44, radius * 0.34);
-  ctx.lineTo(radius * 0.3, radius + 5);
-  ctx.lineTo(0, radius * 0.6);
-  ctx.lineTo(-radius * 0.3, radius + 5);
-  ctx.lineTo(-radius * 0.44, radius * 0.34);
-  ctx.lineTo(-radius * 0.82, radius * 0.5);
-  ctx.closePath();
+  skin.drawHull(ctx, radius);
   ctx.fill();
 
-  // cockpit
   ctx.shadowBlur = 0;
-  const cockpitG = ctx.createRadialGradient(0, -radius * 0.5, 1, 0, -radius * 0.4, radius * 0.52);
-  cockpitG.addColorStop(0, "rgba(200,248,255,0.95)");
-  cockpitG.addColorStop(0.5, "rgba(60,160,255,0.7)");
-  cockpitG.addColorStop(1, "rgba(8,16,31,0.92)");
-  ctx.fillStyle = cockpitG;
-  ctx.beginPath();
-  ctx.moveTo(0, -radius * 0.98);
-  ctx.bezierCurveTo(radius * 0.3, -radius * 0.22, radius * 0.26, radius * 0.06, 0, radius * 0.26);
-  ctx.bezierCurveTo(-radius * 0.26, radius * 0.06, -radius * 0.3, -radius * 0.22, 0, -radius * 0.98);
-  ctx.fill();
 
-  // cockpit highlight
-  ctx.fillStyle = "rgba(255,255,255,0.55)";
-  ctx.beginPath();
-  ctx.ellipse(-radius * 0.08, -radius * 0.72, radius * 0.08, radius * 0.18, -0.3, 0, Math.PI * 2);
-  ctx.fill();
-
-  // panel lines
-  ctx.strokeStyle = "rgba(233,249,255,0.7)";
-  ctx.lineWidth = 1.2;
-  ctx.shadowBlur = 0;
-  ctx.beginPath();
-  ctx.moveTo(0, -radius - 16);
-  ctx.lineTo(0, radius * 0.52);
-  ctx.moveTo(-radius * 0.54, radius * 0.1);
-  ctx.lineTo(radius * 0.54, radius * 0.1);
-  ctx.stroke();
+  if (activeSkin !== "saucer") {
+    // cockpit
+    const cockpitG = ctx.createRadialGradient(0, -radius * 0.5, 1, 0, -radius * 0.4, radius * 0.52);
+    cockpitG.addColorStop(0, "rgba(200,248,255,0.95)");
+    cockpitG.addColorStop(0.5, "rgba(60,160,255,0.7)");
+    cockpitG.addColorStop(1, "rgba(8,16,31,0.92)");
+    ctx.fillStyle = cockpitG;
+    ctx.beginPath();
+    ctx.moveTo(0, -radius * 0.98);
+    ctx.bezierCurveTo(radius * 0.3, -radius * 0.22, radius * 0.26, radius * 0.06, 0, radius * 0.26);
+    ctx.bezierCurveTo(-radius * 0.26, radius * 0.06, -radius * 0.3, -radius * 0.22, 0, -radius * 0.98);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.beginPath();
+    ctx.ellipse(-radius * 0.08, -radius * 0.72, radius * 0.08, radius * 0.18, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // panel lines
+    ctx.strokeStyle = "rgba(233,249,255,0.7)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, top + 4);
+    ctx.lineTo(0, radius * 0.52);
+    ctx.moveTo(-radius * 0.54, radius * 0.1);
+    ctx.lineTo(radius * 0.54, radius * 0.1);
+    ctx.stroke();
+  } else {
+    // saucer dome
+    const domeG = ctx.createRadialGradient(0, -radius * 0.15, 1, 0, 0, radius * 0.5);
+    domeG.addColorStop(0, "rgba(200,248,255,0.9)");
+    domeG.addColorStop(0.5, "rgba(60,160,255,0.6)");
+    domeG.addColorStop(1, "rgba(8,16,31,0.85)");
+    ctx.fillStyle = domeG;
+    ctx.beginPath();
+    ctx.ellipse(0, -radius * 0.05, radius * 0.42, radius * 0.28, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // wings
   ctx.fillStyle = "#c8f0ff";
   ctx.shadowBlur = 8;
   ctx.shadowColor = "#62e4ff";
-  ctx.beginPath();
-  ctx.moveTo(-radius * 0.98, radius * 0.52);
-  ctx.lineTo(-radius * 0.38, radius * 0.16);
-  ctx.lineTo(-radius * 0.2, radius * 0.64);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(radius * 0.98, radius * 0.52);
-  ctx.lineTo(radius * 0.38, radius * 0.16);
-  ctx.lineTo(radius * 0.2, radius * 0.64);
-  ctx.closePath();
-  ctx.fill();
+  skin.drawWings(ctx, radius);
 
   // engine nozzles
   ctx.shadowBlur = 0;
   ctx.fillStyle = "rgba(118,235,255,0.95)";
-  ctx.fillRect(-radius * 0.5, -radius * 0.18, radius * 0.2, radius * 0.46);
-  ctx.fillRect(radius * 0.3, -radius * 0.18, radius * 0.2, radius * 0.46);
+  for (const n of skin.nozzles) {
+    ctx.fillRect(n.x * radius, n.y * radius, n.w * radius, n.h * radius);
+  }
 
   if (state.shieldCharges > 0) {
     ctx.globalAlpha = 0.9;
@@ -1250,7 +1342,6 @@ function drawPlayer() {
     ctx.beginPath();
     ctx.arc(0, 0, radius + 20 + pulse * 3, 0, Math.PI * 2);
     ctx.stroke();
-    // inner ring
     ctx.globalAlpha = 0.4;
     ctx.lineWidth = 1.2;
     ctx.beginPath();
@@ -1787,6 +1878,7 @@ if (mobileViewportQuery.addEventListener) {
 
 syncLandscapeUi();
 resizeCanvas();
+renderSkinPreviews();
 showOverlay("start", uiText.startTitle, uiText.startText, uiText.startButton);
 state.stars = Array.from({ length: 90 }, () => makeStar(true));
 draw();
