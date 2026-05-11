@@ -2,6 +2,14 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const { bestKey, tuning, uiText } = window.starRingConfig;
 
+const particlePool = [];
+function acquireParticle(x, y, vx, vy, life, size, color) {
+  const p = particlePool.pop() || {};
+  p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.size = size; p.color = color;
+  return p;
+}
+function releaseParticle(p) { particlePool.push(p); }
+
 const scoreEl = document.getElementById("score");
 const healthEl = document.getElementById("health");
 const bestEl = document.getElementById("best");
@@ -538,14 +546,21 @@ function updateStars(dt) {
 }
 
 function updateParticles(dt) {
-  state.particles = state.particles.filter((particle) => {
-    particle.life -= dt;
-    particle.x += particle.vx * dt;
-    particle.y += particle.vy * dt;
-    particle.vx *= 0.988;
-    particle.vy *= 0.988;
-    return particle.life > 0;
-  });
+  let alive = 0;
+  for (let i = 0; i < state.particles.length; i++) {
+    const p = state.particles[i];
+    p.life -= dt;
+    if (p.life > 0) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.988;
+      p.vy *= 0.988;
+      state.particles[alive++] = p;
+    } else {
+      releaseParticle(p);
+    }
+  }
+  state.particles.length = alive;
 }
 
 function updateMessages(dt) {
@@ -635,15 +650,14 @@ function spawnLaser(x, y, angle) {
   });
 
   for (let i = 0; i < 5; i += 1) {
-    state.particles.push({
-      x,
-      y,
-      vx: Math.cos(angle) * (180 + Math.random() * 120) + (Math.random() - 0.5) * 70,
-      vy: Math.sin(angle) * (180 + Math.random() * 120) + (Math.random() - 0.5) * 70,
-      life: 0.12 + Math.random() * 0.12,
-      size: 1.6 + Math.random() * 2.2,
-      color: Math.random() > 0.5 ? "#77ebff" : "#b7f4ff"
-    });
+    state.particles.push(acquireParticle(
+      x, y,
+      Math.cos(angle) * (180 + Math.random() * 120) + (Math.random() - 0.5) * 70,
+      Math.sin(angle) * (180 + Math.random() * 120) + (Math.random() - 0.5) * 70,
+      0.12 + Math.random() * 0.12,
+      1.6 + Math.random() * 2.2,
+      Math.random() > 0.5 ? "#77ebff" : "#b7f4ff"
+    ));
   }
 }
 
@@ -710,9 +724,11 @@ function handleCollisions() {
     let hit = false;
     for (let j = state.asteroids.length - 1; j >= 0; j -= 1) {
       const asteroid = state.asteroids[j];
+      const threshold = asteroid.radius + 7;
+      if (Math.abs(asteroid.x - laser.x) > threshold || Math.abs(asteroid.y - laser.y) > threshold) continue;
       const isLargeAsteroid = asteroid.radius > 34;
       const dist = Math.hypot(asteroid.x - laser.x, asteroid.y - laser.y);
-      if (dist < asteroid.radius + 7) {
+      if (dist < threshold) {
         hit = true;
         state.lasers.splice(i, 1);
         state.stats.shotsHit += 1;
@@ -771,15 +787,14 @@ function spawnBurst(x, y, count, colors) {
   for (let i = 0; i < count; i += 1) {
     const angle = Math.random() * Math.PI * 2;
     const speed = 50 + Math.random() * 220;
-    state.particles.push({
-      x,
-      y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      life: 0.22 + Math.random() * 0.45,
-      size: 1.4 + Math.random() * 3.8,
-      color: colors[Math.floor(Math.random() * colors.length)]
-    });
+    state.particles.push(acquireParticle(
+      x, y,
+      Math.cos(angle) * speed,
+      Math.sin(angle) * speed,
+      0.22 + Math.random() * 0.45,
+      1.4 + Math.random() * 3.8,
+      colors[Math.floor(Math.random() * colors.length)]
+    ));
   }
 }
 
