@@ -4,6 +4,7 @@ const { bestKey, tuning, uiText } = window.starRingConfig;
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 let musicEnabled = true;
+let sfxEnabled = true;
 let musicGain = null;
 let musicNodes = [];
 
@@ -60,10 +61,17 @@ function toggleMusic() {
   if (btn) btn.textContent = musicEnabled ? "音乐 ON" : "音乐 OFF";
 }
 
+function toggleSfx() {
+  sfxEnabled = !sfxEnabled;
+  const btn = document.getElementById("sfx-button");
+  if (btn) btn.textContent = sfxEnabled ? "音效 ON" : "音效 OFF";
+}
+
 const vibrationMap = { shoot: 10, hit: 20, explode: 40, pickup: 15, hurt: 80 };
 
 function playSound(type) {
   if (navigator.vibrate) navigator.vibrate(vibrationMap[type] || 10);
+  if (!sfxEnabled) return;
   if (audioCtx.state === "suspended") audioCtx.resume();
   const now = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();

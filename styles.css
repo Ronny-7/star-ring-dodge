@@ -382,6 +382,21 @@ body {
   font-size: 0.8rem;
 }
 
+.audio-button {
+  display: inline-grid;
+  place-items: center;
+  margin: 0;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 201, 255, 0.3);
+  background: rgba(8, 17, 32, 0.74);
+  color: #dff7ff;
+  box-shadow: none;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
 .signal-group span {
   width: 10px;
   height: 10px;
