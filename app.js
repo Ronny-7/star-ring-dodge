@@ -2,6 +2,54 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const { bestKey, tuning, uiText } = window.starRingConfig;
 
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(type) {
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  if (type === "shoot") {
+    osc.type = "square";
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.exponentialRampToValueAtTime(180, now + 0.08);
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    osc.start(now); osc.stop(now + 0.08);
+  } else if (type === "hit") {
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(260, now);
+    osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc.start(now); osc.stop(now + 0.12);
+  } else if (type === "explode") {
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(120, now);
+    osc.frequency.exponentialRampToValueAtTime(30, now + 0.25);
+    gain.gain.setValueAtTime(0.18, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc.start(now); osc.stop(now + 0.25);
+  } else if (type === "pickup") {
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(440, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc.start(now); osc.stop(now + 0.15);
+  } else if (type === "hurt") {
+    osc.type = "square";
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(60, now + 0.3);
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    osc.start(now); osc.stop(now + 0.3);
+  }
+}
+
 const particlePool = [];
 function acquireParticle(x, y, vx, vy, life, size, color) {
   const p = particlePool.pop() || {};
@@ -669,6 +717,7 @@ function fireLaser() {
   }
 
   state.shootCooldown = 0.18;
+  playSound("shoot");
   const angle = state.player.angle - Math.PI / 2;
   const offset = state.player.radius + 18;
   const baseX = state.player.x + Math.cos(angle) * offset;
@@ -712,6 +761,7 @@ function handleCollisions() {
         state.flashTimer = tuning.hitFlashDuration;
         triggerScreenShake(0.28, 18);
         spawnMessage("HULL -1", state.player.x, state.player.y - 34, "#ff8ea1");
+        playSound("hurt");
         if (state.health <= 0) {
           endGame();
           return;
@@ -745,6 +795,9 @@ function handleCollisions() {
           spawnBurst(asteroid.x, asteroid.y, isLargeAsteroid ? 28 : 20, ["#7fe8ff", "#dce7ff", "#95a5bf"]);
           triggerScreenShake(isLargeAsteroid ? 0.18 : 0.12, isLargeAsteroid ? 12 : 7);
           state.asteroids.splice(j, 1);
+          playSound("explode");
+        } else {
+          playSound("hit");
         }
         break;
       }
@@ -763,6 +816,7 @@ function handleCollisions() {
       state.stats.collectedCores += 1;
       spawnBurst(core.x, core.y, 14, ["#8affd1", "#f3fffd", "#62e4ff"]);
       spawnMessage("CORE +25", core.x, core.y - 22, "#8affd1");
+      playSound("pickup");
     }
   }
 
@@ -781,6 +835,7 @@ function handleCollisions() {
         spawnMessage("DOUBLE FIRE", powerUp.x, powerUp.y - 24, "#ffb59e");
       }
       triggerScreenShake(0.12, 8);
+      playSound("pickup");
     }
   }
 }
