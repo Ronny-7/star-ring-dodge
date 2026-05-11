@@ -4,7 +4,10 @@ const { bestKey, tuning, uiText } = window.starRingConfig;
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+const vibrationMap = { shoot: 10, hit: 20, explode: 40, pickup: 15, hurt: 80 };
+
 function playSound(type) {
+  if (navigator.vibrate) navigator.vibrate(vibrationMap[type] || 10);
   if (audioCtx.state === "suspended") audioCtx.resume();
   const now = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
