@@ -6,12 +6,19 @@ const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 let musicEnabled = true;
 let sfxEnabled = true;
 let activeSkin = "default";
+let activeColor = "blue";
+
+const COLORS = {
+  blue:  { hi: "#f0faff", mid: "#4a8fff", glow: "#62e4ff", stroke: "rgba(131,232,255,0.8)", engine: "rgba(98,228,255,0.95)" },
+  red:   { hi: "#fff0f0", mid: "#ff4a4a", glow: "#ff6f87", stroke: "rgba(255,131,131,0.8)", engine: "rgba(255,98,98,0.95)"  },
+  green: { hi: "#f0fff4", mid: "#4aff8a", glow: "#8affd1", stroke: "rgba(131,255,180,0.8)", engine: "rgba(98,255,180,0.95)" }
+};
 let musicGain = null;
 let musicNodes = [];
 
-function startMusic() {
+async function startMusic() {
   if (!musicEnabled || musicNodes.length) return;
-  if (audioCtx.state === "suspended") audioCtx.resume();
+  if (audioCtx.state === "suspended") await audioCtx.resume();
   const master = audioCtx.createGain();
   master.gain.setValueAtTime(0.06, audioCtx.currentTime);
   master.connect(audioCtx.destination);
@@ -59,13 +66,13 @@ function toggleMusic() {
   if (musicEnabled) startMusic();
   else stopMusic();
   const btn = document.getElementById("settings-music-btn");
-  if (btn) btn.textContent = musicEnabled ? "音乐 ON" : "音乐 OFF";
+  if (btn) { btn.textContent = musicEnabled ? "ON" : "OFF"; btn.classList.toggle("active", musicEnabled); }
 }
 
 function toggleSfx() {
   sfxEnabled = !sfxEnabled;
   const btn = document.getElementById("settings-sfx-btn");
-  if (btn) btn.textContent = sfxEnabled ? "音效 ON" : "音效 OFF";
+  if (btn) { btn.textContent = sfxEnabled ? "ON" : "OFF"; btn.classList.toggle("active", sfxEnabled); }
 }
 
 const vibrationMap = { shoot: 10, hit: 20, explode: 40, pickup: 15, hurt: 80 };
@@ -414,10 +421,18 @@ const settingsOverlay = document.getElementById("settings-overlay");
 
 function openSettings() {
   settingsOverlay.classList.remove("hidden");
+  if (state.running && !state.paused && !state.gameOver) {
+    state.paused = true;
+    keys.clear();
+  }
 }
 
 function closeSettings() {
   settingsOverlay.classList.add("hidden");
+  if (state.running && state.paused && !state.gameOver) {
+    state.paused = false;
+    state.lastTime = 0;
+  }
 }
 
 function selectSkin(name) {
@@ -428,23 +443,36 @@ function selectSkin(name) {
   renderSkinPreviews();
 }
 
+function selectColor(name) {
+  activeColor = name;
+  document.querySelectorAll(".color-swatch").forEach(el => {
+    el.classList.toggle("active", el.dataset.color === name);
+  });
+  renderSkinPreviews();
+}
+
 function renderSkinPreviews() {
+  const col = COLORS[activeColor];
   document.querySelectorAll(".skin-preview").forEach(canvas => {
     const skinName = canvas.closest(".skin-card").dataset.skin;
     const pctx = canvas.getContext("2d");
-    const r = 18;
-    pctx.clearRect(0, 0, 64, 64);
+    const size = canvas.width;
+    const r = size * 0.26;
+    pctx.clearRect(0, 0, size, size);
     pctx.save();
-    pctx.translate(32, 36);
+    pctx.translate(size / 2, size / 2 + r * 0.2);
     const skin = SKINS[skinName];
-    const hullG = pctx.createLinearGradient(0, -r - 20, 0, r + 6);
-    hullG.addColorStop(0, "#f0faff");
-    hullG.addColorStop(0.5, "#4a8fff");
+    const top = skin.hullTop(r);
+    const hullG = pctx.createLinearGradient(0, top, 0, r + 4);
+    hullG.addColorStop(0, col.hi);
+    hullG.addColorStop(0.45, col.mid);
     hullG.addColorStop(1, "#0a1a3a");
     pctx.fillStyle = hullG;
     skin.drawHull(pctx, r);
     pctx.fill();
-    pctx.strokeStyle = "rgba(131,232,255,0.8)";
+    pctx.shadowBlur = 10;
+    pctx.shadowColor = col.glow;
+    pctx.strokeStyle = col.stroke;
     pctx.lineWidth = 1.5;
     skin.drawHull(pctx, r);
     pctx.stroke();
@@ -1225,6 +1253,7 @@ function drawPlayer() {
   const flicker = invulnerable && Math.floor(state.invulnerabilityTimer * 18) % 2 === 0;
   const thruster = state.running && !state.paused && hasActiveMovement();
   const skin = SKINS[activeSkin];
+  const col = COLORS[activeColor];
 
   ctx.save();
   ctx.translate(x, y);
@@ -1235,8 +1264,8 @@ function drawPlayer() {
   const engines = skin.engines.map(e => ({ x: e.x * radius, y: e.y * radius }));
   for (const eng of engines) {
     const eg = ctx.createRadialGradient(eng.x, eng.y, 0, eng.x, eng.y, radius * 0.38);
-    eg.addColorStop(0, `rgba(98,228,255,${0.55 + pulse * 0.3})`);
-    eg.addColorStop(1, "rgba(98,228,255,0)");
+    eg.addColorStop(0, col.engine.replace("0.95)", `${0.55 + pulse * 0.3})`));
+    eg.addColorStop(1, col.engine.replace("0.95)", "0)"));
     ctx.fillStyle = eg;
     ctx.beginPath();
     ctx.arc(eng.x, eng.y, radius * 0.38, 0, Math.PI * 2);
@@ -1247,8 +1276,8 @@ function drawPlayer() {
       const flame = 14 + pulse * 14;
       const fg = ctx.createLinearGradient(eng.x, eng.y, eng.x, eng.y + flame);
       fg.addColorStop(0, "rgba(255,243,182,0.95)");
-      fg.addColorStop(0.35, "rgba(98,228,255,0.88)");
-      fg.addColorStop(1, "rgba(98,228,255,0)");
+      fg.addColorStop(0.35, col.engine.replace("0.95)", "0.88)"));
+      fg.addColorStop(1, col.engine.replace("0.95)", "0)"));
       ctx.fillStyle = fg;
       ctx.beginPath();
       ctx.moveTo(eng.x - 5, eng.y);
@@ -1260,12 +1289,12 @@ function drawPlayer() {
 
   // hull glow
   ctx.shadowBlur = state.flashTimer > 0 ? 42 : invulnerable ? 36 : 28;
-  ctx.shadowColor = state.flashTimer > 0 ? "#ff6f87" : invulnerable ? "#9ff3ff" : "#62e4ff";
+  ctx.shadowColor = state.flashTimer > 0 ? "#ff6f87" : invulnerable ? "#9ff3ff" : col.glow;
 
   // hull outline
   ctx.strokeStyle = invulnerable
     ? `rgba(214,249,255,${0.6 + pulse * 0.25})`
-    : `rgba(131,232,255,${0.55 + pulse * 0.2})`;
+    : col.stroke.replace("0.8)", `${0.55 + pulse * 0.2})`);
   ctx.lineWidth = 2.2;
   skin.drawHull(ctx, radius);
   ctx.stroke();
@@ -1273,9 +1302,9 @@ function drawPlayer() {
   // hull fill
   const top = skin.hullTop(radius);
   const hullGradient = ctx.createLinearGradient(0, top, 0, radius + 6);
-  hullGradient.addColorStop(0, "#f0faff");
-  hullGradient.addColorStop(0.2, "#b8f0ff");
-  hullGradient.addColorStop(0.5, "#4a8fff");
+  hullGradient.addColorStop(0, col.hi);
+  hullGradient.addColorStop(0.2, col.hi);
+  hullGradient.addColorStop(0.5, col.mid);
   hullGradient.addColorStop(1, "#0a1a3a");
   ctx.fillStyle = hullGradient;
   skin.drawHull(ctx, radius);
@@ -1321,14 +1350,14 @@ function drawPlayer() {
   }
 
   // wings
-  ctx.fillStyle = "#c8f0ff";
+  ctx.fillStyle = col.hi;
   ctx.shadowBlur = 8;
-  ctx.shadowColor = "#62e4ff";
+  ctx.shadowColor = col.glow;
   skin.drawWings(ctx, radius);
 
   // engine nozzles
   ctx.shadowBlur = 0;
-  ctx.fillStyle = "rgba(118,235,255,0.95)";
+  ctx.fillStyle = col.engine;
   for (const n of skin.nozzles) {
     ctx.fillRect(n.x * radius, n.y * radius, n.w * radius, n.h * radius);
   }

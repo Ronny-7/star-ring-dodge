@@ -19,7 +19,7 @@
         <p class="kicker">Arcade / Survival Run</p>
         <div class="brand-row">
           <h1>星环闪避</h1>
-          <span class="build-tag">v2.1</span>
+          <span class="build-tag">v2.2</span>
         </div>
         <p class="subtitle">在封锁航道中机动穿梭，规避陨石流，回收高能核心并主动清障。</p>
       </div>
@@ -146,33 +146,50 @@
   </main>
 
   <div class="settings-overlay hidden" id="settings-overlay">
-    <div class="overlay-panel settings-panel">
-      <p class="panel-label">Web Arcade</p>
-      <h2>游戏设置</h2>
-      <div class="settings-row">
-        <span>背景音乐</span>
-        <button class="audio-button" id="settings-music-btn" onclick="toggleMusic()">ON</button>
+    <div class="settings-panel">
+      <div class="settings-header">
+        <span class="panel-label">SETTINGS</span>
+        <button class="settings-close" onclick="closeSettings()" aria-label="关闭">✕</button>
       </div>
-      <div class="settings-row">
-        <span>音效</span>
-        <button class="audio-button" id="settings-sfx-btn" onclick="toggleSfx()">ON</button>
+
+      <div class="settings-section">
+        <p class="settings-section-title">音频</p>
+        <div class="settings-row">
+          <span>背景音乐</span>
+          <button class="toggle-btn active" id="settings-music-btn" onclick="toggleMusic()">ON</button>
+        </div>
+        <div class="settings-row">
+          <span>音效</span>
+          <button class="toggle-btn active" id="settings-sfx-btn" onclick="toggleSfx()">ON</button>
+        </div>
       </div>
-      <p class="panel-label" style="margin-top:18px">飞船外观</p>
-      <div class="skin-grid">
-        <button class="skin-card active" data-skin="default" onclick="selectSkin('default')">
-          <canvas class="skin-preview" width="64" height="64"></canvas>
-          <span>战斗机</span>
-        </button>
-        <button class="skin-card" data-skin="delta" onclick="selectSkin('delta')">
-          <canvas class="skin-preview" width="64" height="64"></canvas>
-          <span>三角翼</span>
-        </button>
-        <button class="skin-card" data-skin="saucer" onclick="selectSkin('saucer')">
-          <canvas class="skin-preview" width="64" height="64"></canvas>
-          <span>飞碟</span>
-        </button>
+
+      <div class="settings-section">
+        <p class="settings-section-title">飞船外形</p>
+        <div class="skin-grid">
+          <button class="skin-card active" data-skin="default" onclick="selectSkin('default')">
+            <canvas class="skin-preview" width="72" height="72"></canvas>
+            <span>战斗机</span>
+          </button>
+          <button class="skin-card" data-skin="delta" onclick="selectSkin('delta')">
+            <canvas class="skin-preview" width="72" height="72"></canvas>
+            <span>三角翼</span>
+          </button>
+          <button class="skin-card" data-skin="saucer" onclick="selectSkin('saucer')">
+            <canvas class="skin-preview" width="72" height="72"></canvas>
+            <span>飞碟</span>
+          </button>
+        </div>
       </div>
-      <button style="margin-top:20px;width:100%" onclick="closeSettings()">关闭</button>
+
+      <div class="settings-section">
+        <p class="settings-section-title">飞船颜色</p>
+        <div class="color-row">
+          <button class="color-swatch active" data-color="blue" onclick="selectColor('blue')" aria-label="蓝色" style="--c:#62e4ff"></button>
+          <button class="color-swatch" data-color="red" onclick="selectColor('red')" aria-label="红色" style="--c:#ff6f87"></button>
+          <button class="color-swatch" data-color="green" onclick="selectColor('green')" aria-label="绿色" style="--c:#8affd1"></button>
+        </div>
+      </div>
     </div>
   </div>
 
