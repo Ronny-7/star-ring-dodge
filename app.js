@@ -244,8 +244,8 @@ const state = {
   player: {
     x: canvas.width / 2,
     y: canvas.height / 2,
-    radius: 22,
-    speed: 340,
+    radius: tuning.playerRadius,
+    speed: tuning.playerSpeed,
     angle: -Math.PI / 2
   },
   asteroids: [],
@@ -310,7 +310,7 @@ function resetGame() {
   state.lasers = [];
   state.messages = [];
   state.particles = [];
-  state.stars = Array.from({ length: 90 }, () => makeStar(true));
+  state.stars = Array.from({ length: tuning.starCount }, () => makeStar(true));
   syncHud();
   hideOverlay();
 }
@@ -396,7 +396,7 @@ function triggerScreenShake(duration, strength) {
 
 function spawnAsteroid() {
   const scale = getGameplayScale();
-  const radius = (Math.random() * 22 + 20) * scale;
+  const radius = (Math.random() * tuning.asteroidRadiusRange + tuning.asteroidRadiusMin) * scale;
   const minDistance = tuning.safeSpawnDistance + radius + state.player.radius;
   let spawn = sampleAsteroidSpawn(radius);
   let bestDistance = Math.hypot(state.player.x - spawn.x, state.player.y - spawn.y);
@@ -413,7 +413,7 @@ function spawnAsteroid() {
   if (bestDistance < minDistance) return;
 
   const angle = Math.atan2(state.player.y - spawn.y, state.player.x - spawn.x);
-  const speed = (Math.random() * 70 + 110) * state.speedScale;
+  const speed = (Math.random() * tuning.asteroidSpeedRange + tuning.asteroidSpeedBase) * state.speedScale;
   const shape = makeAsteroidShape(radius);
 
   state.asteroids.push({
@@ -427,7 +427,7 @@ function spawnAsteroid() {
     points: shape.points,
     craters: shape.craters,
     cracks: shape.cracks,
-    hp: radius > 34 * scale ? 2 : 1,
+    hp: radius > tuning.largeAsteroidThreshold * scale ? 2 : 1,
     hitFlash: 0
   });
 }
@@ -692,14 +692,14 @@ function updatePowerUps(dt) {
 }
 
 function spawnLaser(x, y, angle) {
-  const speed = 720;
+  const speed = tuning.laserSpeed;
   state.lasers.push({
     x,
     y,
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
     angle,
-    life: 0.9
+    life: tuning.laserLife
   });
 
   for (let i = 0; i < 5; i += 1) {
@@ -719,10 +719,10 @@ function fireLaser() {
     return;
   }
 
-  state.shootCooldown = 0.18;
+  state.shootCooldown = tuning.shootCooldown;
   playSound("shoot");
   const angle = state.player.angle - Math.PI / 2;
-  const offset = state.player.radius + 18;
+  const offset = state.player.radius + tuning.laserSpawnOffset;
   const baseX = state.player.x + Math.cos(angle) * offset;
   const baseY = state.player.y + Math.sin(angle) * offset;
   const sideX = Math.cos(state.player.angle);
@@ -730,8 +730,8 @@ function fireLaser() {
 
   if (state.doubleShotTimer > 0) {
     state.stats.shotsFired += 2;
-    spawnLaser(baseX + sideX * 9, baseY + sideY * 9, angle);
-    spawnLaser(baseX - sideX * 9, baseY - sideY * 9, angle);
+    spawnLaser(baseX + sideX * tuning.doubleShotOffset, baseY + sideY * tuning.doubleShotOffset, angle);
+    spawnLaser(baseX - sideX * tuning.doubleShotOffset, baseY - sideY * tuning.doubleShotOffset, angle);
     return;
   }
 
@@ -781,7 +781,7 @@ function handleCollisions() {
       const asteroid = state.asteroids[j];
       const threshold = asteroid.radius + 7;
       if (Math.abs(asteroid.x - laser.x) > threshold || Math.abs(asteroid.y - laser.y) > threshold) continue;
-      const isLargeAsteroid = asteroid.radius > 34;
+      const isLargeAsteroid = asteroid.radius > tuning.largeAsteroidThreshold;
       const dist = Math.hypot(asteroid.x - laser.x, asteroid.y - laser.y);
       if (dist < threshold) {
         hit = true;
@@ -793,7 +793,7 @@ function handleCollisions() {
         triggerScreenShake(0.08, isLargeAsteroid ? 6 : 4);
 
         if (asteroid.hp <= 0) {
-          state.score += 18;
+          state.score += tuning.scoreAsteroid;
           state.stats.destroyedAsteroids += 1;
           spawnBurst(asteroid.x, asteroid.y, isLargeAsteroid ? 28 : 20, ["#7fe8ff", "#dce7ff", "#95a5bf"]);
           triggerScreenShake(isLargeAsteroid ? 0.18 : 0.12, isLargeAsteroid ? 12 : 7);
@@ -815,7 +815,7 @@ function handleCollisions() {
     const dist = Math.hypot(core.x - state.player.x, core.y - state.player.y);
     if (dist < core.radius + state.player.radius + 4) {
       state.cores.splice(i, 1);
-      state.score += 25;
+      state.score += tuning.scoreCore;
       state.stats.collectedCores += 1;
       spawnBurst(core.x, core.y, 14, ["#8affd1", "#f3fffd", "#62e4ff"]);
       spawnMessage("CORE +25", core.x, core.y - 22, "#8affd1");
