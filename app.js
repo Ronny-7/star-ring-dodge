@@ -419,8 +419,11 @@ function hideOverlay() {
 
 const settingsOverlay = document.getElementById("settings-overlay");
 
+let pausedBeforeSettings = false;
+
 function openSettings() {
   settingsOverlay.classList.remove("hidden");
+  pausedBeforeSettings = state.paused;
   if (state.running && !state.paused && !state.gameOver) {
     state.paused = true;
     keys.clear();
@@ -429,7 +432,7 @@ function openSettings() {
 
 function closeSettings() {
   settingsOverlay.classList.add("hidden");
-  if (state.running && state.paused && !state.gameOver) {
+  if (state.running && state.paused && !state.gameOver && !pausedBeforeSettings) {
     state.paused = false;
     state.lastTime = 0;
   }
