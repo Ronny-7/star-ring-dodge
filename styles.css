@@ -397,19 +397,6 @@ body {
   cursor: pointer;
 }
 
-.signal-group span {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(123, 140, 255, 0.54);
-  box-shadow: 0 0 18px rgba(123, 140, 255, 0.44);
-}
-
-.signal-group span:first-child {
-  background: rgba(138, 255, 209, 0.85);
-  box-shadow: 0 0 18px rgba(138, 255, 209, 0.45);
-}
-
 .playfield {
   position: relative;
   border-radius: 8px;
@@ -469,18 +456,12 @@ canvas {
   animation: signalBlink 2.4s ease-in-out infinite;
 }
 
-.signal-group span:nth-child(2) {
-  animation-delay: 0.3s;
-}
-
-.signal-group span:nth-child(3) {
-  animation-delay: 0.6s;
-}
+.signal-group span:nth-child(2) { animation-delay: 0.3s; }
+.signal-group span:nth-child(3) { animation-delay: 0.6s; }
 
 .signal-group span:first-child {
   background: rgba(138, 255, 209, 0.85);
   box-shadow: 0 0 18px rgba(138, 255, 209, 0.45);
-  animation-delay: 0s;
 }
 
 @keyframes signalBlink {

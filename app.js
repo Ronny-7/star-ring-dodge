@@ -9,9 +9,9 @@ let activeSkin = "default";
 let activeColor = "blue";
 
 const COLORS = {
-  blue:  { hi: "#f0faff", mid: "#4a8fff", glow: "#62e4ff", stroke: "rgba(131,232,255,0.8)", engine: "rgba(98,228,255,0.95)" },
-  red:   { hi: "#fff0f0", mid: "#ff4a4a", glow: "#ff6f87", stroke: "rgba(255,131,131,0.8)", engine: "rgba(255,98,98,0.95)"  },
-  green: { hi: "#f0fff4", mid: "#4aff8a", glow: "#8affd1", stroke: "rgba(131,255,180,0.8)", engine: "rgba(98,255,180,0.95)" }
+  blue:  { hi: "#f0faff", mid: "#4a8fff", glow: "#62e4ff", stroke: "rgba(131,232,255,0.8)", engine: "rgba(98,228,255,0.95)",  engineRgb: "98,228,255",  strokeRgb: "131,232,255" },
+  red:   { hi: "#fff0f0", mid: "#ff4a4a", glow: "#ff6f87", stroke: "rgba(255,131,131,0.8)", engine: "rgba(255,98,98,0.95)",   engineRgb: "255,98,98",   strokeRgb: "255,131,131" },
+  green: { hi: "#f0fff4", mid: "#4aff8a", glow: "#8affd1", stroke: "rgba(131,255,180,0.8)", engine: "rgba(98,255,180,0.95)",  engineRgb: "98,255,180",  strokeRgb: "131,255,180" }
 };
 let musicGain = null;
 let musicNodes = [];
@@ -65,14 +65,12 @@ function toggleMusic() {
   musicEnabled = !musicEnabled;
   if (musicEnabled) startMusic();
   else stopMusic();
-  const btn = document.getElementById("settings-music-btn");
-  if (btn) { btn.textContent = musicEnabled ? "ON" : "OFF"; btn.classList.toggle("active", musicEnabled); }
+  musicBtn.textContent = musicEnabled ? "ON" : "OFF"; musicBtn.classList.toggle("active", musicEnabled);
 }
 
 function toggleSfx() {
   sfxEnabled = !sfxEnabled;
-  const btn = document.getElementById("settings-sfx-btn");
-  if (btn) { btn.textContent = sfxEnabled ? "ON" : "OFF"; btn.classList.toggle("active", sfxEnabled); }
+  sfxBtn.textContent = sfxEnabled ? "ON" : "OFF"; sfxBtn.classList.toggle("active", sfxEnabled);
 }
 
 const vibrationMap = { shoot: 10, hit: 20, explode: 40, pickup: 15, hurt: 80 };
@@ -143,6 +141,8 @@ function acquireParticle(x, y, vx, vy, life, size, color) {
 }
 function releaseParticle(p) { particlePool.push(p); }
 
+const musicBtn = document.getElementById("settings-music-btn");
+const sfxBtn = document.getElementById("settings-sfx-btn");
 const scoreEl = document.getElementById("score");
 const healthEl = document.getElementById("health");
 const bestEl = document.getElementById("best");
@@ -775,11 +775,13 @@ function updateParticles(dt) {
 }
 
 function updateMessages(dt) {
-  state.messages = state.messages.filter((message) => {
+  let alive = 0;
+  for (const message of state.messages) {
     message.life -= dt;
     message.y += message.vy * dt;
-    return message.life > 0;
-  });
+    if (message.life > 0) state.messages[alive++] = message;
+  }
+  state.messages.length = alive;
 }
 
 function getKeyboardMovement() {
@@ -818,23 +820,28 @@ function movePlayer(dt) {
 }
 
 function moveAsteroids(dt) {
-  state.asteroids = state.asteroids.filter((asteroid) => {
+  let alive = 0;
+  for (const asteroid of state.asteroids) {
     asteroid.x += asteroid.vx * dt;
     asteroid.y += asteroid.vy * dt;
     asteroid.rotation += asteroid.spin;
     asteroid.hitFlash = Math.max(0, asteroid.hitFlash - dt * 4);
-
-    return asteroid.x > -120 && asteroid.x < cw + 120 && asteroid.y > -120 && asteroid.y < ch + 120;
-  });
+    if (asteroid.x > -120 && asteroid.x < cw + 120 && asteroid.y > -120 && asteroid.y < ch + 120)
+      state.asteroids[alive++] = asteroid;
+  }
+  state.asteroids.length = alive;
 }
 
 function moveLasers(dt) {
-  state.lasers = state.lasers.filter((laser) => {
+  let alive = 0;
+  for (const laser of state.lasers) {
     laser.x += laser.vx * dt;
     laser.y += laser.vy * dt;
     laser.life -= dt;
-    return laser.life > 0 && laser.x > -40 && laser.x < cw + 40 && laser.y > -40 && laser.y < ch + 40;
-  });
+    if (laser.life > 0 && laser.x > -40 && laser.x < cw + 40 && laser.y > -40 && laser.y < ch + 40)
+      state.lasers[alive++] = laser;
+  }
+  state.lasers.length = alive;
 }
 
 function updateCores(dt) {
@@ -1267,8 +1274,8 @@ function drawPlayer() {
   const engines = skin.engines.map(e => ({ x: e.x * radius, y: e.y * radius }));
   for (const eng of engines) {
     const eg = ctx.createRadialGradient(eng.x, eng.y, 0, eng.x, eng.y, radius * 0.38);
-    eg.addColorStop(0, col.engine.replace("0.95)", `${0.55 + pulse * 0.3})`));
-    eg.addColorStop(1, col.engine.replace("0.95)", "0)"));
+    eg.addColorStop(0, `rgba(${col.engineRgb},${0.55 + pulse * 0.3})`);
+    eg.addColorStop(1, `rgba(${col.engineRgb},0)`);
     ctx.fillStyle = eg;
     ctx.beginPath();
     ctx.arc(eng.x, eng.y, radius * 0.38, 0, Math.PI * 2);
@@ -1279,8 +1286,8 @@ function drawPlayer() {
       const flame = 14 + pulse * 14;
       const fg = ctx.createLinearGradient(eng.x, eng.y, eng.x, eng.y + flame);
       fg.addColorStop(0, "rgba(255,243,182,0.95)");
-      fg.addColorStop(0.35, col.engine.replace("0.95)", "0.88)"));
-      fg.addColorStop(1, col.engine.replace("0.95)", "0)"));
+      fg.addColorStop(0.35, `rgba(${col.engineRgb},0.88)`);
+      fg.addColorStop(1, `rgba(${col.engineRgb},0)`);
       ctx.fillStyle = fg;
       ctx.beginPath();
       ctx.moveTo(eng.x - 5, eng.y);
@@ -1297,7 +1304,7 @@ function drawPlayer() {
   // hull outline
   ctx.strokeStyle = invulnerable
     ? `rgba(214,249,255,${0.6 + pulse * 0.25})`
-    : col.stroke.replace("0.8)", `${0.55 + pulse * 0.2})`);
+    : `rgba(${col.strokeRgb},${0.55 + pulse * 0.2})`;
   ctx.lineWidth = 2.2;
   skin.drawHull(ctx, radius);
   ctx.stroke();
