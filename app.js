@@ -1,12 +1,15 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const { bestKey, tuning, uiText } = window.starRingConfig;
+const { bestKey, tuning, uiText, regions } = window.starRingConfig;
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 let musicEnabled = true;
 let sfxEnabled = true;
 let activeSkin = "default";
 let activeColor = "blue";
+
+const REGION_IDS = Object.keys(regions);
+const DEFAULT_REGION_ID = "drift";
 
 const COLORS = {
   blue: makeColor(98, 228, 255),
@@ -338,6 +341,14 @@ const state = {
   shootCooldown: 0,
   shieldCharges: 0,
   doubleShotTimer: 0,
+  regionId: DEFAULT_REGION_ID,
+  regionTimer: 0,
+  regionJunctions: 0,
+  routeChoice: {
+    active: false,
+    timer: 0,
+    gates: []
+  },
   stats: {
     survivalTime: 0,
     destroyedAsteroids: 0,
@@ -400,6 +411,12 @@ function resetGame() {
   state.shootCooldown = 0;
   state.shieldCharges = 0;
   state.doubleShotTimer = 0;
+  state.regionId = DEFAULT_REGION_ID;
+  state.regionTimer = 0;
+  state.regionJunctions = 0;
+  state.routeChoice.active = false;
+  state.routeChoice.timer = 0;
+  state.routeChoice.gates = [];
   state.stats.survivalTime = 0;
   state.stats.destroyedAsteroids = 0;
   state.stats.collectedCores = 0;
@@ -566,6 +583,92 @@ function triggerScreenShake(duration, strength) {
   state.screenShakeStrength = Math.max(state.screenShakeStrength, strength);
 }
 
+function getCurrentRegion() {
+  return regions[state.regionId] || regions[DEFAULT_REGION_ID];
+}
+
+function getRegionMultiplier(name) {
+  const value = getCurrentRegion()[name];
+  return typeof value === "number" ? value : 1;
+}
+
+function getRouteAdjustedSpawnInterval() {
+  const slowdown = state.routeChoice.active ? tuning.routeChoiceSpawnSlowdown : 1;
+  return state.spawnInterval * getRegionMultiplier("asteroidSpawnMultiplier") * slowdown;
+}
+
+function updateRegionFlow(dt) {
+  if (state.routeChoice.active) {
+    state.routeChoice.timer = Math.max(0, state.routeChoice.timer - dt);
+    if (state.routeChoice.timer <= 0) {
+      chooseFallbackRoute();
+    }
+    return;
+  }
+
+  state.regionTimer += dt;
+  if (state.regionTimer >= tuning.routeChoiceInterval) {
+    beginRouteChoice();
+  }
+}
+
+function beginRouteChoice() {
+  const candidates = REGION_IDS.filter(id => id !== state.regionId);
+  const first = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0];
+  const second = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0];
+  const gateY = Math.max(90, Math.min(ch - 90, state.player.y));
+  const margin = Math.max(110, cw * 0.22);
+
+  state.routeChoice.active = true;
+  state.routeChoice.timer = tuning.routeChoiceDuration;
+  state.routeChoice.gates = [
+    { regionId: first, x: margin, y: gateY, radius: tuning.routeGateRadius },
+    { regionId: second, x: cw - margin, y: gateY, radius: tuning.routeGateRadius }
+  ];
+  state.regionTimer = 0;
+  spawnMessage("选择跃迁门", cw / 2, Math.max(42, gateY - 72), "#eaf4ff");
+}
+
+function chooseFallbackRoute() {
+  const fallback = state.routeChoice.gates[0];
+  if (fallback) {
+    resolveRouteChoice(fallback.regionId, fallback.x, fallback.y);
+  }
+}
+
+function resolveRouteChoice(regionId, x = state.player.x, y = state.player.y) {
+  const nextRegion = regions[regionId];
+  if (!nextRegion) {
+    return;
+  }
+
+  state.regionId = regionId;
+  state.regionTimer = 0;
+  state.regionJunctions += 1;
+  state.routeChoice.active = false;
+  state.routeChoice.timer = 0;
+  state.routeChoice.gates = [];
+  state.asteroids.length = Math.min(state.asteroids.length, Math.max(2, Math.floor(state.asteroids.length * 0.6)));
+  spawnBurst(x, y, 28, [rgba(nextRegion.tint, 0.95), rgba(nextRegion.secondaryTint, 0.9), "#f4fbff"]);
+  spawnMessage(nextRegion.name, x, y - 34, rgba(nextRegion.tint, 0.95));
+  triggerScreenShake(0.16, 8);
+  playSound("pickup");
+}
+
+function handleRouteGateCollision() {
+  if (!state.routeChoice.active) {
+    return;
+  }
+
+  for (const gate of state.routeChoice.gates) {
+    const dist = Math.hypot(gate.x - state.player.x, gate.y - state.player.y);
+    if (dist < gate.radius + state.player.radius) {
+      resolveRouteChoice(gate.regionId, gate.x, gate.y);
+      return;
+    }
+  }
+}
+
 function spawnAsteroid() {
   const scale = getGameplayScale();
   const radius = (Math.random() * tuning.asteroidRadiusRange + tuning.asteroidRadiusMin) * scale;
@@ -585,7 +688,7 @@ function spawnAsteroid() {
   if (bestDistance < minDistance) return;
 
   const angle = Math.atan2(state.player.y - spawn.y, state.player.x - spawn.x);
-  const speed = (Math.random() * tuning.asteroidSpeedRange + tuning.asteroidSpeedBase) * state.speedScale;
+  const speed = (Math.random() * tuning.asteroidSpeedRange + tuning.asteroidSpeedBase) * state.speedScale * getRegionMultiplier("asteroidSpeedMultiplier");
   const shape = makeAsteroidShape(radius);
 
   state.asteroids.push({
@@ -721,6 +824,7 @@ function update(dt) {
   if (fireHeld) {
     fireLaser();
   }
+  updateRegionFlow(dt);
   state.spawnTimer += dt;
   state.coreTimer += dt;
   state.powerUpTimer += dt;
@@ -732,17 +836,17 @@ function update(dt) {
     state.spawnInterval = Math.max(tuning.minSpawnInterval, state.spawnInterval - tuning.spawnIntervalStep);
   }
 
-  if (state.spawnTimer >= state.spawnInterval) {
+  if (state.spawnTimer >= getRouteAdjustedSpawnInterval()) {
     state.spawnTimer = 0;
     spawnAsteroid();
   }
 
-  if (state.coreTimer >= 2.5 && state.cores.length < 2) {
+  if (state.coreTimer >= 2.5 * getRegionMultiplier("coreIntervalMultiplier") && state.cores.length < 2) {
     state.coreTimer = 0;
     spawnCore();
   }
 
-  if (state.powerUpTimer >= tuning.powerUpSpawnInterval && state.powerUps.length < 1) {
+  if (state.powerUpTimer >= tuning.powerUpSpawnInterval * getRegionMultiplier("powerUpIntervalMultiplier") && state.powerUps.length < 1) {
     state.powerUpTimer = 0;
     spawnPowerUp();
   }
@@ -919,6 +1023,7 @@ function fireLaser() {
 }
 
 function handleCollisions() {
+  handleRouteGateCollision();
   if (state.invulnerabilityTimer <= 0) {
     for (let i = state.asteroids.length - 1; i >= 0; i -= 1) {
       const asteroid = state.asteroids[i];
@@ -1099,6 +1204,7 @@ function draw() {
   drawStars();
   drawRings();
   drawAsteroidWarnings();
+  drawRouteChoice();
   drawCores();
   drawPowerUps();
   drawParticles();
@@ -1112,6 +1218,7 @@ function draw() {
 }
 
 function drawBackground() {
+  const region = getCurrentRegion();
   const bg = ctx.createLinearGradient(0, 0, 0, ch);
   bg.addColorStop(0, "#08111f");
   bg.addColorStop(0.45, "#07101d");
@@ -1119,15 +1226,16 @@ function drawBackground() {
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, cw, ch);
 
-  const glowA = ctx.createRadialGradient(180, 120, 40, 180, 120, 320);
-  glowA.addColorStop(0, "rgba(98, 228, 255, 0.22)");
-  glowA.addColorStop(1, "rgba(98, 228, 255, 0)");
+  const drift = state.regionTimer * 18;
+  const glowA = ctx.createRadialGradient(180 + Math.sin(state.pulseTime * 0.35) * 34, 120 + drift % 180, 40, 180, 120, 340);
+  glowA.addColorStop(0, rgba(region.tint, 0.22));
+  glowA.addColorStop(1, rgba(region.tint, 0));
   ctx.fillStyle = glowA;
   ctx.fillRect(0, 0, cw, ch);
 
-  const glowB = ctx.createRadialGradient(cw - 140, ch - 90, 50, cw - 140, ch - 90, 300);
-  glowB.addColorStop(0, "rgba(123, 140, 255, 0.18)");
-  glowB.addColorStop(1, "rgba(123, 140, 255, 0)");
+  const glowB = ctx.createRadialGradient(cw - 140, ch - 90 - drift % 150, 50, cw - 140, ch - 90, 320);
+  glowB.addColorStop(0, rgba(region.secondaryTint, 0.18));
+  glowB.addColorStop(1, rgba(region.secondaryTint, 0));
   ctx.fillStyle = glowB;
   ctx.fillRect(0, 0, cw, ch);
 }
@@ -1145,15 +1253,70 @@ function drawStars() {
 
 function drawRings() {
   const pulse = Math.sin(state.pulseTime * 0.8) * 0.5 + 0.5;
+  const region = getCurrentRegion();
   ctx.save();
   ctx.translate(cw / 2, ch / 2);
-  ctx.strokeStyle = `rgba(108, 171, 255, ${0.08 + pulse * 0.06})`;
+  ctx.rotate(state.regionTimer * 0.018);
+  ctx.strokeStyle = rgba(region.tint, 0.08 + pulse * 0.06);
   ctx.lineWidth = 1.2;
   for (let i = 0; i < 4; i += 1) {
     ctx.beginPath();
     ctx.ellipse(0, 0, 160 + i * 90, 92 + i * 50, 0.16, 0, Math.PI * 2);
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+function drawRouteChoice() {
+  if (!state.routeChoice.active) {
+    return;
+  }
+
+  const pulse = Math.sin(state.pulseTime * 7) * 0.5 + 0.5;
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  for (const gate of state.routeChoice.gates) {
+    const region = regions[gate.regionId];
+    const radius = gate.radius + pulse * 5;
+    const glow = ctx.createRadialGradient(gate.x, gate.y, 4, gate.x, gate.y, radius * 1.9);
+    glow.addColorStop(0, rgba(region.tint, 0.34));
+    glow.addColorStop(0.48, rgba(region.tint, 0.18));
+    glow.addColorStop(1, rgba(region.tint, 0));
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(gate.x, gate.y, radius * 1.9, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur = 24;
+    ctx.shadowColor = rgba(region.tint, 0.9);
+    ctx.strokeStyle = rgba(region.tint, 0.88);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(gate.x, gate.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(gate.x, gate.y, radius * 0.66, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = "rgba(238,248,255,0.96)";
+    ctx.font = '700 13px "Segoe UI", sans-serif';
+    ctx.fillText(region.label, gate.x, gate.y - 6);
+    ctx.font = '11px "Segoe UI", sans-serif';
+    ctx.fillText(region.name, gate.x, gate.y + 12);
+    ctx.fillStyle = rgba(region.tint, 0.9);
+    ctx.fillText(region.description, gate.x, gate.y + radius + 26);
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(230,242,255,0.92)";
+  ctx.font = '700 15px "Segoe UI", sans-serif';
+  ctx.fillText(`跃迁窗口 ${Math.ceil(state.routeChoice.timer)}s`, cw / 2, Math.max(38, ch * 0.16));
+  ctx.font = '12px "Segoe UI", sans-serif';
+  ctx.fillText("穿过任意跃迁门选择下一片星域", cw / 2, Math.max(60, ch * 0.16 + 22));
   ctx.restore();
 }
 
@@ -1614,29 +1777,38 @@ function drawLasers() {
 }
 
 function drawHudOverlay() {
+  const region = getCurrentRegion();
+  const routeProgress = Math.min(1, state.regionTimer / tuning.routeChoiceInterval);
   ctx.save();
-  ctx.strokeStyle = state.flashTimer > 0 ? "rgba(255, 111, 135, 0.32)" : "rgba(111, 170, 255, 0.12)";
+  ctx.strokeStyle = state.flashTimer > 0 ? "rgba(255, 111, 135, 0.32)" : rgba(region.tint, 0.14);
   ctx.lineWidth = 1;
   ctx.strokeRect(14, 14, cw - 28, ch - 28);
 
   ctx.fillStyle = "rgba(190, 210, 255, 0.9)";
   ctx.font = '12px "Segoe UI", sans-serif';
-  ctx.fillText("SECTOR A-17", 28, 38);
+  ctx.fillText(`SECTOR ${region.label}`, 28, 38);
   ctx.fillText(`THREAT x${state.asteroids.length}`, cw - 126, 38);
   ctx.fillText(`LASER ${state.shootCooldown > 0 ? "COOLDOWN" : "READY"}`, 28, ch - 26);
   ctx.fillText(`CORE x${state.stats.collectedCores}`, 28, 58);
+  ctx.fillStyle = rgba(region.tint, 0.92);
+  ctx.fillText(region.name, 28, 78);
+  ctx.fillText(
+    state.routeChoice.active ? `WARP ${Math.ceil(state.routeChoice.timer)}s` : `NEXT ${Math.round(routeProgress * 100)}%`,
+    cw - 126,
+    58
+  );
 
   if (state.shieldCharges > 0) {
     ctx.fillStyle = "rgba(138, 255, 209, 0.96)";
-    ctx.fillText(`SHIELD x${state.shieldCharges}`, cw - 130, ch - 26);
+    ctx.fillText(`SHIELD x${state.shieldCharges}`, cw - 130, ch - 42);
   } else if (state.invulnerabilityTimer > 0) {
     ctx.fillStyle = "rgba(144, 244, 255, 0.95)";
-    ctx.fillText("SHIELDING", cw - 116, ch - 26);
+    ctx.fillText("SHIELDING", cw - 116, ch - 42);
   }
 
   if (state.doubleShotTimer > 0) {
     ctx.fillStyle = "rgba(255, 196, 168, 0.98)";
-    ctx.fillText(`DOUBLE x${Math.ceil(state.doubleShotTimer)}s`, cw - 128, 58);
+    ctx.fillText(`DOUBLE x${Math.ceil(state.doubleShotTimer)}s`, cw - 128, ch - 24);
   }
 
   if (state.paused) {

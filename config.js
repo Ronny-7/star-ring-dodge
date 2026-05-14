@@ -34,12 +34,63 @@ window.starRingConfig = {
     pickupAsteroidDistance: 132,
     maxPickupSpawnAttempts: 18,
     asteroidWarningDistance: 96,
-    idleFrameInterval: 1000 / 12
+    idleFrameInterval: 1000 / 12,
+    routeChoiceInterval: 28,
+    routeChoiceDuration: 11,
+    routeGateRadius: 42,
+    routeChoiceSpawnSlowdown: 1.8
+  },
+
+  regions: {
+    drift: {
+      name: "安定漂流区",
+      label: "DRIFT",
+      description: "陨石压力较低，适合调整航线。",
+      tint: "98,228,255",
+      secondaryTint: "123,140,255",
+      asteroidSpawnMultiplier: 1.12,
+      asteroidSpeedMultiplier: 0.92,
+      coreIntervalMultiplier: 1,
+      powerUpIntervalMultiplier: 1
+    },
+    belt: {
+      name: "密集陨带",
+      label: "BELT",
+      description: "陨石更密更快，清障收益更高。",
+      tint: "255,111,135",
+      secondaryTint: "255,181,158",
+      asteroidSpawnMultiplier: 0.76,
+      asteroidSpeedMultiplier: 1.14,
+      coreIntervalMultiplier: 1.08,
+      powerUpIntervalMultiplier: 1.1
+    },
+    stream: {
+      name: "核心流",
+      label: "STREAM",
+      description: "高能核心更频繁地穿过航道。",
+      tint: "138,255,209",
+      secondaryTint: "98,228,255",
+      asteroidSpawnMultiplier: 0.96,
+      asteroidSpeedMultiplier: 0.98,
+      coreIntervalMultiplier: 0.56,
+      powerUpIntervalMultiplier: 1.05
+    },
+    rift: {
+      name: "跃迁裂隙",
+      label: "RIFT",
+      description: "空间流速紊乱，道具补给更活跃。",
+      tint: "191,132,255",
+      secondaryTint: "98,228,255",
+      asteroidSpawnMultiplier: 0.84,
+      asteroidSpeedMultiplier: 1.08,
+      coreIntervalMultiplier: 0.9,
+      powerUpIntervalMultiplier: 0.58
+    }
   },
 
   uiText: {
     startTitle: "按空格开始",
-    startText: "方向键或 WASD 移动，J 发射激光，P 或 Esc 暂停。拾取蓝色能量核得分，激光可以击碎陨石。",
+    startText: "方向键或 WASD 移动，J 发射激光，P 或 Esc 暂停。拾取蓝色能量核得分，存活后选择跃迁门进入不同星域。",
     startButton: "开始游戏",
     pauseTitle: "已暂停",
     pauseText: "按 P、Esc 或点击按钮继续。",
