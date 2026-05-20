@@ -2,7 +2,7 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const { bestKey, tuning, uiText, regions } = window.starRingConfig;
 
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let audioCtx = null;
 let musicEnabled = true;
 let sfxEnabled = true;
 let activeSkin = "default";
@@ -28,17 +28,47 @@ function rgba(rgb, alpha) { return `rgba(${rgb},${alpha})`; }
 let musicGain = null;
 let musicNodes = [];
 
+function getAudioContext() {
+  if (audioCtx) {
+    return audioCtx;
+  }
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) {
+    return null;
+  }
+  try {
+    audioCtx = new AudioContextCtor();
+    return audioCtx;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureAudioRunning(ctx) {
+  if (ctx.state !== "suspended") {
+    return true;
+  }
+  try {
+    await ctx.resume();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function startMusic() {
   if (!musicEnabled || musicNodes.length) return;
-  if (audioCtx.state === "suspended") await audioCtx.resume();
-  const master = audioCtx.createGain();
-  master.gain.setValueAtTime(0.06, audioCtx.currentTime);
-  master.connect(audioCtx.destination);
+  const ctxAudio = getAudioContext();
+  if (!ctxAudio || !(await ensureAudioRunning(ctxAudio))) return;
+  if (!musicEnabled || musicNodes.length) return;
+  const master = ctxAudio.createGain();
+  master.gain.setValueAtTime(0.06, ctxAudio.currentTime);
+  master.connect(ctxAudio.destination);
   musicGain = master;
 
   // bass drone
-  const bass = audioCtx.createOscillator();
-  const bassG = audioCtx.createGain();
+  const bass = ctxAudio.createOscillator();
+  const bassG = ctxAudio.createGain();
   bass.type = "sine";
   bass.frequency.value = 55;
   bassG.gain.value = 0.5;
@@ -46,8 +76,8 @@ async function startMusic() {
   bass.start();
 
   // mid pad
-  const pad = audioCtx.createOscillator();
-  const padG = audioCtx.createGain();
+  const pad = ctxAudio.createOscillator();
+  const padG = ctxAudio.createGain();
   pad.type = "triangle";
   pad.frequency.value = 110;
   padG.gain.value = 0.3;
@@ -55,8 +85,8 @@ async function startMusic() {
   pad.start();
 
   // slow LFO on pad volume for breathing effect
-  const lfo = audioCtx.createOscillator();
-  const lfoG = audioCtx.createGain();
+  const lfo = ctxAudio.createOscillator();
+  const lfoG = ctxAudio.createGain();
   lfo.frequency.value = 0.18;
   lfoG.gain.value = 0.15;
   lfo.connect(lfoG); lfoG.connect(padG.gain);
@@ -93,14 +123,21 @@ function toggleSfx() {
 const vibrationMap = { shoot: 10, hit: 20, explode: 40, pickup: 15, hurt: 80 };
 
 function playSound(type) {
-  if (navigator.vibrate) navigator.vibrate(vibrationMap[type] || 10);
   if (!sfxEnabled) return;
-  if (audioCtx.state === "suspended") audioCtx.resume();
-  const now = audioCtx.currentTime;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
+  const vibrationDuration = vibrationMap[type];
+  if (!vibrationDuration) return;
+  if (navigator.vibrate) navigator.vibrate(vibrationDuration);
+
+  const ctxAudio = getAudioContext();
+  if (!ctxAudio) return;
+  if (ctxAudio.state === "suspended") {
+    ctxAudio.resume().catch(() => {});
+  }
+  const now = ctxAudio.currentTime;
+  const osc = ctxAudio.createOscillator();
+  const gain = ctxAudio.createGain();
   osc.connect(gain);
-  gain.connect(audioCtx.destination);
+  gain.connect(ctxAudio.destination);
 
   if (type === "shoot") {
     // crisp laser zap: triangle + quick pitch drop
@@ -123,7 +160,7 @@ function playSound(type) {
     osc.type = "sawtooth";
     osc.frequency.setValueAtTime(80, now);
     osc.frequency.exponentialRampToValueAtTime(18, now + 0.35);
-    const filter = audioCtx.createBiquadFilter();
+    const filter = ctxAudio.createBiquadFilter();
     filter.type = "lowpass";
     filter.frequency.value = 400;
     osc.disconnect(); osc.connect(filter); filter.connect(gain);
@@ -174,6 +211,10 @@ const playfieldEl = canvas.parentElement;
 const touchControls = document.querySelectorAll("[data-touch-action]");
 const gesturePad = document.querySelector("[data-gesture-pad]");
 const orientationButton = document.querySelector("[data-orientation-button]");
+const settingsButton = document.getElementById("settings-button");
+const settingsCloseButton = document.querySelector(".settings-close");
+const skinCards = document.querySelectorAll("[data-skin]");
+const colorSwatches = document.querySelectorAll("[data-color]");
 const mobileViewportQuery = window.matchMedia("(pointer: coarse), (max-width: 780px)");
 
 function getDisplaySize() {
@@ -186,17 +227,19 @@ function getDisplaySize() {
   };
 }
 
-const dpr = window.devicePixelRatio || 1;
+let dpr = window.devicePixelRatio || 1;
 let cw = 960, ch = 600;
 
 function resizeCanvas() {
   const { width, height } = getDisplaySize();
-  const physW = Math.round(width * dpr);
-  const physH = Math.round(height * dpr);
-  if (canvas.width === physW && canvas.height === physH) return;
+  const nextDpr = window.devicePixelRatio || 1;
+  const physW = Math.round(width * nextDpr);
+  const physH = Math.round(height * nextDpr);
+  if (canvas.width === physW && canvas.height === physH && dpr === nextDpr) return;
 
   const previousW = cw;
   const previousH = ch;
+  dpr = nextDpr;
   cw = width;
   ch = height;
   canvas.width = physW;
@@ -205,10 +248,10 @@ function resizeCanvas() {
   canvas.style.height = height + "px";
   // scale is reset each draw via setTransform, not here
 
-  const scaleX = width / previousW;
-  const scaleY = height / previousH;
+  const scaleX = previousW ? width / previousW : 1;
+  const scaleY = previousH ? height / previousH : 1;
   scaleEntity(state.player, scaleX, scaleY);
-  for (const collection of [state.asteroids, state.cores, state.powerUps, state.stars, state.lasers, state.particles, state.messages]) {
+  for (const collection of [state.asteroids, state.cores, state.powerUps, state.stars, state.lasers, state.particles, state.messages, state.routeChoice.gates]) {
     for (const entity of collection) {
       scaleEntity(entity, scaleX, scaleY);
     }
@@ -219,6 +262,30 @@ function resizeCanvas() {
 function scaleEntity(entity, scaleX, scaleY) {
   entity.x *= scaleX;
   entity.y *= scaleY;
+  const scale = Math.min(scaleX, scaleY);
+  if (typeof entity.radius === "number") {
+    entity.radius *= scale;
+  }
+  if (typeof entity.size === "number") {
+    entity.size *= scale;
+  }
+  if (entity.points) {
+    for (const point of entity.points) {
+      point.distance *= scale;
+    }
+  }
+  if (entity.craters) {
+    for (const crater of entity.craters) {
+      crater.x *= scaleX;
+      crater.y *= scaleY;
+      crater.r *= scale;
+    }
+  }
+  if (entity.cracks) {
+    for (const crack of entity.cracks) {
+      crack.length *= scale;
+    }
+  }
 }
 
 function getGameplayScale() {
@@ -295,16 +362,21 @@ function formatRate(hits, shots) {
 }
 
 function renderOverlayStats(stats, isRecord) {
-  overlayStatGrid.innerHTML = stats
-    .map(
-      ({ label, value }) => `
-        <article class="overlay-stat-card">
-          <span class="overlay-stat-label">${label}</span>
-          <strong class="overlay-stat-value">${value}</strong>
-        </article>
-      `
-    )
-    .join("");
+  const statCards = stats.map(({ label, value }) => {
+    const card = document.createElement("article");
+    const labelEl = document.createElement("span");
+    const valueEl = document.createElement("strong");
+
+    card.className = "overlay-stat-card";
+    labelEl.className = "overlay-stat-label";
+    valueEl.className = "overlay-stat-value";
+    labelEl.textContent = label;
+    valueEl.textContent = value;
+    card.append(labelEl, valueEl);
+    return card;
+  });
+
+  overlayStatGrid.replaceChildren(...statCards);
 
   overlayStats.classList.remove("hidden");
   overlayRecord.classList.toggle("hidden", !isRecord);
@@ -313,7 +385,7 @@ function renderOverlayStats(stats, isRecord) {
 function hideOverlayStats() {
   overlayStats.classList.add("hidden");
   overlayRecord.classList.add("hidden");
-  overlayStatGrid.innerHTML = "";
+  overlayStatGrid.replaceChildren();
 }
 
 let bestScore = readBestScore();
@@ -636,6 +708,30 @@ function chooseFallbackRoute() {
   }
 }
 
+function getRouteAsteroidKeepScore(asteroid, x, y) {
+  const distanceFromPlayer = Math.hypot(asteroid.x - state.player.x, asteroid.y - state.player.y);
+  const distanceFromGate = Math.hypot(asteroid.x - x, asteroid.y - y);
+  const isOffscreen = asteroid.x < 0 || asteroid.x > cw || asteroid.y < 0 || asteroid.y > ch;
+  const isMovingAway =
+    (asteroid.x - state.player.x) * asteroid.vx +
+    (asteroid.y - state.player.y) * asteroid.vy > 0;
+
+  return distanceFromPlayer + distanceFromGate * 0.35 + (isOffscreen ? 260 : 0) + (isMovingAway ? 120 : 0);
+}
+
+function pruneAsteroidsAfterRoute(x, y) {
+  const targetCount = Math.min(state.asteroids.length, Math.max(2, Math.floor(state.asteroids.length * 0.6)));
+  if (state.asteroids.length <= targetCount) {
+    return;
+  }
+
+  state.asteroids = state.asteroids
+    .map(asteroid => ({ asteroid, keepScore: getRouteAsteroidKeepScore(asteroid, x, y) }))
+    .sort((a, b) => b.keepScore - a.keepScore)
+    .slice(0, targetCount)
+    .map(({ asteroid }) => asteroid);
+}
+
 function resolveRouteChoice(regionId, x = state.player.x, y = state.player.y) {
   const nextRegion = regions[regionId];
   if (!nextRegion) {
@@ -648,7 +744,7 @@ function resolveRouteChoice(regionId, x = state.player.x, y = state.player.y) {
   state.routeChoice.active = false;
   state.routeChoice.timer = 0;
   state.routeChoice.gates = [];
-  state.asteroids.length = Math.min(state.asteroids.length, Math.max(2, Math.floor(state.asteroids.length * 0.6)));
+  pruneAsteroidsAfterRoute(x, y);
   spawnBurst(x, y, 28, [rgba(nextRegion.tint, 0.95), rgba(nextRegion.secondaryTint, 0.9), "#f4fbff"]);
   spawnMessage(nextRegion.name, x, y - 34, rgba(nextRegion.tint, 0.95));
   triggerScreenShake(0.16, 8);
@@ -861,7 +957,7 @@ function update(dt) {
 }
 
 function updateStars(dt) {
-  if (state.stars.length < 90) {
+  if (state.stars.length < tuning.starCount) {
     state.stars.push(makeStar());
   }
 
@@ -1267,6 +1363,45 @@ function drawRings() {
   ctx.restore();
 }
 
+function trimCanvasText(text, maxWidth) {
+  const chars = Array.from(text);
+  while (chars.length && ctx.measureText(`${chars.join("")}...`).width > maxWidth) {
+    chars.pop();
+  }
+  return chars.length ? `${chars.join("")}...` : "";
+}
+
+function drawCenteredWrappedText(text, x, y, maxWidth, lineHeight, maxLines = 2) {
+  const lines = [];
+  let line = "";
+
+  for (const char of Array.from(text)) {
+    const nextLine = line + char;
+    if (!line || ctx.measureText(nextLine).width <= maxWidth) {
+      line = nextLine;
+      continue;
+    }
+
+    lines.push(line);
+    line = char;
+    if (lines.length === maxLines) {
+      break;
+    }
+  }
+
+  if (line && lines.length < maxLines) {
+    lines.push(line);
+  }
+
+  if (lines.length === maxLines && ctx.measureText(lines[lines.length - 1]).width > maxWidth) {
+    lines[lines.length - 1] = trimCanvasText(lines[lines.length - 1], maxWidth);
+  }
+
+  lines.forEach((lineText, index) => {
+    ctx.fillText(lineText, x, y + index * lineHeight);
+  });
+}
+
 function drawRouteChoice() {
   if (!state.routeChoice.active) {
     return;
@@ -1308,7 +1443,14 @@ function drawRouteChoice() {
     ctx.font = '11px "Segoe UI", sans-serif';
     ctx.fillText(region.name, gate.x, gate.y + 12);
     ctx.fillStyle = rgba(region.tint, 0.9);
-    ctx.fillText(region.description, gate.x, gate.y + radius + 26);
+    drawCenteredWrappedText(
+      region.description,
+      gate.x,
+      gate.y + radius + 24,
+      Math.max(76, Math.min(160, cw * 0.27)),
+      14,
+      2
+    );
   }
 
   ctx.shadowBlur = 0;
@@ -2046,6 +2188,30 @@ if (orientationButton) {
   orientationButton.addEventListener("click", requestLandscapeMode);
 }
 
+if (settingsButton) {
+  settingsButton.addEventListener("click", openSettings);
+}
+
+if (settingsCloseButton) {
+  settingsCloseButton.addEventListener("click", closeSettings);
+}
+
+if (musicBtn) {
+  musicBtn.addEventListener("click", toggleMusic);
+}
+
+if (sfxBtn) {
+  sfxBtn.addEventListener("click", toggleSfx);
+}
+
+for (const button of skinCards) {
+  button.addEventListener("click", () => selectSkin(button.dataset.skin));
+}
+
+for (const button of colorSwatches) {
+  button.addEventListener("click", () => selectColor(button.dataset.color));
+}
+
 window.addEventListener("keydown", (event) => {
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
@@ -2108,6 +2274,6 @@ syncLandscapeUi();
 resizeCanvas();
 renderSkinPreviews();
 showOverlay("start", uiText.startTitle, uiText.startText, uiText.startButton);
-state.stars = Array.from({ length: 90 }, () => makeStar(true));
+state.stars = Array.from({ length: tuning.starCount }, () => makeStar(true));
 draw();
 requestAnimationFrame(loop);

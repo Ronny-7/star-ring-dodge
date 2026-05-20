@@ -737,11 +737,22 @@ button:active {
 }
 
 @media (max-width: 780px) {
+  html,
+  body {
+    width: 100%;
+    overflow-x: hidden;
+  }
+
   .app {
+    width: 100%;
+    max-width: 100vw;
     padding: 10px;
   }
 
   .topbar {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
@@ -773,9 +784,14 @@ button:active {
   .top-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
   }
 
   .metric-card {
+    min-width: 0;
+    overflow: hidden;
     padding: 10px;
   }
 
@@ -786,6 +802,9 @@ button:active {
   .metric-value {
     margin-top: 6px;
     font-size: 1.25rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .metric-card:nth-child(2) .metric-value {
@@ -793,11 +812,18 @@ button:active {
   }
 
   .stage-layout {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     gap: 12px;
     min-height: auto;
   }
 
   .playfield-shell {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
     order: -1;
   }
 
@@ -806,11 +832,29 @@ button:active {
   }
 
   .stage-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 8px;
     min-height: 52px;
     padding: 12px 14px;
   }
 
+  .stage-head .signal-group {
+    display: none;
+  }
+
+  .stage-head > div {
+    min-width: 0;
+  }
+
+  .orientation-button,
+  .audio-button {
+    flex: 0 0 auto;
+  }
+
   .playfield {
+    width: 100%;
+    max-width: 100%;
     min-height: 520px;
     height: 78dvh;
     max-height: none;
@@ -846,8 +890,10 @@ button:active {
   }
 
   .overlay-panel {
+    max-width: 100%;
     max-height: calc(100% - 20px);
     padding: 14px;
+    overflow-wrap: anywhere;
   }
 
   .overlay-panel h2 {
@@ -1446,4 +1492,3 @@ body.force-landscape .overlay-panel > button {
   transform: scale(1.15);
   box-shadow: 0 0 14px var(--c);
 }
-

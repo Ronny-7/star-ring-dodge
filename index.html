@@ -107,7 +107,7 @@
               <span></span>
             </div>
             <button class="orientation-button" type="button" data-orientation-button>横屏</button>
-            <button class="audio-button" id="settings-button" type="button" onclick="openSettings()" aria-label="设置" style="font-size:1.1rem">⚙</button>
+            <button class="audio-button" id="settings-button" type="button" aria-label="设置" style="font-size:1.1rem">⚙</button>
           </div>
 
           <div class="playfield">
@@ -149,33 +149,33 @@
     <div class="settings-panel">
       <div class="settings-header">
         <span class="panel-label">SETTINGS</span>
-        <button class="settings-close" onclick="closeSettings()" aria-label="关闭">✕</button>
+        <button class="settings-close" type="button" aria-label="关闭">✕</button>
       </div>
 
       <div class="settings-section">
         <p class="settings-section-title">音频</p>
         <div class="settings-row">
           <span>背景音乐</span>
-          <button class="toggle-btn active" id="settings-music-btn" onclick="toggleMusic()">ON</button>
+          <button class="toggle-btn active" id="settings-music-btn" type="button">ON</button>
         </div>
         <div class="settings-row">
           <span>音效</span>
-          <button class="toggle-btn active" id="settings-sfx-btn" onclick="toggleSfx()">ON</button>
+          <button class="toggle-btn active" id="settings-sfx-btn" type="button">ON</button>
         </div>
       </div>
 
       <div class="settings-section">
         <p class="settings-section-title">飞船外形</p>
         <div class="skin-grid">
-          <button class="skin-card active" data-skin="default" onclick="selectSkin('default')">
+          <button class="skin-card active" data-skin="default" type="button">
             <canvas class="skin-preview" width="72" height="72"></canvas>
             <span>战斗机</span>
           </button>
-          <button class="skin-card" data-skin="delta" onclick="selectSkin('delta')">
+          <button class="skin-card" data-skin="delta" type="button">
             <canvas class="skin-preview" width="72" height="72"></canvas>
             <span>三角翼</span>
           </button>
-          <button class="skin-card" data-skin="saucer" onclick="selectSkin('saucer')">
+          <button class="skin-card" data-skin="saucer" type="button">
             <canvas class="skin-preview" width="72" height="72"></canvas>
             <span>飞碟</span>
           </button>
@@ -185,9 +185,9 @@
       <div class="settings-section">
         <p class="settings-section-title">飞船颜色</p>
         <div class="color-row">
-          <button class="color-swatch active" data-color="blue" onclick="selectColor('blue')" aria-label="蓝色" style="--c:#62e4ff"></button>
-          <button class="color-swatch" data-color="red" onclick="selectColor('red')" aria-label="红色" style="--c:#ff6f87"></button>
-          <button class="color-swatch" data-color="green" onclick="selectColor('green')" aria-label="绿色" style="--c:#8affd1"></button>
+          <button class="color-swatch active" data-color="blue" type="button" aria-label="蓝色" style="--c:#62e4ff"></button>
+          <button class="color-swatch" data-color="red" type="button" aria-label="红色" style="--c:#ff6f87"></button>
+          <button class="color-swatch" data-color="green" type="button" aria-label="绿色" style="--c:#8affd1"></button>
         </div>
       </div>
     </div>
