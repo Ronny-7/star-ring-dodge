@@ -257,6 +257,7 @@ function resizeCanvas() {
     }
   }
   state.player.radius = getPlayerRadius();
+  refreshRouteGatePresentation();
 }
 
 function scaleEntity(entity, scaleX, scaleY) {
@@ -659,14 +660,14 @@ function getCurrentRegion() {
   return regions[state.regionId] || regions[DEFAULT_REGION_ID];
 }
 
-function getRegionMultiplier(name) {
-  const value = getCurrentRegion()[name];
+function getRegionMultiplier(region, name) {
+  const value = region[name];
   return typeof value === "number" ? value : 1;
 }
 
-function getRouteAdjustedSpawnInterval() {
+function getRouteAdjustedSpawnInterval(region) {
   const slowdown = state.routeChoice.active ? tuning.routeChoiceSpawnSlowdown : 1;
-  return state.spawnInterval * getRegionMultiplier("asteroidSpawnMultiplier") * slowdown;
+  return state.spawnInterval * getRegionMultiplier(region, "asteroidSpawnMultiplier") * slowdown;
 }
 
 function updateRegionFlow(dt) {
@@ -684,6 +685,36 @@ function updateRegionFlow(dt) {
   }
 }
 
+function refreshRouteGatePresentation() {
+  if (!state.routeChoice.active) {
+    return;
+  }
+
+  ctx.save();
+  ctx.font = '11px "Segoe UI", sans-serif';
+  const maxWidth = Math.max(76, Math.min(160, cw * 0.27));
+  for (const gate of state.routeChoice.gates) {
+    gate.descriptionLines = wrapCanvasText(gate.description, maxWidth, 2);
+  }
+  ctx.restore();
+}
+
+function makeRouteGate(regionId, x, y) {
+  const region = regions[regionId];
+  return {
+    regionId,
+    x,
+    y,
+    radius: tuning.routeGateRadius,
+    label: region.label,
+    name: region.name,
+    description: region.description,
+    tint: region.tint,
+    secondaryTint: region.secondaryTint,
+    descriptionLines: []
+  };
+}
+
 function beginRouteChoice() {
   const candidates = REGION_IDS.filter(id => id !== state.regionId);
   const first = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0];
@@ -694,15 +725,24 @@ function beginRouteChoice() {
   state.routeChoice.active = true;
   state.routeChoice.timer = tuning.routeChoiceDuration;
   state.routeChoice.gates = [
-    { regionId: first, x: margin, y: gateY, radius: tuning.routeGateRadius },
-    { regionId: second, x: cw - margin, y: gateY, radius: tuning.routeGateRadius }
+    makeRouteGate(first, margin, gateY),
+    makeRouteGate(second, cw - margin, gateY)
   ];
+  refreshRouteGatePresentation();
   state.regionTimer = 0;
   spawnMessage("选择跃迁门", cw / 2, Math.max(42, gateY - 72), "#eaf4ff");
 }
 
 function chooseFallbackRoute() {
-  const fallback = state.routeChoice.gates[0];
+  let fallback = null;
+  let closestDistance = Infinity;
+  for (const gate of state.routeChoice.gates) {
+    const distance = Math.hypot(gate.x - state.player.x, gate.y - state.player.y);
+    if (distance < closestDistance) {
+      fallback = gate;
+      closestDistance = distance;
+    }
+  }
   if (fallback) {
     resolveRouteChoice(fallback.regionId, fallback.x, fallback.y);
   }
@@ -725,11 +765,16 @@ function pruneAsteroidsAfterRoute(x, y) {
     return;
   }
 
-  state.asteroids = state.asteroids
-    .map(asteroid => ({ asteroid, keepScore: getRouteAsteroidKeepScore(asteroid, x, y) }))
-    .sort((a, b) => b.keepScore - a.keepScore)
-    .slice(0, targetCount)
-    .map(({ asteroid }) => asteroid);
+  const scoredAsteroids = [];
+  for (const asteroid of state.asteroids) {
+    scoredAsteroids.push({ asteroid, keepScore: getRouteAsteroidKeepScore(asteroid, x, y) });
+  }
+  scoredAsteroids.sort((a, b) => b.keepScore - a.keepScore);
+
+  for (let i = 0; i < targetCount; i += 1) {
+    state.asteroids[i] = scoredAsteroids[i].asteroid;
+  }
+  state.asteroids.length = targetCount;
 }
 
 function resolveRouteChoice(regionId, x = state.player.x, y = state.player.y) {
@@ -765,7 +810,7 @@ function handleRouteGateCollision() {
   }
 }
 
-function spawnAsteroid() {
+function spawnAsteroid(region = getCurrentRegion()) {
   const scale = getGameplayScale();
   const radius = (Math.random() * tuning.asteroidRadiusRange + tuning.asteroidRadiusMin) * scale;
   const minDistance = tuning.safeSpawnDistance + radius + state.player.radius;
@@ -784,7 +829,7 @@ function spawnAsteroid() {
   if (bestDistance < minDistance) return;
 
   const angle = Math.atan2(state.player.y - spawn.y, state.player.x - spawn.x);
-  const speed = (Math.random() * tuning.asteroidSpeedRange + tuning.asteroidSpeedBase) * state.speedScale * getRegionMultiplier("asteroidSpeedMultiplier");
+  const speed = (Math.random() * tuning.asteroidSpeedRange + tuning.asteroidSpeedBase) * state.speedScale * getRegionMultiplier(region, "asteroidSpeedMultiplier");
   const shape = makeAsteroidShape(radius);
 
   state.asteroids.push({
@@ -921,6 +966,7 @@ function update(dt) {
     fireLaser();
   }
   updateRegionFlow(dt);
+  const region = getCurrentRegion();
   state.spawnTimer += dt;
   state.coreTimer += dt;
   state.powerUpTimer += dt;
@@ -932,17 +978,17 @@ function update(dt) {
     state.spawnInterval = Math.max(tuning.minSpawnInterval, state.spawnInterval - tuning.spawnIntervalStep);
   }
 
-  if (state.spawnTimer >= getRouteAdjustedSpawnInterval()) {
+  if (state.spawnTimer >= getRouteAdjustedSpawnInterval(region)) {
     state.spawnTimer = 0;
-    spawnAsteroid();
+    spawnAsteroid(region);
   }
 
-  if (state.coreTimer >= 2.5 * getRegionMultiplier("coreIntervalMultiplier") && state.cores.length < 2) {
+  if (state.coreTimer >= 2.5 * getRegionMultiplier(region, "coreIntervalMultiplier") && state.cores.length < 2) {
     state.coreTimer = 0;
     spawnCore();
   }
 
-  if (state.powerUpTimer >= tuning.powerUpSpawnInterval * getRegionMultiplier("powerUpIntervalMultiplier") && state.powerUps.length < 1) {
+  if (state.powerUpTimer >= tuning.powerUpSpawnInterval * getRegionMultiplier(region, "powerUpIntervalMultiplier") && state.powerUps.length < 1) {
     state.powerUpTimer = 0;
     spawnPowerUp();
   }
@@ -1273,6 +1319,7 @@ function endGame() {
       { label: "存活时间", value: formatDuration(state.stats.survivalTime) },
       { label: "击毁陨石", value: String(state.stats.destroyedAsteroids) },
       { label: "回收核心", value: String(state.stats.collectedCores) },
+      { label: "跃迁次数", value: String(state.regionJunctions) },
       { label: "命中率", value: formatRate(state.stats.shotsHit, state.stats.shotsFired) }
     ],
     state.stats.newBest
@@ -1287,6 +1334,7 @@ function endGame() {
 }
 
 function draw() {
+  const region = getCurrentRegion();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cw, ch);
   ctx.save();
@@ -1296,9 +1344,9 @@ function draw() {
     ctx.translate((Math.random() - 0.5) * intensity, (Math.random() - 0.5) * intensity);
   }
 
-  drawBackground();
+  drawBackground(region);
   drawStars();
-  drawRings();
+  drawRings(region);
   drawAsteroidWarnings();
   drawRouteChoice();
   drawCores();
@@ -1308,13 +1356,12 @@ function draw() {
   drawLasers();
   drawAsteroids();
   drawPlayer();
-  drawHudOverlay();
+  drawHudOverlay(region);
   drawVignette();
   ctx.restore();
 }
 
-function drawBackground() {
-  const region = getCurrentRegion();
+function drawBackground(region) {
   const bg = ctx.createLinearGradient(0, 0, 0, ch);
   bg.addColorStop(0, "#08111f");
   bg.addColorStop(0.45, "#07101d");
@@ -1347,9 +1394,8 @@ function drawStars() {
   ctx.globalAlpha = 1;
 }
 
-function drawRings() {
+function drawRings(region) {
   const pulse = Math.sin(state.pulseTime * 0.8) * 0.5 + 0.5;
-  const region = getCurrentRegion();
   ctx.save();
   ctx.translate(cw / 2, ch / 2);
   ctx.rotate(state.regionTimer * 0.018);
@@ -1371,7 +1417,7 @@ function trimCanvasText(text, maxWidth) {
   return chars.length ? `${chars.join("")}...` : "";
 }
 
-function drawCenteredWrappedText(text, x, y, maxWidth, lineHeight, maxLines = 2) {
+function wrapCanvasText(text, maxWidth, maxLines = 2) {
   const lines = [];
   let line = "";
 
@@ -1397,6 +1443,10 @@ function drawCenteredWrappedText(text, x, y, maxWidth, lineHeight, maxLines = 2)
     lines[lines.length - 1] = trimCanvasText(lines[lines.length - 1], maxWidth);
   }
 
+  return lines;
+}
+
+function drawWrappedTextLines(lines, x, y, lineHeight) {
   lines.forEach((lineText, index) => {
     ctx.fillText(lineText, x, y + index * lineHeight);
   });
@@ -1413,20 +1463,19 @@ function drawRouteChoice() {
   ctx.textBaseline = "middle";
 
   for (const gate of state.routeChoice.gates) {
-    const region = regions[gate.regionId];
     const radius = gate.radius + pulse * 5;
     const glow = ctx.createRadialGradient(gate.x, gate.y, 4, gate.x, gate.y, radius * 1.9);
-    glow.addColorStop(0, rgba(region.tint, 0.34));
-    glow.addColorStop(0.48, rgba(region.tint, 0.18));
-    glow.addColorStop(1, rgba(region.tint, 0));
+    glow.addColorStop(0, rgba(gate.tint, 0.34));
+    glow.addColorStop(0.48, rgba(gate.tint, 0.18));
+    glow.addColorStop(1, rgba(gate.tint, 0));
     ctx.fillStyle = glow;
     ctx.beginPath();
     ctx.arc(gate.x, gate.y, radius * 1.9, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.shadowBlur = 24;
-    ctx.shadowColor = rgba(region.tint, 0.9);
-    ctx.strokeStyle = rgba(region.tint, 0.88);
+    ctx.shadowColor = rgba(gate.tint, 0.9);
+    ctx.strokeStyle = rgba(gate.tint, 0.88);
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(gate.x, gate.y, radius, 0, Math.PI * 2);
@@ -1439,18 +1488,11 @@ function drawRouteChoice() {
     ctx.shadowBlur = 10;
     ctx.fillStyle = "rgba(238,248,255,0.96)";
     ctx.font = '700 13px "Segoe UI", sans-serif';
-    ctx.fillText(region.label, gate.x, gate.y - 6);
+    ctx.fillText(gate.label, gate.x, gate.y - 6);
     ctx.font = '11px "Segoe UI", sans-serif';
-    ctx.fillText(region.name, gate.x, gate.y + 12);
-    ctx.fillStyle = rgba(region.tint, 0.9);
-    drawCenteredWrappedText(
-      region.description,
-      gate.x,
-      gate.y + radius + 24,
-      Math.max(76, Math.min(160, cw * 0.27)),
-      14,
-      2
-    );
+    ctx.fillText(gate.name, gate.x, gate.y + 12);
+    ctx.fillStyle = rgba(gate.tint, 0.9);
+    drawWrappedTextLines(gate.descriptionLines, gate.x, gate.y + radius + 24, 14);
   }
 
   ctx.shadowBlur = 0;
@@ -1918,8 +1960,7 @@ function drawLasers() {
   }
 }
 
-function drawHudOverlay() {
-  const region = getCurrentRegion();
+function drawHudOverlay(region) {
   const routeProgress = Math.min(1, state.regionTimer / tuning.routeChoiceInterval);
   ctx.save();
   ctx.strokeStyle = state.flashTimer > 0 ? "rgba(255, 111, 135, 0.32)" : rgba(region.tint, 0.14);
