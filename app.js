@@ -266,7 +266,7 @@ function resizeCanvas() {
   const scaleX = previousW ? width / previousW : 1;
   const scaleY = previousH ? height / previousH : 1;
   scaleEntity(state.player, scaleX, scaleY);
-  for (const collection of [state.asteroids, state.cores, state.powerUps, state.stars, state.lasers, state.particles, state.messages, state.routeChoice.gates]) {
+  for (const collection of [state.asteroids, state.cores, state.powerUps, state.stars, state.lasers, state.particles, state.rings, state.messages, state.routeChoice.gates]) {
     for (const entity of collection) {
       scaleEntity(entity, scaleX, scaleY);
     }
