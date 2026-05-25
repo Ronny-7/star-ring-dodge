@@ -25,6 +25,14 @@ function makeColor(r, g, b) {
 
 function softenChannel(channel) { return Math.round(channel + (255 - channel) * 0.92); }
 function rgba(rgb, alpha) { return `rgba(${rgb},${alpha})`; }
+function distanceSquared(ax, ay, bx, by) {
+  const dx = ax - bx;
+  const dy = ay - by;
+  return dx * dx + dy * dy;
+}
+function isWithinRadius(ax, ay, bx, by, radius) {
+  return distanceSquared(ax, ay, bx, by) < radius * radius;
+}
 let musicGain = null;
 let musicNodes = [];
 
@@ -229,6 +237,9 @@ function getDisplaySize() {
 
 let dpr = window.devicePixelRatio || 1;
 let cw = 960, ch = 600;
+let backgroundGradient = null;
+let backgroundGradientWidth = 0;
+let backgroundGradientHeight = 0;
 
 function resizeCanvas() {
   const { width, height } = getDisplaySize();
@@ -391,6 +402,11 @@ function hideOverlayStats() {
 
 let bestScore = readBestScore();
 let overlayMode = "start";
+const hudCache = {
+  score: null,
+  health: null,
+  best: null
+};
 bestEl.textContent = String(bestScore);
 
 const state = {
@@ -512,9 +528,22 @@ function resetGame() {
 }
 
 function syncHud() {
-  scoreEl.textContent = String(Math.floor(state.score));
-  healthEl.textContent = `${"♥".repeat(state.health)}${"♡".repeat(3 - state.health)}`;
-  bestEl.textContent = String(Math.max(bestScore, Math.floor(state.score)));
+  const nextScore = String(Math.floor(state.score));
+  const nextHealth = `${"♥".repeat(state.health)}${"♡".repeat(3 - state.health)}`;
+  const nextBest = String(Math.max(bestScore, Math.floor(state.score)));
+
+  if (hudCache.score !== nextScore) {
+    scoreEl.textContent = nextScore;
+    hudCache.score = nextScore;
+  }
+  if (hudCache.health !== nextHealth) {
+    healthEl.textContent = nextHealth;
+    hudCache.health = nextHealth;
+  }
+  if (hudCache.best !== nextBest) {
+    bestEl.textContent = nextBest;
+    hudCache.best = nextBest;
+  }
 }
 
 function hideOverlay() {
@@ -802,8 +831,7 @@ function handleRouteGateCollision() {
   }
 
   for (const gate of state.routeChoice.gates) {
-    const dist = Math.hypot(gate.x - state.player.x, gate.y - state.player.y);
-    if (dist < gate.radius + state.player.radius) {
+    if (isWithinRadius(gate.x, gate.y, state.player.x, state.player.y, gate.radius + state.player.radius)) {
       resolveRouteChoice(gate.regionId, gate.x, gate.y);
       return;
     }
@@ -1169,8 +1197,7 @@ function handleCollisions() {
   if (state.invulnerabilityTimer <= 0) {
     for (let i = state.asteroids.length - 1; i >= 0; i -= 1) {
       const asteroid = state.asteroids[i];
-      const dist = Math.hypot(asteroid.x - state.player.x, asteroid.y - state.player.y);
-      if (dist < asteroid.radius + state.player.radius) {
+      if (isWithinRadius(asteroid.x, asteroid.y, state.player.x, state.player.y, asteroid.radius + state.player.radius)) {
         spawnBurst(asteroid.x, asteroid.y, 20, ["#ff8ea1", "#ffc5cf", "#ffd7a1"]);
         spawnBurst(state.player.x, state.player.y, 16, ["#ff8ea1", "#ffd7a1", "#fff0d6"]);
         state.asteroids.splice(i, 1);
@@ -1208,8 +1235,7 @@ function handleCollisions() {
       const threshold = asteroid.radius + 7;
       if (Math.abs(asteroid.x - laser.x) > threshold || Math.abs(asteroid.y - laser.y) > threshold) continue;
       const isLargeAsteroid = asteroid.radius > tuning.largeAsteroidThreshold;
-      const dist = Math.hypot(asteroid.x - laser.x, asteroid.y - laser.y);
-      if (dist < threshold) {
+      if (isWithinRadius(asteroid.x, asteroid.y, laser.x, laser.y, threshold)) {
         hit = true;
         state.lasers.splice(i, 1);
         state.stats.shotsHit += 1;
@@ -1238,8 +1264,7 @@ function handleCollisions() {
 
   for (let i = state.cores.length - 1; i >= 0; i -= 1) {
     const core = state.cores[i];
-    const dist = Math.hypot(core.x - state.player.x, core.y - state.player.y);
-    if (dist < core.radius + state.player.radius + 4) {
+    if (isWithinRadius(core.x, core.y, state.player.x, state.player.y, core.radius + state.player.radius + 4)) {
       state.cores.splice(i, 1);
       state.score += tuning.scoreCore;
       state.stats.collectedCores += 1;
@@ -1251,8 +1276,7 @@ function handleCollisions() {
 
   for (let i = state.powerUps.length - 1; i >= 0; i -= 1) {
     const powerUp = state.powerUps[i];
-    const dist = Math.hypot(powerUp.x - state.player.x, powerUp.y - state.player.y);
-    if (dist < powerUp.radius + state.player.radius + 4) {
+    if (isWithinRadius(powerUp.x, powerUp.y, state.player.x, state.player.y, powerUp.radius + state.player.radius + 4)) {
       state.powerUps.splice(i, 1);
       if (powerUp.type === "shield") {
         state.shieldCharges = 1;
@@ -1361,12 +1385,22 @@ function draw() {
   ctx.restore();
 }
 
+function getBackgroundGradient() {
+  if (backgroundGradient && backgroundGradientWidth === cw && backgroundGradientHeight === ch) {
+    return backgroundGradient;
+  }
+
+  backgroundGradient = ctx.createLinearGradient(0, 0, 0, ch);
+  backgroundGradient.addColorStop(0, "#08111f");
+  backgroundGradient.addColorStop(0.45, "#07101d");
+  backgroundGradient.addColorStop(1, "#030814");
+  backgroundGradientWidth = cw;
+  backgroundGradientHeight = ch;
+  return backgroundGradient;
+}
+
 function drawBackground(region) {
-  const bg = ctx.createLinearGradient(0, 0, 0, ch);
-  bg.addColorStop(0, "#08111f");
-  bg.addColorStop(0.45, "#07101d");
-  bg.addColorStop(1, "#030814");
-  ctx.fillStyle = bg;
+  ctx.fillStyle = getBackgroundGradient();
   ctx.fillRect(0, 0, cw, ch);
 
   const drift = state.regionTimer * 18;

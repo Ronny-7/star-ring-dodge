@@ -746,7 +746,7 @@ button:active {
   .app {
     width: 100%;
     max-width: 100vw;
-    padding: 10px;
+    padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
   }
 
   .topbar {
@@ -928,7 +928,7 @@ button:active {
 
 @media (max-width: 420px) {
   .playfield {
-    min-height: 500px;
+    min-height: min(500px, calc(100dvh - 150px));
     height: 80dvh;
   }
 
@@ -956,7 +956,7 @@ button:active {
 
   .app {
     height: 100dvh;
-    padding: 6px;
+    padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
     overflow: hidden;
   }
 
@@ -1063,7 +1063,7 @@ body.landscape-layout {
 body.landscape-layout .app {
   height: 100dvh;
   min-height: 0;
-  padding: 6px;
+  padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
   overflow: hidden;
 }
 
@@ -1141,7 +1141,7 @@ body.landscape-layout .playfield {
 }
 
 body.landscape-layout .touch-controls {
-  inset: auto 22px 18px;
+  inset: auto max(22px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left));
 }
 
 body.landscape-layout .gesture-ring {
@@ -1210,8 +1210,8 @@ body.force-landscape .stage-frame::before {
 
 body.force-landscape .stage-head {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: max(8px, env(safe-area-inset-left));
+  right: max(8px, env(safe-area-inset-top));
   z-index: 6;
   display: block;
   margin: 0;
@@ -1245,7 +1245,7 @@ body.force-landscape .orientation-hint {
 }
 
 body.force-landscape .touch-controls {
-  inset: auto 28px 22px;
+  inset: auto max(28px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-top));
   align-items: end;
 }
 
@@ -1319,7 +1319,7 @@ body.force-landscape .overlay-panel > button {
   z-index: 100;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
   background: rgba(2, 6, 14, 0.82);
   transition: opacity 0.25s ease, visibility 0.25s ease;
 }
