@@ -25,6 +25,10 @@ function makeColor(r, g, b) {
 
 function softenChannel(channel) { return Math.round(channel + (255 - channel) * 0.92); }
 function rgba(rgb, alpha) { return `rgba(${rgb},${alpha})`; }
+function getTuningValue(name, fallback) {
+  const value = tuning[name];
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
 function distanceSquared(ax, ay, bx, by) {
   const dx = ax - bx;
   const dy = ay - by;
@@ -198,7 +202,7 @@ function playSound(type) {
 const particlePool = [];
 function acquireParticle(x, y, vx, vy, life, size, color) {
   const p = particlePool.pop() || {};
-  p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.size = size; p.color = color;
+  p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.size = size; p.color = color; p.drag = 0.988;
   return p;
 }
 function releaseParticle(p) { particlePool.push(p); }
@@ -451,7 +455,8 @@ const state = {
     y: ch / 2,
     radius: tuning.playerRadius,
     speed: tuning.playerSpeed,
-    angle: -Math.PI / 2
+    angle: -Math.PI / 2,
+    trailTimer: 0
   },
   asteroids: [],
   cores: [],
@@ -459,7 +464,14 @@ const state = {
   stars: [],
   lasers: [],
   messages: [],
-  particles: []
+  particles: [],
+  rings: [],
+  warpFlash: {
+    timer: 0,
+    duration: 0,
+    tint: "98,228,255",
+    secondaryTint: "123,140,255"
+  }
 };
 
 const keys = new Set();
@@ -516,12 +528,18 @@ function resetGame() {
   state.player.x = cw / 2;
   state.player.y = ch / 2;
   state.player.angle = -Math.PI / 2;
+  state.player.trailTimer = 0;
   state.asteroids = [];
   state.cores = [];
   state.powerUps = [];
   state.lasers = [];
   state.messages = [];
   state.particles = [];
+  state.rings = [];
+  state.warpFlash.timer = 0;
+  state.warpFlash.duration = 0;
+  state.warpFlash.tint = regions[DEFAULT_REGION_ID].tint;
+  state.warpFlash.secondaryTint = regions[DEFAULT_REGION_ID].secondaryTint;
   state.stars = Array.from({ length: tuning.starCount }, () => makeStar(true));
   syncHud();
   hideOverlay();
@@ -702,6 +720,9 @@ function getRouteAdjustedSpawnInterval(region) {
 function updateRegionFlow(dt) {
   if (state.routeChoice.active) {
     state.routeChoice.timer = Math.max(0, state.routeChoice.timer - dt);
+    for (const gate of state.routeChoice.gates) {
+      gate.age = (gate.age || 0) + dt;
+    }
     if (state.routeChoice.timer <= 0) {
       chooseFallbackRoute();
     }
@@ -740,6 +761,7 @@ function makeRouteGate(regionId, x, y) {
     description: region.description,
     tint: region.tint,
     secondaryTint: region.secondaryTint,
+    age: 0,
     descriptionLines: []
   };
 }
@@ -757,6 +779,9 @@ function beginRouteChoice() {
     makeRouteGate(first, margin, gateY),
     makeRouteGate(second, cw - margin, gateY)
   ];
+  for (const gate of state.routeChoice.gates) {
+    spawnRing(gate.x, gate.y, gate.radius * 0.35, 160, rgba(gate.tint, 0.62), 0.44, 1.8);
+  }
   refreshRouteGatePresentation();
   state.regionTimer = 0;
   spawnMessage("选择跃迁门", cw / 2, Math.max(42, gateY - 72), "#eaf4ff");
@@ -806,6 +831,13 @@ function pruneAsteroidsAfterRoute(x, y) {
   state.asteroids.length = targetCount;
 }
 
+function startWarpFlash(region) {
+  state.warpFlash.timer = getTuningValue("warpFlashDuration", 0.58);
+  state.warpFlash.duration = getTuningValue("warpFlashDuration", 0.58);
+  state.warpFlash.tint = region.tint;
+  state.warpFlash.secondaryTint = region.secondaryTint;
+}
+
 function resolveRouteChoice(regionId, x = state.player.x, y = state.player.y) {
   const nextRegion = regions[regionId];
   if (!nextRegion) {
@@ -819,9 +851,12 @@ function resolveRouteChoice(regionId, x = state.player.x, y = state.player.y) {
   state.routeChoice.timer = 0;
   state.routeChoice.gates = [];
   pruneAsteroidsAfterRoute(x, y);
-  spawnBurst(x, y, 28, [rgba(nextRegion.tint, 0.95), rgba(nextRegion.secondaryTint, 0.9), "#f4fbff"]);
+  startWarpFlash(nextRegion);
+  spawnBurst(x, y, 36, [rgba(nextRegion.tint, 0.95), rgba(nextRegion.secondaryTint, 0.9), "#f4fbff"]);
+  spawnRing(x, y, tuning.routeGateRadius * 0.9, 300, rgba(nextRegion.tint, 0.86), 0.52, 4);
+  spawnRing(x, y, tuning.routeGateRadius * 1.4, 190, rgba(nextRegion.secondaryTint, 0.62), 0.6, 2.4);
   spawnMessage(nextRegion.name, x, y - 34, rgba(nextRegion.tint, 0.95));
-  triggerScreenShake(0.16, 8);
+  triggerScreenShake(0.2, 10);
   playSound("pickup");
 }
 
@@ -976,6 +1011,7 @@ function update(dt) {
   state.pulseTime += dt;
   updateStars(dt);
   updateParticles(dt);
+  updateRings(dt);
   updateMessages(dt);
 
   if (!state.running || state.paused) {
@@ -988,6 +1024,7 @@ function update(dt) {
   state.invulnerabilityTimer = Math.max(0, state.invulnerabilityTimer - dt);
   state.screenShakeTimer = Math.max(0, state.screenShakeTimer - dt);
   state.screenShakeStrength = state.screenShakeTimer > 0 ? Math.max(0, state.screenShakeStrength - dt * tuning.screenShakeDecay) : 0;
+  state.warpFlash.timer = Math.max(0, state.warpFlash.timer - dt);
   state.shootCooldown = Math.max(0, state.shootCooldown - dt);
   state.doubleShotTimer = Math.max(0, state.doubleShotTimer - dt);
   if (fireHeld) {
@@ -1022,12 +1059,54 @@ function update(dt) {
   }
 
   movePlayer(dt);
+  spawnThrusterTrail(dt);
   moveAsteroids(dt);
   moveLasers(dt);
   updateCores(dt);
   updatePowerUps(dt);
   handleCollisions();
   syncHud();
+}
+
+function spawnThrusterTrail(dt) {
+  if (!hasActiveMovement()) {
+    state.player.trailTimer = 0;
+    return;
+  }
+
+  state.player.trailTimer += dt;
+  if (state.player.trailTimer < getTuningValue("thrusterTrailInterval", 0.035)) {
+    return;
+  }
+  state.player.trailTimer = 0;
+
+  const skin = SKINS[activeSkin];
+  const col = COLORS[activeColor];
+  const backAngle = state.player.angle + Math.PI / 2;
+  const sideAngle = state.player.angle;
+  const sin = Math.sin(state.player.angle);
+  const cos = Math.cos(state.player.angle);
+
+  for (const engine of skin.engines) {
+    const localX = engine.x * state.player.radius;
+    const localY = engine.y * state.player.radius;
+    const x = state.player.x + localX * cos - localY * sin;
+    const y = state.player.y + localX * sin + localY * cos;
+    const spread = (Math.random() - 0.5) * 0.7;
+    const speed = 85 + Math.random() * 95;
+    const drift = (Math.random() - 0.5) * 34;
+    const p = acquireParticle(
+      x,
+      y,
+      Math.cos(backAngle + spread) * speed + Math.cos(sideAngle) * drift,
+      Math.sin(backAngle + spread) * speed + Math.sin(sideAngle) * drift,
+      0.26 + Math.random() * 0.18,
+      2.2 + Math.random() * 2.8,
+      Math.random() > 0.22 ? rgba(col.rgb, 0.82) : "rgba(255,243,182,0.88)"
+    );
+    p.drag = 0.965;
+    state.particles.push(p);
+  }
 }
 
 function updateStars(dt) {
@@ -1052,14 +1131,26 @@ function updateParticles(dt) {
     if (p.life > 0) {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vx *= 0.988;
-      p.vy *= 0.988;
+      p.vx *= p.drag ?? 0.988;
+      p.vy *= p.drag ?? 0.988;
       state.particles[alive++] = p;
     } else {
       releaseParticle(p);
     }
   }
   state.particles.length = alive;
+}
+
+function updateRings(dt) {
+  let alive = 0;
+  for (const ring of state.rings) {
+    ring.life -= dt;
+    ring.radius += ring.speed * dt;
+    if (ring.life > 0) {
+      state.rings[alive++] = ring;
+    }
+  }
+  state.rings.length = alive;
 }
 
 function updateMessages(dt) {
@@ -1208,6 +1299,7 @@ function handleCollisions() {
           state.flashTimer = 0;
           triggerScreenShake(0.2, 12);
           spawnBurst(state.player.x, state.player.y, 18, ["#8affd1", "#d4fff4", "#62e4ff"]);
+          spawnShieldImpactEffect(state.player.x, state.player.y);
           spawnMessage("SHIELD -1", state.player.x, state.player.y - 34, "#8affd1");
           break;
         }
@@ -1216,6 +1308,7 @@ function handleCollisions() {
         state.invulnerabilityTimer = tuning.hitInvulnerability;
         state.flashTimer = tuning.hitFlashDuration;
         triggerScreenShake(0.28, 18);
+        spawnHullImpactEffect(state.player.x, state.player.y);
         spawnMessage("HULL -1", state.player.x, state.player.y - 34, "#ff8ea1");
         playSound("hurt");
         if (state.health <= 0) {
@@ -1242,12 +1335,14 @@ function handleCollisions() {
         asteroid.hp -= 1;
         asteroid.hitFlash = 1;
         spawnBurst(laser.x, laser.y, isLargeAsteroid ? 10 : 8, ["#74ecff", "#d2fbff", "#8c9bb7"]);
+        spawnImpactEffect(laser.x, laser.y, laser.angle, isLargeAsteroid);
         triggerScreenShake(0.08, isLargeAsteroid ? 6 : 4);
 
         if (asteroid.hp <= 0) {
           state.score += tuning.scoreAsteroid;
           state.stats.destroyedAsteroids += 1;
           spawnBurst(asteroid.x, asteroid.y, isLargeAsteroid ? 28 : 20, ["#7fe8ff", "#dce7ff", "#95a5bf"]);
+          spawnExplosionEffect(asteroid.x, asteroid.y, asteroid.radius, isLargeAsteroid);
           triggerScreenShake(isLargeAsteroid ? 0.18 : 0.12, isLargeAsteroid ? 12 : 7);
           state.asteroids.splice(j, 1);
           playSound("explode");
@@ -1269,6 +1364,7 @@ function handleCollisions() {
       state.score += tuning.scoreCore;
       state.stats.collectedCores += 1;
       spawnBurst(core.x, core.y, 14, ["#8affd1", "#f3fffd", "#62e4ff"]);
+      spawnCorePickupEffect(core.x, core.y);
       spawnMessage("CORE +25", core.x, core.y - 22, "#8affd1");
       playSound("pickup");
     }
@@ -1281,16 +1377,79 @@ function handleCollisions() {
       if (powerUp.type === "shield") {
         state.shieldCharges = 1;
         spawnBurst(powerUp.x, powerUp.y, 18, ["#8affd1", "#d9fffb", "#62e4ff"]);
+        spawnShieldPickupEffect(state.player.x, state.player.y);
         spawnMessage("SHIELD READY", powerUp.x, powerUp.y - 24, "#8affd1");
       } else {
         state.doubleShotTimer = tuning.doubleShotDuration;
         spawnBurst(powerUp.x, powerUp.y, 18, ["#ffd7a1", "#ffb59e", "#ff8ea1"]);
+        spawnDoubleFirePickupEffect(state.player.x, state.player.y);
         spawnMessage("DOUBLE FIRE", powerUp.x, powerUp.y - 24, "#ffb59e");
       }
       triggerScreenShake(0.12, 8);
       playSound("pickup");
     }
   }
+}
+
+function spawnRing(x, y, radius, speed, color, life = getTuningValue("impactRingLife", 0.34), lineWidth = 2) {
+  state.rings.push({ x, y, radius, speed, color, life, maxLife: life, lineWidth });
+}
+
+function spawnDirectionalBurst(x, y, angle, count, colors, speedBase, speedRange, spread = Math.PI * 0.7) {
+  for (let i = 0; i < count; i += 1) {
+    const particleAngle = angle + (Math.random() - 0.5) * spread;
+    const speed = speedBase + Math.random() * speedRange;
+    const p = acquireParticle(
+      x,
+      y,
+      Math.cos(particleAngle) * speed,
+      Math.sin(particleAngle) * speed,
+      0.18 + Math.random() * 0.28,
+      1.2 + Math.random() * 3.2,
+      colors[Math.floor(Math.random() * colors.length)]
+    );
+    p.drag = 0.974;
+    state.particles.push(p);
+  }
+}
+
+function spawnImpactEffect(x, y, angle, isLarge) {
+  spawnRing(x, y, isLarge ? 10 : 7, isLarge ? 130 : 110, "rgba(116,236,255,0.88)", 0.24, isLarge ? 2.4 : 1.8);
+  spawnDirectionalBurst(x, y, angle, isLarge ? 12 : 8, ["#74ecff", "#d2fbff", "#8c9bb7"], 90, 210, Math.PI * 0.9);
+}
+
+function spawnExplosionEffect(x, y, radius, isLarge) {
+  spawnRing(x, y, radius * 0.55, isLarge ? 220 : 170, "rgba(127,232,255,0.82)", isLarge ? 0.44 : 0.36, isLarge ? 3.2 : 2.4);
+  spawnRing(x, y, radius * 0.25, isLarge ? 150 : 120, "rgba(255,215,161,0.62)", 0.28, 1.8);
+  spawnBurst(x, y, isLarge ? 24 : 16, ["#7fe8ff", "#dce7ff", "#ffd7a1", "#95a5bf"]);
+}
+
+function spawnShieldImpactEffect(x, y) {
+  spawnRing(x, y, state.player.radius + 8, 170, "rgba(138,255,209,0.9)", 0.34, 3.2);
+  spawnRing(x, y, state.player.radius + 18, 110, "rgba(98,228,255,0.62)", 0.42, 2.2);
+}
+
+function spawnHullImpactEffect(x, y) {
+  spawnRing(x, y, state.player.radius + 4, 150, "rgba(255,111,135,0.86)", 0.34, 3);
+  spawnDirectionalBurst(x, y, -Math.PI / 2, 18, ["#ff8ea1", "#ffd7a1", "#fff0d6"], 70, 190, Math.PI * 2);
+}
+
+function spawnCorePickupEffect(x, y) {
+  spawnRing(x, y, 10, 120, "rgba(138,255,209,0.82)", 0.32, 2.2);
+  spawnDirectionalBurst(x, y, -Math.PI / 2, 16, ["#8affd1", "#f3fffd", "#62e4ff"], 50, 150, Math.PI * 2);
+}
+
+function spawnShieldPickupEffect(x, y) {
+  spawnRing(x, y, state.player.radius + 4, 190, "rgba(138,255,209,0.92)", 0.46, 3.4);
+  spawnRing(x, y, state.player.radius + 20, 90, "rgba(212,255,244,0.72)", 0.56, 2.2);
+  spawnDirectionalBurst(x, y, -Math.PI / 2, 18, ["#8affd1", "#d9fffb", "#62e4ff"], 70, 170, Math.PI * 2);
+}
+
+function spawnDoubleFirePickupEffect(x, y) {
+  spawnRing(x, y, state.player.radius + 6, 170, "rgba(255,181,158,0.86)", 0.42, 2.8);
+  const angle = state.player.angle - Math.PI / 2;
+  spawnDirectionalBurst(x - Math.cos(state.player.angle) * 12, y - Math.sin(state.player.angle) * 12, angle, 12, ["#ffd7a1", "#ffb59e", "#ff8ea1"], 100, 190, Math.PI * 0.65);
+  spawnDirectionalBurst(x + Math.cos(state.player.angle) * 12, y + Math.sin(state.player.angle) * 12, angle, 12, ["#ffd7a1", "#ffb59e", "#ff8ea1"], 100, 190, Math.PI * 0.65);
 }
 
 function spawnBurst(x, y, count, colors) {
@@ -1376,6 +1535,7 @@ function draw() {
   drawCores();
   drawPowerUps();
   drawParticles();
+  drawEffectRings();
   drawMessages();
   drawLasers();
   drawAsteroids();
@@ -1497,14 +1657,24 @@ function drawRouteChoice() {
   ctx.textBaseline = "middle";
 
   for (const gate of state.routeChoice.gates) {
-    const radius = gate.radius + pulse * 5;
-    const glow = ctx.createRadialGradient(gate.x, gate.y, 4, gate.x, gate.y, radius * 1.9);
+    const gateX = Number.isFinite(gate.x) ? gate.x : cw / 2;
+    const gateY = Number.isFinite(gate.y) ? gate.y : ch / 2;
+    const gateRadius = Number.isFinite(gate.radius) ? gate.radius : tuning.routeGateRadius;
+    const gateAge = Number.isFinite(gate.age) ? gate.age : 0;
+    const appearDuration = getTuningValue("routeGateAppearDuration", 0.7);
+    const appear = Math.min(1, gateAge / appearDuration);
+    const ease = 1 - Math.pow(1 - appear, 3);
+    const radius = Math.max(1, (gateRadius + pulse * 5) * (0.58 + ease * 0.42));
+    const alpha = 0.28 + ease * 0.72;
+    const rippleRadius = Math.max(1, gateRadius * (0.8 + appear * 1.75 + pulse * 0.15));
+    ctx.globalAlpha = alpha;
+    const glow = ctx.createRadialGradient(gateX, gateY, 4, gateX, gateY, radius * 1.9);
     glow.addColorStop(0, rgba(gate.tint, 0.34));
     glow.addColorStop(0.48, rgba(gate.tint, 0.18));
     glow.addColorStop(1, rgba(gate.tint, 0));
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(gate.x, gate.y, radius * 1.9, 0, Math.PI * 2);
+    ctx.arc(gateX, gateY, radius * 1.9, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.shadowBlur = 24;
@@ -1512,24 +1682,33 @@ function drawRouteChoice() {
     ctx.strokeStyle = rgba(gate.tint, 0.88);
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(gate.x, gate.y, radius, 0, Math.PI * 2);
+    ctx.arc(gateX, gateY, radius, 0, Math.PI * 2);
     ctx.stroke();
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.arc(gate.x, gate.y, radius * 0.66, 0, Math.PI * 2);
+    ctx.arc(gateX, gateY, radius * 0.66, 0, Math.PI * 2);
     ctx.stroke();
+
+    ctx.globalAlpha = (1 - appear) * 0.75;
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = rgba(gate.secondaryTint, 0.7);
+    ctx.beginPath();
+    ctx.arc(gateX, gateY, rippleRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = alpha;
 
     ctx.shadowBlur = 10;
     ctx.fillStyle = "rgba(238,248,255,0.96)";
     ctx.font = '700 13px "Segoe UI", sans-serif';
-    ctx.fillText(gate.label, gate.x, gate.y - 6);
+    ctx.fillText(gate.label, gateX, gateY - 6);
     ctx.font = '11px "Segoe UI", sans-serif';
-    ctx.fillText(gate.name, gate.x, gate.y + 12);
+    ctx.fillText(gate.name, gateX, gateY + 12);
     ctx.fillStyle = rgba(gate.tint, 0.9);
-    drawWrappedTextLines(gate.descriptionLines, gate.x, gate.y + radius + 24, 14);
+    drawWrappedTextLines(gate.descriptionLines, gateX, gateY + radius + 24, 14);
   }
 
   ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
   ctx.fillStyle = "rgba(230,242,255,0.92)";
   ctx.font = '700 15px "Segoe UI", sans-serif';
   ctx.fillText(`跃迁窗口 ${Math.ceil(state.routeChoice.timer)}s`, cw / 2, Math.max(38, ch * 0.16));
@@ -1962,6 +2141,22 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
+function drawEffectRings() {
+  ctx.save();
+  for (const ring of state.rings) {
+    const alpha = Math.max(0, ring.life / ring.maxLife);
+    ctx.globalAlpha = Math.min(1, alpha);
+    ctx.strokeStyle = ring.color;
+    ctx.lineWidth = ring.lineWidth;
+    ctx.shadowBlur = 18 * alpha;
+    ctx.shadowColor = ring.color;
+    ctx.beginPath();
+    ctx.arc(ring.x, ring.y, ring.radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawMessages() {
   ctx.save();
   ctx.font = '700 13px "Segoe UI", sans-serif';
@@ -2065,6 +2260,24 @@ function drawVignette() {
     damageGlow.addColorStop(1, `rgba(255,111,135,${0.18 + alpha * 0.22})`);
     ctx.fillStyle = damageGlow;
     ctx.fillRect(0, 0, cw, ch);
+  }
+
+  if (state.warpFlash.timer > 0 && state.warpFlash.duration > 0) {
+    const alpha = state.warpFlash.timer / state.warpFlash.duration;
+    const warpGlow = ctx.createRadialGradient(cw / 2, ch / 2, ch * 0.08, cw / 2, ch / 2, Math.max(cw, ch) * 0.72);
+    warpGlow.addColorStop(0, rgba(state.warpFlash.secondaryTint, 0.08 * alpha));
+    warpGlow.addColorStop(0.48, rgba(state.warpFlash.tint, 0.18 * alpha));
+    warpGlow.addColorStop(1, rgba(state.warpFlash.tint, 0));
+    ctx.fillStyle = warpGlow;
+    ctx.fillRect(0, 0, cw, ch);
+
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.strokeStyle = rgba(state.warpFlash.tint, 0.75);
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(cw / 2, ch / 2, Math.max(cw, ch) * (0.18 + (1 - alpha) * 0.42), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
   }
 }
 
