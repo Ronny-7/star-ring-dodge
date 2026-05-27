@@ -42,15 +42,7 @@ window.starRingConfig = {
     routeChoiceInterval: 28,
     routeChoiceDuration: 11,
     routeGateRadius: 42,
-    routeChoiceSpawnSlowdown: 1.8,
-    webglFov: 54,
-    webglCameraHeight: 720,
-    webglCameraDistance: 760,
-    webglSceneDepth: 900,
-    webglShipHeight: 24,
-    webglAsteroidDepth: 38,
-    webglGateDepth: 80,
-    webglMobileQuality: 0.78
+    routeChoiceSpawnSlowdown: 1.8
   },
 
   regions: {
