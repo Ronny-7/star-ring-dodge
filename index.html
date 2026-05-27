@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>星环闪避</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -19,9 +20,9 @@
         <p class="kicker">Arcade / Survival Run</p>
         <div class="brand-row">
           <h1>星环闪避</h1>
-          <span class="build-tag">v3.0</span>
+          <span class="build-tag">v4.0</span>
         </div>
-        <p class="subtitle">在流动星域中机动穿梭，规避陨石流，回收高能核心，并选择跃迁门探索下一片区域。</p>
+        <p class="subtitle">在真 3D 星域中机动穿梭，规避陨石流，回收高能核心，并选择跃迁门探索下一片区域。</p>
       </div>
 
       <div class="top-stats">
@@ -111,7 +112,8 @@
           </div>
 
           <div class="playfield">
-            <canvas id="game" width="960" height="600" aria-label="游戏画面"></canvas>
+            <canvas id="scene3d" class="scene-canvas" width="960" height="600" aria-hidden="true"></canvas>
+            <canvas id="game" class="hud-canvas" width="960" height="600" aria-label="游戏画面"></canvas>
             <div class="scanlines" aria-hidden="true"></div>
             <div class="orientation-hint" data-orientation-hint>横屏游玩视野更宽</div>
             <div class="touch-controls" aria-label="触控操作">
@@ -194,6 +196,7 @@
   </div>
 
   <script src="config.js"></script>
+  <script src="webgl.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

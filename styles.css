@@ -414,6 +414,24 @@ canvas {
   height: 100%;
 }
 
+.playfield canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.scene-canvas,
+.hud-canvas {
+  pointer-events: none;
+}
+
+.hud-canvas {
+  z-index: 2;
+}
+
+.scene-canvas {
+  z-index: 1;
+}
+
 .scanlines {
   position: absolute;
   inset: 0;

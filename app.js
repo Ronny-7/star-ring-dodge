@@ -1,6 +1,8 @@
 const canvas = document.getElementById("game");
+const sceneCanvas = document.getElementById("scene3d");
 const ctx = canvas.getContext("2d");
 const { bestKey, tuning, uiText, regions } = window.starRingConfig;
+const webglRenderer = window.StarRingWebglRenderer ? new window.StarRingWebglRenderer(sceneCanvas, tuning) : null;
 
 let audioCtx = null;
 let musicEnabled = true;
@@ -261,6 +263,7 @@ function resizeCanvas() {
   canvas.height = physH;
   canvas.style.width = width + "px";
   canvas.style.height = height + "px";
+  webglRenderer?.resize(width, height, dpr);
   // scale is reset each draw via setTransform, not here
 
   const scaleX = previousW ? width / previousW : 1;
@@ -1518,6 +1521,7 @@ function endGame() {
 
 function draw() {
   const region = getCurrentRegion();
+  const isWebglFrame = webglRenderer?.draw(state, region, COLORS, activeColor);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cw, ch);
   ctx.save();
@@ -1527,19 +1531,25 @@ function draw() {
     ctx.translate((Math.random() - 0.5) * intensity, (Math.random() - 0.5) * intensity);
   }
 
-  drawBackground(region);
-  drawStars();
-  drawRings(region);
+  if (!isWebglFrame) {
+    drawBackground(region);
+    drawStars();
+    drawRings(region);
+    drawRouteChoice();
+    drawCores();
+    drawPowerUps();
+    drawParticles();
+    drawEffectRings();
+    drawMessages();
+    drawLasers();
+    drawAsteroids();
+    drawPlayer();
+  } else {
+    drawRouteLabels();
+    drawMessages();
+  }
+
   drawAsteroidWarnings();
-  drawRouteChoice();
-  drawCores();
-  drawPowerUps();
-  drawParticles();
-  drawEffectRings();
-  drawMessages();
-  drawLasers();
-  drawAsteroids();
-  drawPlayer();
   drawHudOverlay(region);
   drawVignette();
   ctx.restore();
@@ -1709,6 +1719,36 @@ function drawRouteChoice() {
 
   ctx.shadowBlur = 0;
   ctx.globalAlpha = 1;
+  ctx.fillStyle = "rgba(230,242,255,0.92)";
+  ctx.font = '700 15px "Segoe UI", sans-serif';
+  ctx.fillText(`跃迁窗口 ${Math.ceil(state.routeChoice.timer)}s`, cw / 2, Math.max(38, ch * 0.16));
+  ctx.font = '12px "Segoe UI", sans-serif';
+  ctx.fillText("穿过任意跃迁门选择下一片星域", cw / 2, Math.max(60, ch * 0.16 + 22));
+  ctx.restore();
+}
+
+function drawRouteLabels() {
+  if (!state.routeChoice.active) {
+    return;
+  }
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowBlur = 10;
+  for (const gate of state.routeChoice.gates) {
+    const gateX = Number.isFinite(gate.x) ? gate.x : cw / 2;
+    const gateY = Number.isFinite(gate.y) ? gate.y : ch / 2;
+    const gateRadius = Number.isFinite(gate.radius) ? gate.radius : tuning.routeGateRadius;
+    ctx.fillStyle = "rgba(238,248,255,0.96)";
+    ctx.font = '700 13px "Segoe UI", sans-serif';
+    ctx.fillText(gate.label, gateX, gateY - 6);
+    ctx.font = '11px "Segoe UI", sans-serif';
+    ctx.fillText(gate.name, gateX, gateY + 12);
+    ctx.fillStyle = rgba(gate.tint, 0.9);
+    drawWrappedTextLines(gate.descriptionLines, gateX, gateY + gateRadius + 24, 14);
+  }
+  ctx.shadowBlur = 0;
   ctx.fillStyle = "rgba(230,242,255,0.92)";
   ctx.font = '700 15px "Segoe UI", sans-serif';
   ctx.fillText(`跃迁窗口 ${Math.ceil(state.routeChoice.timer)}s`, cw / 2, Math.max(38, ch * 0.16));
