@@ -42,7 +42,14 @@ window.starRingConfig = {
     routeChoiceInterval: 28,
     routeChoiceDuration: 11,
     routeGateRadius: 42,
-    routeChoiceSpawnSlowdown: 1.8
+    routeChoiceSpawnSlowdown: 1.8,
+    visualStarTrail: 0.72,
+    visualHazeStrength: 0.14,
+    visualRingDepth: 0.5,
+    visualShadowOffset: 8,
+    visualShadowAlpha: 0.22,
+    visualLaserTrail: 0.58,
+    visualVignetteTint: 0.16
   },
 
   regions: {

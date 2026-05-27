@@ -1564,25 +1564,51 @@ function drawBackground(region) {
   ctx.fillRect(0, 0, cw, ch);
 
   const drift = state.regionTimer * 18;
-  const glowA = ctx.createRadialGradient(180 + Math.sin(state.pulseTime * 0.35) * 34, 120 + drift % 180, 40, 180, 120, 340);
-  glowA.addColorStop(0, rgba(region.tint, 0.22));
+  const haze = getTuningValue("visualHazeStrength", 0.14);
+  const playerDx = (state.player.x - cw / 2) * 0.025;
+  const playerDy = (state.player.y - ch / 2) * 0.018;
+  const glowA = ctx.createRadialGradient(180 + Math.sin(state.pulseTime * 0.35) * 34 - playerDx, 120 + drift % 180 - playerDy, 40, 180, 120, 340);
+  glowA.addColorStop(0, rgba(region.tint, 0.2 + haze * 0.16));
   glowA.addColorStop(1, rgba(region.tint, 0));
   ctx.fillStyle = glowA;
   ctx.fillRect(0, 0, cw, ch);
 
-  const glowB = ctx.createRadialGradient(cw - 140, ch - 90 - drift % 150, 50, cw - 140, ch - 90, 320);
-  glowB.addColorStop(0, rgba(region.secondaryTint, 0.18));
+  const glowB = ctx.createRadialGradient(cw - 140 + playerDx, ch - 90 - drift % 150 + playerDy, 50, cw - 140, ch - 90, 320);
+  glowB.addColorStop(0, rgba(region.secondaryTint, 0.16 + haze * 0.12));
   glowB.addColorStop(1, rgba(region.secondaryTint, 0));
   ctx.fillStyle = glowB;
+  ctx.fillRect(0, 0, cw, ch);
+
+  const centerHaze = ctx.createRadialGradient(cw / 2, ch * 0.42, 20, cw / 2, ch * 0.52, Math.max(cw, ch) * 0.55);
+  centerHaze.addColorStop(0, rgba(region.secondaryTint, haze * 0.16));
+  centerHaze.addColorStop(0.45, rgba(region.tint, haze * 0.08));
+  centerHaze.addColorStop(1, rgba(region.tint, 0));
+  ctx.fillStyle = centerHaze;
   ctx.fillRect(0, 0, cw, ch);
 }
 
 function drawStars() {
+  const trailStrength = getTuningValue("visualStarTrail", 0.72);
   for (const star of state.stars) {
-    ctx.globalAlpha = star.alpha;
+    const depth = star.depth || 1;
+    const radius = star.radius * (0.82 + depth * 0.28);
+    const alpha = Math.min(0.9, star.alpha * (0.72 + depth * 0.34));
+    const trail = Math.max(0, star.speed * 0.035 * depth * trailStrength);
+    if (trail > 1.2) {
+      const gradient = ctx.createLinearGradient(star.x, star.y - trail, star.x, star.y + radius);
+      gradient.addColorStop(0, "rgba(220,236,255,0)");
+      gradient.addColorStop(1, `rgba(220,236,255,${alpha * 0.42})`);
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = Math.max(0.5, radius * 0.72);
+      ctx.beginPath();
+      ctx.moveTo(star.x, star.y - trail);
+      ctx.lineTo(star.x, star.y + radius);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = alpha;
     ctx.fillStyle = "#dcecff";
     ctx.beginPath();
-    ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+    ctx.arc(star.x, star.y, radius, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -1590,14 +1616,22 @@ function drawStars() {
 
 function drawRings(region) {
   const pulse = Math.sin(state.pulseTime * 0.8) * 0.5 + 0.5;
+  const depth = getTuningValue("visualRingDepth", 0.5);
   ctx.save();
   ctx.translate(cw / 2, ch / 2);
   ctx.rotate(state.regionTimer * 0.018);
-  ctx.strokeStyle = rgba(region.tint, 0.08 + pulse * 0.06);
-  ctx.lineWidth = 1.2;
   for (let i = 0; i < 4; i += 1) {
+    const layer = i / 3;
+    const alpha = 0.05 + pulse * 0.035 + layer * depth * 0.035;
+    ctx.strokeStyle = rgba(i % 2 ? region.secondaryTint : region.tint, alpha);
+    ctx.lineWidth = 0.8 + layer * 0.7;
     ctx.beginPath();
-    ctx.ellipse(0, 0, 160 + i * 90, 92 + i * 50, 0.16, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, 160 + i * 90, 92 + i * 50, 0.16 + layer * 0.04, Math.PI * 0.08, Math.PI * 1.08);
+    ctx.stroke();
+    ctx.strokeStyle = rgba(region.tint, alpha * 0.42);
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 160 + i * 90, 92 + i * 50, 0.16 + layer * 0.04, Math.PI * 1.08, Math.PI * 2.08);
     ctx.stroke();
   }
   ctx.restore();
@@ -1830,6 +1864,22 @@ const SKINS = {
   }
 };
 
+function drawSoftShadow(x, y, radius, alpha = getTuningValue("visualShadowAlpha", 0.22), scaleX = 1.35, scaleY = 0.42) {
+  const offset = getTuningValue("visualShadowOffset", 8) * getGameplayScale();
+  ctx.save();
+  ctx.translate(x, y + offset);
+  const shadow = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * scaleX);
+  shadow.addColorStop(0, `rgba(0, 6, 18, ${alpha})`);
+  shadow.addColorStop(0.62, `rgba(0, 10, 24, ${alpha * 0.34})`);
+  shadow.addColorStop(1, "rgba(0, 10, 24, 0)");
+  ctx.scale(scaleX, scaleY);
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawPlayer() {
   const { x, y, radius, angle } = state.player;
   const pulse = Math.sin(state.pulseTime * 5) * 0.5 + 0.5;
@@ -1838,6 +1888,8 @@ function drawPlayer() {
   const thruster = state.running && !state.paused && hasActiveMovement();
   const skin = SKINS[activeSkin];
   const col = COLORS[activeColor];
+
+  drawSoftShadow(x, y, radius, 0.18, 1.3, 0.36);
 
   ctx.save();
   ctx.translate(x, y);
@@ -1977,12 +2029,13 @@ function drawPlayer() {
 
 function drawAsteroids() {
   for (const asteroid of state.asteroids) {
+    const hit = asteroid.hitFlash > 0;
+    const isLarge = asteroid.radius > tuning.largeAsteroidThreshold;
+    drawSoftShadow(asteroid.x, asteroid.y, asteroid.radius, isLarge ? 0.2 : 0.15, 1.22, 0.36);
+
     ctx.save();
     ctx.translate(asteroid.x, asteroid.y);
     ctx.rotate(asteroid.rotation);
-
-    const hit = asteroid.hitFlash > 0;
-    const isLarge = asteroid.radius > tuning.largeAsteroidThreshold;
 
     // outer glow
     ctx.shadowBlur = hit ? 32 : isLarge ? 22 : 14;
@@ -2010,6 +2063,20 @@ function drawAsteroids() {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+
+    const lowerShade = ctx.createLinearGradient(0, -asteroid.radius * 0.4, 0, asteroid.radius * 0.95);
+    lowerShade.addColorStop(0, "rgba(255,255,255,0)");
+    lowerShade.addColorStop(1, "rgba(2,7,18,0.26)");
+    ctx.fillStyle = lowerShade;
+    ctx.beginPath();
+    asteroid.points.forEach((point, index) => {
+      const px = Math.cos(point.angle) * point.distance * 0.96;
+      const py = Math.sin(point.angle) * point.distance * 0.96;
+      if (index === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.fill();
 
     // edge highlight (top-left rim light)
     ctx.shadowBlur = 0;
@@ -2055,6 +2122,7 @@ function drawAsteroids() {
 function drawCores() {
   for (const core of state.cores) {
     const radius = core.radius + Math.sin(core.pulse) * 2;
+    drawSoftShadow(core.x, core.y, radius, 0.12, 1.08, 0.3);
     ctx.save();
     ctx.shadowBlur = 26;
     ctx.shadowColor = "#8affd1";
@@ -2084,6 +2152,7 @@ function drawPowerUps() {
     const glowColor = isShield ? "#8affd1" : "#ffb59e";
     const coreColor = isShield ? "#f3fffd" : "#fff0d6";
 
+    drawSoftShadow(powerUp.x, powerUp.y, radius, 0.12, 1.08, 0.3);
     ctx.save();
     ctx.shadowBlur = 24;
     ctx.shadowColor = glowColor;
@@ -2173,18 +2242,31 @@ function drawMessages() {
 }
 
 function drawLasers() {
+  const trailScale = getTuningValue("visualLaserTrail", 0.58);
   for (const laser of state.lasers) {
     ctx.save();
     ctx.translate(laser.x, laser.y);
     ctx.rotate(laser.angle);
     ctx.shadowBlur = 18;
     ctx.shadowColor = "#77ebff";
+    const trailLength = 28 + 30 * trailScale;
+    const trail = ctx.createLinearGradient(-trailLength, 0, 18, 0);
+    trail.addColorStop(0, "rgba(119, 235, 255, 0)");
+    trail.addColorStop(0.46, "rgba(119, 235, 255, 0.22)");
+    trail.addColorStop(1, "rgba(216, 251, 255, 0.9)");
+    ctx.fillStyle = trail;
+    ctx.fillRect(-trailLength, -1.3, trailLength + 18, 2.6);
+
     const beam = ctx.createLinearGradient(-18, 0, 18, 0);
     beam.addColorStop(0, "rgba(119, 235, 255, 0)");
     beam.addColorStop(0.45, "#d8fbff");
     beam.addColorStop(1, "rgba(119, 235, 255, 0)");
     ctx.fillStyle = beam;
     ctx.fillRect(-18, -2, 36, 4);
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.beginPath();
+    ctx.arc(17, 0, 2.2, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 }
@@ -2232,6 +2314,8 @@ function drawHudOverlay(region) {
 }
 
 function drawVignette() {
+  const region = getCurrentRegion();
+  const tint = getTuningValue("visualVignetteTint", 0.16);
   const vignette = ctx.createRadialGradient(
     cw / 2,
     ch / 2,
@@ -2241,7 +2325,8 @@ function drawVignette() {
     ch * 0.76
   );
   vignette.addColorStop(0, "rgba(0,0,0,0)");
-  vignette.addColorStop(1, "rgba(0,0,0,0.52)");
+  vignette.addColorStop(0.7, rgba(region.secondaryTint, tint * 0.08));
+  vignette.addColorStop(1, `rgba(0,0,0,${0.48 - tint * 0.08})`);
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, cw, ch);
 
