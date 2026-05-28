@@ -3,7 +3,11 @@ window.starRingConfig = {
 
   tuning: {
     playerRadius: 22,
-    playerSpeed: 340,
+    playerSpeed: 370,
+    playerAcceleration: 16,
+    playerDeceleration: 22,
+    playerTurnLerp: 18,
+    playerStopThreshold: 18,
     starCount: 90,
     laserSpeed: 720,
     laserLife: 0.9,

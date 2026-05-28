@@ -34,6 +34,9 @@ function distanceSquared(ax, ay, bx, by) {
   const dy = ay - by;
   return dx * dx + dy * dy;
 }
+function shortestAngleDelta(from, to) {
+  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
+}
 function isWithinRadius(ax, ay, bx, by, radius) {
   return distanceSquared(ax, ay, bx, by) < radius * radius;
 }
@@ -279,6 +282,12 @@ function scaleEntity(entity, scaleX, scaleY) {
   entity.x *= scaleX;
   entity.y *= scaleY;
   const scale = Math.min(scaleX, scaleY);
+  if (typeof entity.vx === "number") {
+    entity.vx *= scaleX;
+  }
+  if (typeof entity.vy === "number") {
+    entity.vy *= scaleY;
+  }
   if (typeof entity.radius === "number") {
     entity.radius *= scale;
   }
@@ -300,6 +309,13 @@ function scaleEntity(entity, scaleX, scaleY) {
   if (entity.cracks) {
     for (const crack of entity.cracks) {
       crack.length *= scale;
+    }
+  }
+  if (entity.glints) {
+    for (const glint of entity.glints) {
+      glint.x *= scaleX;
+      glint.y *= scaleY;
+      glint.size *= scale;
     }
   }
 }
@@ -455,7 +471,11 @@ const state = {
     y: ch / 2,
     radius: tuning.playerRadius,
     speed: tuning.playerSpeed,
+    vx: 0,
+    vy: 0,
     angle: -Math.PI / 2,
+    thrust: 0,
+    turnLean: 0,
     trailTimer: 0
   },
   asteroids: [],
@@ -527,7 +547,11 @@ function resetGame() {
   state.player.radius = getPlayerRadius();
   state.player.x = cw / 2;
   state.player.y = ch / 2;
+  state.player.vx = 0;
+  state.player.vy = 0;
   state.player.angle = -Math.PI / 2;
+  state.player.thrust = 0;
+  state.player.turnLean = 0;
   state.player.trailTimer = 0;
   state.asteroids = [];
   state.cores = [];
@@ -658,26 +682,40 @@ function makeStar(randomY = false) {
 
 function makeAsteroidShape(radius) {
   const points = [];
-  const count = 11;
+  const count = 12 + Math.floor(Math.random() * 5);
+  const jaggedness = 0.22 + Math.random() * 0.18;
   for (let i = 0; i < count; i += 1) {
+    const notch = i % 3 === 0 ? -Math.random() * 0.12 : Math.random() * 0.1;
     points.push({
-      angle: (Math.PI * 2 * i) / count,
-      distance: radius * (0.72 + Math.random() * 0.34)
+      angle: (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.09,
+      distance: radius * (0.76 + Math.random() * jaggedness + notch)
     });
   }
 
-  const craters = Array.from({ length: 3 }, () => ({
+  const craterCount = 3 + Math.floor(Math.random() * 3);
+  const craters = Array.from({ length: craterCount }, () => ({
     x: (Math.random() - 0.5) * radius * 0.9,
     y: (Math.random() - 0.5) * radius * 0.9,
-    r: radius * (0.12 + Math.random() * 0.18)
+    r: radius * (0.1 + Math.random() * 0.2),
+    shade: 0.75 + Math.random() * 0.35
   }));
 
-  const cracks = Array.from({ length: 3 }, () => ({
+  const crackCount = 3 + Math.floor(Math.random() * 3);
+  const cracks = Array.from({ length: crackCount }, () => ({
     angle: Math.random() * Math.PI * 2,
-    length: radius * (0.34 + Math.random() * 0.28)
+    length: radius * (0.32 + Math.random() * 0.36),
+    branch: (Math.random() - 0.5) * 0.55,
+    width: 0.8 + Math.random() * 0.8
   }));
 
-  return { points, craters, cracks };
+  const glints = Array.from({ length: Math.random() > 0.55 ? 2 + Math.floor(Math.random() * 3) : 0 }, () => ({
+    x: (Math.random() - 0.5) * radius * 0.95,
+    y: (Math.random() - 0.5) * radius * 0.95,
+    size: radius * (0.025 + Math.random() * 0.04),
+    alpha: 0.22 + Math.random() * 0.28
+  }));
+
+  return { points, craters, cracks, glints };
 }
 
 function sampleAsteroidSpawn(radius) {
@@ -894,6 +932,8 @@ function spawnAsteroid(region = getCurrentRegion()) {
   const angle = Math.atan2(state.player.y - spawn.y, state.player.x - spawn.x);
   const speed = (Math.random() * tuning.asteroidSpeedRange + tuning.asteroidSpeedBase) * state.speedScale * getRegionMultiplier(region, "asteroidSpeedMultiplier");
   const shape = makeAsteroidShape(radius);
+  const mineralChance = Math.random();
+  const mineralTint = mineralChance > 0.82 ? region.tint : mineralChance > 0.68 ? region.secondaryTint : "160,180,220";
 
   state.asteroids.push({
     x: spawn.x,
@@ -906,6 +946,10 @@ function spawnAsteroid(region = getCurrentRegion()) {
     points: shape.points,
     craters: shape.craters,
     cracks: shape.cracks,
+    glints: shape.glints,
+    mineralTint,
+    surfaceTone: 0.86 + Math.random() * 0.28,
+    rimAngle: Math.random() * Math.PI * 2,
     hp: radius > tuning.largeAsteroidThreshold * scale ? 2 : 1,
     hitFlash: 0
   });
@@ -1184,18 +1228,63 @@ function movePlayer(dt) {
   const keyboard = getKeyboardMovement();
   const dx = keyboard.dx + gestureMovement.dx;
   const dy = keyboard.dy + gestureMovement.dy;
+  const inputLength = Math.hypot(dx, dy);
+  const maxSpeed = getTuningValue("playerSpeed", state.player.speed);
+  const acceleration = getTuningValue("playerAcceleration", 16);
+  const deceleration = getTuningValue("playerDeceleration", 22);
+  const turnLerp = getTuningValue("playerTurnLerp", 18);
+  const stopThreshold = getTuningValue("playerStopThreshold", 18);
+  const previousAngle = state.player.angle;
 
-  if (dx !== 0 || dy !== 0) {
-    const length = Math.hypot(dx, dy) || 1;
-    const nx = dx / length;
-    const ny = dy / length;
-    state.player.x += nx * state.player.speed * dt;
-    state.player.y += ny * state.player.speed * dt;
-    state.player.angle = Math.atan2(ny, nx) + Math.PI / 2;
+  if (inputLength > 0) {
+    const nx = dx / inputLength;
+    const ny = dy / inputLength;
+    const inputScale = Math.min(1, inputLength);
+    const targetVx = nx * maxSpeed * inputScale;
+    const targetVy = ny * maxSpeed * inputScale;
+    const blend = 1 - Math.exp(-acceleration * dt);
+    state.player.vx += (targetVx - state.player.vx) * blend;
+    state.player.vy += (targetVy - state.player.vy) * blend;
+    const targetAngle = Math.atan2(ny, nx) + Math.PI / 2;
+    state.player.angle += shortestAngleDelta(state.player.angle, targetAngle) * (1 - Math.exp(-turnLerp * dt));
+  } else {
+    const blend = Math.exp(-deceleration * dt);
+    state.player.vx *= blend;
+    state.player.vy *= blend;
+    if (Math.hypot(state.player.vx, state.player.vy) < stopThreshold) {
+      state.player.vx = 0;
+      state.player.vy = 0;
+    }
   }
 
-  state.player.x = Math.max(state.player.radius, Math.min(cw - state.player.radius, state.player.x));
-  state.player.y = Math.max(state.player.radius, Math.min(ch - state.player.radius, state.player.y));
+  state.player.x += state.player.vx * dt;
+  state.player.y += state.player.vy * dt;
+
+  const minX = state.player.radius;
+  const maxX = cw - state.player.radius;
+  const minY = state.player.radius;
+  const maxY = ch - state.player.radius;
+  if (state.player.x < minX) {
+    state.player.x = minX;
+    state.player.vx = Math.max(0, state.player.vx);
+  } else if (state.player.x > maxX) {
+    state.player.x = maxX;
+    state.player.vx = Math.min(0, state.player.vx);
+  }
+  if (state.player.y < minY) {
+    state.player.y = minY;
+    state.player.vy = Math.max(0, state.player.vy);
+  } else if (state.player.y > maxY) {
+    state.player.y = maxY;
+    state.player.vy = Math.min(0, state.player.vy);
+  }
+
+  const speedRatio = Math.min(1, Math.hypot(state.player.vx, state.player.vy) / maxSpeed);
+  const thrustTarget = inputLength > 0 ? Math.max(0.35, speedRatio) : speedRatio * 0.25;
+  state.player.thrust += (thrustTarget - state.player.thrust) * (1 - Math.exp(-12 * dt));
+  const turnDelta = shortestAngleDelta(previousAngle, state.player.angle) / Math.max(dt, 0.001);
+  const leanTarget = Math.max(-1, Math.min(1, turnDelta / 8));
+  state.player.turnLean += (leanTarget - state.player.turnLean) * (1 - Math.exp(-10 * dt));
 }
 
 function moveAsteroids(dt) {
@@ -1883,73 +1972,93 @@ function drawSoftShadow(x, y, radius, alpha = getTuningValue("visualShadowAlpha"
 function drawPlayer() {
   const { x, y, radius, angle } = state.player;
   const pulse = Math.sin(state.pulseTime * 5) * 0.5 + 0.5;
+  const fastPulse = Math.sin(state.pulseTime * 18) * 0.5 + 0.5;
   const invulnerable = state.invulnerabilityTimer > 0;
   const flicker = invulnerable && Math.floor(state.invulnerabilityTimer * 18) % 2 === 0;
-  const thruster = state.running && !state.paused && hasActiveMovement();
+  const thrust = Math.max(state.player.thrust || 0, state.running && !state.paused && hasActiveMovement() ? 0.3 : 0);
+  const lean = state.player.turnLean || 0;
   const skin = SKINS[activeSkin];
   const col = COLORS[activeColor];
 
-  drawSoftShadow(x, y, radius, 0.18, 1.3, 0.36);
+  drawSoftShadow(x, y, radius, 0.18 + thrust * 0.05, 1.3 + Math.abs(lean) * 0.08, 0.36);
 
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
+  ctx.scale(1 + Math.abs(lean) * 0.04, 1 - Math.abs(lean) * 0.03);
+  ctx.transform(1, 0, lean * 0.08, 1, 0, 0);
   ctx.globalAlpha = flicker ? 0.7 : 1;
 
-  // engine glow + thruster flames
   for (const engine of skin.engines) {
     const engX = engine.x * radius;
     const engY = engine.y * radius;
-    const eg = ctx.createRadialGradient(engX, engY, 0, engX, engY, radius * 0.38);
-    eg.addColorStop(0, rgba(col.rgb, 0.55 + pulse * 0.3));
+    const glowRadius = radius * (0.34 + thrust * 0.28);
+    const eg = ctx.createRadialGradient(engX, engY, 0, engX, engY, glowRadius);
+    eg.addColorStop(0, rgba(col.rgb, 0.45 + pulse * 0.2 + thrust * 0.38));
+    eg.addColorStop(0.58, rgba(col.rgb, 0.16 + thrust * 0.16));
     eg.addColorStop(1, rgba(col.rgb, 0));
     ctx.fillStyle = eg;
     ctx.beginPath();
-    ctx.arc(engX, engY, radius * 0.38, 0, Math.PI * 2);
+    ctx.arc(engX, engY, glowRadius, 0, Math.PI * 2);
     ctx.fill();
   }
-  if (thruster) {
+  if (thrust > 0.04) {
     for (const engine of skin.engines) {
       const engX = engine.x * radius;
       const engY = engine.y * radius;
-      const flame = 14 + pulse * 14;
+      const flame = 10 + thrust * 24 + fastPulse * (5 + thrust * 9);
+      const width = 4 + thrust * 4;
       const fg = ctx.createLinearGradient(engX, engY, engX, engY + flame);
-      fg.addColorStop(0, "rgba(255,243,182,0.95)");
-      fg.addColorStop(0.35, rgba(col.rgb, 0.88));
+      fg.addColorStop(0, "rgba(255,252,214,0.98)");
+      fg.addColorStop(0.28, rgba(col.rgb, 0.92));
+      fg.addColorStop(0.68, rgba(col.rgb, 0.44));
       fg.addColorStop(1, rgba(col.rgb, 0));
       ctx.fillStyle = fg;
       ctx.beginPath();
-      ctx.moveTo(engX - 5, engY);
-      ctx.quadraticCurveTo(engX, engY + flame, engX + 5, engY);
+      ctx.moveTo(engX - width, engY);
+      ctx.quadraticCurveTo(engX - lean * radius * 0.16, engY + flame, engX + width, engY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.beginPath();
+      ctx.moveTo(engX - width * 0.38, engY + 1);
+      ctx.quadraticCurveTo(engX, engY + flame * 0.48, engX + width * 0.38, engY + 1);
       ctx.closePath();
       ctx.fill();
     }
   }
 
-  // hull glow
-  ctx.shadowBlur = state.flashTimer > 0 ? 42 : invulnerable ? 36 : 28;
+  ctx.shadowBlur = state.flashTimer > 0 ? 46 : invulnerable ? 38 : 30 + thrust * 12;
   ctx.shadowColor = state.flashTimer > 0 ? "#ff6f87" : invulnerable ? "#9ff3ff" : col.glow;
 
-  // hull outline
   ctx.strokeStyle = invulnerable
     ? `rgba(214,249,255,${0.6 + pulse * 0.25})`
-    : rgba(col.rgb, 0.55 + pulse * 0.2);
-  ctx.lineWidth = 2.2;
+    : rgba(col.rgb, 0.6 + pulse * 0.18 + thrust * 0.12);
+  ctx.lineWidth = 2.2 + thrust * 0.7;
   skin.drawHull(ctx, radius);
   ctx.stroke();
 
-  // hull fill
   const top = skin.hullTop(radius);
-  const hullGradient = ctx.createLinearGradient(0, top, 0, radius + 6);
-  hullGradient.addColorStop(0, col.hi);
-  hullGradient.addColorStop(0.2, col.hi);
-  hullGradient.addColorStop(0.5, col.mid);
-  hullGradient.addColorStop(1, "#0a1a3a");
+  const hullGradient = ctx.createLinearGradient(-radius * 0.32, top, radius * 0.28, radius + 6);
+  hullGradient.addColorStop(0, "#ffffff");
+  hullGradient.addColorStop(0.16, col.hi);
+  hullGradient.addColorStop(0.52, col.mid);
+  hullGradient.addColorStop(1, "#071329");
   ctx.fillStyle = hullGradient;
   skin.drawHull(ctx, radius);
   ctx.fill();
 
   ctx.shadowBlur = 0;
+  ctx.globalCompositeOperation = "screen";
+  const edgeGradient = ctx.createLinearGradient(0, top, 0, radius * 0.72);
+  edgeGradient.addColorStop(0, "rgba(255,255,255,0.62)");
+  edgeGradient.addColorStop(0.4, rgba(col.rgb, 0.24 + thrust * 0.18));
+  edgeGradient.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.strokeStyle = edgeGradient;
+  ctx.lineWidth = 1.2;
+  skin.drawHull(ctx, radius * 0.92);
+  ctx.stroke();
+  ctx.globalCompositeOperation = "source-over";
 
   if (activeSkin !== "saucer") {
     // cockpit
@@ -2001,6 +2110,22 @@ function drawPlayer() {
     ctx.fillRect(n.x * radius, n.y * radius, n.w * radius, n.h * radius);
   }
 
+  ctx.shadowBlur = 12 + thrust * 10;
+  ctx.shadowColor = col.glow;
+  ctx.strokeStyle = rgba(col.rgb, 0.78 + thrust * 0.18);
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-radius * 0.34, -radius * 0.2);
+  ctx.lineTo(-radius * 0.58, radius * 0.42);
+  ctx.moveTo(radius * 0.34, -radius * 0.2);
+  ctx.lineTo(radius * 0.58, radius * 0.42);
+  ctx.stroke();
+  ctx.fillStyle = `rgba(255,255,255,${0.42 + thrust * 0.28})`;
+  ctx.beginPath();
+  ctx.arc(0, top + radius * 0.26, radius * (0.06 + thrust * 0.03), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
   if (state.shieldCharges > 0) {
     ctx.globalAlpha = 0.9;
     ctx.shadowBlur = 18;
@@ -2031,27 +2156,28 @@ function drawAsteroids() {
   for (const asteroid of state.asteroids) {
     const hit = asteroid.hitFlash > 0;
     const isLarge = asteroid.radius > tuning.largeAsteroidThreshold;
-    drawSoftShadow(asteroid.x, asteroid.y, asteroid.radius, isLarge ? 0.2 : 0.15, 1.22, 0.36);
+    const tone = asteroid.surfaceTone || 1;
+    const mineralTint = asteroid.mineralTint || "160,180,220";
+    drawSoftShadow(asteroid.x, asteroid.y, asteroid.radius, isLarge ? 0.22 : 0.16, 1.24, 0.36);
 
     ctx.save();
     ctx.translate(asteroid.x, asteroid.y);
     ctx.rotate(asteroid.rotation);
 
-    // outer glow
-    ctx.shadowBlur = hit ? 32 : isLarge ? 22 : 14;
-    ctx.shadowColor = hit ? "#74ecff" : isLarge ? "rgba(80,100,160,0.7)" : "rgba(60,80,130,0.5)";
+    ctx.shadowBlur = hit ? 34 : isLarge ? 24 : 15;
+    ctx.shadowColor = hit ? "#74ecff" : isLarge ? `rgba(${mineralTint},0.42)` : "rgba(60,80,130,0.5)";
 
     const rock = ctx.createRadialGradient(
-      -asteroid.radius * 0.3, -asteroid.radius * 0.32, 2,
-      asteroid.radius * 0.1, asteroid.radius * 0.1, asteroid.radius * 1.1
+      -asteroid.radius * 0.38, -asteroid.radius * 0.36, 2,
+      asteroid.radius * 0.14, asteroid.radius * 0.16, asteroid.radius * 1.14
     );
-    rock.addColorStop(0, hit ? "#e8f8ff" : isLarge ? "#c8d4e8" : "#b2bdd0");
-    rock.addColorStop(0.3, hit ? "#8ad8ff" : isLarge ? "#6e7e96" : "#606e84");
-    rock.addColorStop(0.65, "#3a4252");
-    rock.addColorStop(1, "#1c2230");
+    rock.addColorStop(0, hit ? "#f4fbff" : `rgb(${Math.round(204 * tone)},${Math.round(214 * tone)},${Math.round(232 * tone)})`);
+    rock.addColorStop(0.24, hit ? "#8ad8ff" : isLarge ? "#7d8aa0" : "#68778f");
+    rock.addColorStop(0.6, "#343d4d");
+    rock.addColorStop(1, "#111826");
     ctx.fillStyle = rock;
-    ctx.strokeStyle = hit ? "rgba(111,232,255,0.9)" : isLarge ? "rgba(160,180,220,0.35)" : "rgba(140,160,200,0.22)";
-    ctx.lineWidth = hit ? 2 : 1.4;
+    ctx.strokeStyle = hit ? "rgba(111,232,255,0.95)" : isLarge ? `rgba(${mineralTint},0.42)` : "rgba(150,170,210,0.24)";
+    ctx.lineWidth = hit ? 2.3 : 1.5;
 
     ctx.beginPath();
     asteroid.points.forEach((point, index) => {
@@ -2064,9 +2190,10 @@ function drawAsteroids() {
     ctx.fill();
     ctx.stroke();
 
-    const lowerShade = ctx.createLinearGradient(0, -asteroid.radius * 0.4, 0, asteroid.radius * 0.95);
-    lowerShade.addColorStop(0, "rgba(255,255,255,0)");
-    lowerShade.addColorStop(1, "rgba(2,7,18,0.26)");
+    const lowerShade = ctx.createLinearGradient(0, -asteroid.radius * 0.5, 0, asteroid.radius);
+    lowerShade.addColorStop(0, "rgba(255,255,255,0.08)");
+    lowerShade.addColorStop(0.45, "rgba(255,255,255,0)");
+    lowerShade.addColorStop(1, "rgba(2,7,18,0.38)");
     ctx.fillStyle = lowerShade;
     ctx.beginPath();
     asteroid.points.forEach((point, index) => {
@@ -2078,14 +2205,14 @@ function drawAsteroids() {
     ctx.closePath();
     ctx.fill();
 
-    // edge highlight (top-left rim light)
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = `rgba(200,220,255,${isLarge ? 0.18 : 0.12})`;
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = `rgba(225,238,255,${isLarge ? 0.24 : 0.16})`;
+    ctx.lineWidth = 1.7;
     ctx.beginPath();
     asteroid.points.forEach((point, index) => {
-      const px = Math.cos(point.angle) * point.distance * 0.92;
-      const py = Math.sin(point.angle) * point.distance * 0.92;
+      const rimBoost = Math.max(0.82, Math.cos(point.angle - (asteroid.rimAngle || -2.2)) * 0.12 + 0.9);
+      const px = Math.cos(point.angle) * point.distance * rimBoost;
+      const py = Math.sin(point.angle) * point.distance * rimBoost;
       if (index === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     });
@@ -2094,25 +2221,56 @@ function drawAsteroids() {
 
     for (const crater of asteroid.craters) {
       const cg = ctx.createRadialGradient(
-        crater.x - crater.r * 0.3, crater.y - crater.r * 0.3, 1,
+        crater.x - crater.r * 0.38, crater.y - crater.r * 0.38, 1,
         crater.x, crater.y, crater.r
       );
-      cg.addColorStop(0, "rgba(20,28,44,0.98)");
-      cg.addColorStop(0.7, "rgba(60,72,92,0.5)");
-      cg.addColorStop(1, "rgba(100,115,140,0.15)");
+      cg.addColorStop(0, `rgba(8,13,24,${0.92 * (crater.shade || 1)})`);
+      cg.addColorStop(0.62, "rgba(48,58,76,0.58)");
+      cg.addColorStop(1, "rgba(150,170,205,0.2)");
       ctx.fillStyle = cg;
       ctx.beginPath();
-      ctx.arc(crater.x, crater.y, crater.r, 0, Math.PI * 2);
+      ctx.ellipse(crater.x, crater.y, crater.r * 1.08, crater.r * 0.82, -0.35, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = "rgba(210,225,255,0.16)";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
     }
 
-    ctx.strokeStyle = hit ? "rgba(111,232,255,0.85)" : "rgba(100,120,160,0.38)";
-    ctx.lineWidth = 1.1;
+    ctx.lineCap = "round";
     for (const crack of asteroid.cracks) {
+      const sx = Math.cos(crack.angle) * crack.length * -0.16;
+      const sy = Math.sin(crack.angle) * crack.length * -0.16;
+      const ex = Math.cos(crack.angle) * crack.length;
+      const ey = Math.sin(crack.angle) * crack.length;
+      ctx.strokeStyle = hit ? "rgba(111,232,255,0.9)" : `rgba(${mineralTint},${0.26 + (asteroid.glints?.length ? 0.1 : 0)})`;
+      ctx.lineWidth = crack.width || 1.1;
       ctx.beginPath();
-      ctx.moveTo(Math.cos(crack.angle) * crack.length * -0.14, Math.sin(crack.angle) * crack.length * -0.14);
-      ctx.lineTo(Math.cos(crack.angle) * crack.length, Math.sin(crack.angle) * crack.length);
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
       ctx.stroke();
+      if (Math.abs(crack.branch || 0) > 0.12) {
+        ctx.strokeStyle = hit ? "rgba(210,250,255,0.65)" : "rgba(25,34,54,0.58)";
+        ctx.lineWidth = Math.max(0.7, (crack.width || 1.1) * 0.7);
+        ctx.beginPath();
+        ctx.moveTo(ex * 0.42, ey * 0.42);
+        ctx.lineTo(ex * 0.72 + Math.cos(crack.angle + crack.branch) * crack.length * 0.28, ey * 0.72 + Math.sin(crack.angle + crack.branch) * crack.length * 0.28);
+        ctx.stroke();
+      }
+    }
+
+    if (asteroid.glints?.length) {
+      ctx.shadowBlur = hit ? 16 : 8;
+      ctx.shadowColor = `rgba(${mineralTint},0.8)`;
+      for (const glint of asteroid.glints) {
+        ctx.fillStyle = `rgba(${mineralTint},${hit ? 0.75 : glint.alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(glint.x, glint.y - glint.size * 2.2);
+        ctx.lineTo(glint.x + glint.size, glint.y);
+        ctx.lineTo(glint.x, glint.y + glint.size * 2.2);
+        ctx.lineTo(glint.x - glint.size, glint.y);
+        ctx.closePath();
+        ctx.fill();
+      }
     }
 
     ctx.restore();
