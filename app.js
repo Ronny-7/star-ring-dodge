@@ -25,6 +25,7 @@ function makeColor(r, g, b) {
 
 function softenChannel(channel) { return Math.round(channel + (255 - channel) * 0.92); }
 function rgba(rgb, alpha) { return `rgba(${rgb},${alpha})`; }
+function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function getTuningValue(name, fallback) {
   const value = tuning[name];
   return Number.isFinite(value) && value > 0 ? value : fallback;
@@ -255,8 +256,6 @@ function resizeCanvas() {
   const physH = Math.round(height * nextDpr);
   if (canvas.width === physW && canvas.height === physH && dpr === nextDpr) return;
 
-  const previousW = cw;
-  const previousH = ch;
   dpr = nextDpr;
   cw = width;
   ch = height;
@@ -266,15 +265,10 @@ function resizeCanvas() {
   canvas.style.height = height + "px";
   // scale is reset each draw via setTransform, not here
 
-  const scaleX = previousW ? width / previousW : 1;
-  const scaleY = previousH ? height / previousH : 1;
-  scaleEntity(state.player, scaleX, scaleY);
-  for (const collection of [state.asteroids, state.cores, state.powerUps, state.stars, state.lasers, state.particles, state.rings, state.messages, state.routeChoice.gates]) {
-    for (const entity of collection) {
-      scaleEntity(entity, scaleX, scaleY);
-    }
-  }
+  state.world.width = Math.max(cw, getTuningValue("worldWidth", 2400));
+  state.world.height = Math.max(ch, getTuningValue("worldHeight", 1600));
   state.player.radius = getPlayerRadius();
+  updateCamera();
   refreshRouteGatePresentation();
 }
 
@@ -327,6 +321,27 @@ function getGameplayScale() {
 
 function getPlayerRadius() {
   return 22 * getGameplayScale();
+}
+
+function updateCamera() {
+  const maxX = Math.max(0, state.world.width - cw);
+  const maxY = Math.max(0, state.world.height - ch);
+  state.camera.x = clamp(state.player.x - cw / 2, 0, maxX);
+  state.camera.y = clamp(state.player.y - ch / 2, 0, maxY);
+}
+
+function getCameraRect(pad = 0) {
+  return {
+    left: state.camera.x - pad,
+    top: state.camera.y - pad,
+    right: state.camera.x + cw + pad,
+    bottom: state.camera.y + ch + pad
+  };
+}
+
+function isCircleInCamera(entity, pad = 0) {
+  const rect = getCameraRect(pad + (entity.radius || 0));
+  return entity.x >= rect.left && entity.x <= rect.right && entity.y >= rect.top && entity.y <= rect.bottom;
 }
 
 function isPortraitViewport() {
@@ -453,6 +468,14 @@ const state = {
   regionId: DEFAULT_REGION_ID,
   regionTimer: 0,
   regionJunctions: 0,
+  world: {
+    width: Math.max(cw, getTuningValue("worldWidth", 2400)),
+    height: Math.max(ch, getTuningValue("worldHeight", 1600))
+  },
+  camera: {
+    x: 0,
+    y: 0
+  },
   routeChoice: {
     active: false,
     timer: 0,
@@ -544,9 +567,11 @@ function resetGame() {
   state.stats.shotsFired = 0;
   state.stats.shotsHit = 0;
   state.stats.newBest = false;
+  state.world.width = Math.max(cw, getTuningValue("worldWidth", 2400));
+  state.world.height = Math.max(ch, getTuningValue("worldHeight", 1600));
   state.player.radius = getPlayerRadius();
-  state.player.x = cw / 2;
-  state.player.y = ch / 2;
+  state.player.x = state.world.width / 2;
+  state.player.y = state.world.height / 2;
   state.player.vx = 0;
   state.player.vy = 0;
   state.player.angle = -Math.PI / 2;
@@ -564,6 +589,7 @@ function resetGame() {
   state.warpFlash.duration = 0;
   state.warpFlash.tint = regions[DEFAULT_REGION_ID].tint;
   state.warpFlash.secondaryTint = regions[DEFAULT_REGION_ID].secondaryTint;
+  updateCamera();
   state.stars = Array.from({ length: tuning.starCount }, () => makeStar(true));
   syncHud();
   hideOverlay();
@@ -720,20 +746,33 @@ function makeAsteroidShape(radius) {
 
 function sampleAsteroidSpawn(radius) {
   const edge = Math.floor(Math.random() * 4);
+  const rect = getCameraRect(radius);
 
   if (edge === 0) {
-    return { x: -radius, y: Math.random() * ch };
+    return {
+      x: clamp(rect.left, -radius, state.world.width + radius),
+      y: clamp(Math.random() * (rect.bottom - rect.top) + rect.top, radius, state.world.height - radius)
+    };
   }
 
   if (edge === 1) {
-    return { x: cw + radius, y: Math.random() * ch };
+    return {
+      x: clamp(rect.right, -radius, state.world.width + radius),
+      y: clamp(Math.random() * (rect.bottom - rect.top) + rect.top, radius, state.world.height - radius)
+    };
   }
 
   if (edge === 2) {
-    return { x: Math.random() * cw, y: -radius };
+    return {
+      x: clamp(Math.random() * (rect.right - rect.left) + rect.left, radius, state.world.width - radius),
+      y: clamp(rect.top, -radius, state.world.height + radius)
+    };
   }
 
-  return { x: Math.random() * cw, y: ch + radius };
+  return {
+    x: clamp(Math.random() * (rect.right - rect.left) + rect.left, radius, state.world.width - radius),
+    y: clamp(rect.bottom, -radius, state.world.height + radius)
+  };
 }
 
 function triggerScreenShake(duration, strength) {
@@ -808,21 +847,23 @@ function beginRouteChoice() {
   const candidates = REGION_IDS.filter(id => id !== state.regionId);
   const first = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0];
   const second = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0];
-  const gateY = Math.max(90, Math.min(ch - 90, state.player.y));
-  const margin = Math.max(110, cw * 0.22);
+  const margin = Math.max(getTuningValue("routeGateMargin", 120), cw * 0.16);
+  const gateY = clamp(state.player.y, state.player.radius + 90, state.world.height - state.player.radius - 90);
+  const leftX = clamp(state.camera.x + margin, tuning.routeGateRadius, state.world.width - tuning.routeGateRadius);
+  const rightX = clamp(state.camera.x + cw - margin, tuning.routeGateRadius, state.world.width - tuning.routeGateRadius);
 
   state.routeChoice.active = true;
   state.routeChoice.timer = tuning.routeChoiceDuration;
   state.routeChoice.gates = [
-    makeRouteGate(first, margin, gateY),
-    makeRouteGate(second, cw - margin, gateY)
+    makeRouteGate(first, leftX, gateY),
+    makeRouteGate(second, rightX, gateY)
   ];
   for (const gate of state.routeChoice.gates) {
     spawnRing(gate.x, gate.y, gate.radius * 0.35, 160, rgba(gate.tint, 0.62), 0.44, 1.8);
   }
   refreshRouteGatePresentation();
   state.regionTimer = 0;
-  spawnMessage("选择跃迁门", cw / 2, Math.max(42, gateY - 72), "#eaf4ff");
+  spawnMessage("选择跃迁门", state.camera.x + cw / 2, Math.max(state.camera.y + 42, gateY - 72), "#eaf4ff");
 }
 
 function chooseFallbackRoute() {
@@ -843,7 +884,7 @@ function chooseFallbackRoute() {
 function getRouteAsteroidKeepScore(asteroid, x, y) {
   const distanceFromPlayer = Math.hypot(asteroid.x - state.player.x, asteroid.y - state.player.y);
   const distanceFromGate = Math.hypot(asteroid.x - x, asteroid.y - y);
-  const isOffscreen = asteroid.x < 0 || asteroid.x > cw || asteroid.y < 0 || asteroid.y > ch;
+  const isOffscreen = !isCircleInCamera(asteroid, 0);
   const isMovingAway =
     (asteroid.x - state.player.x) * asteroid.vx +
     (asteroid.y - state.player.y) * asteroid.vy > 0;
@@ -956,9 +997,12 @@ function spawnAsteroid(region = getCurrentRegion()) {
 }
 
 function samplePickupPosition(margin) {
+  const radius = getTuningValue("pickupSpawnLocalRadius", 460);
+  const angle = Math.random() * Math.PI * 2;
+  const distance = margin + Math.random() * Math.max(1, radius - margin);
   return {
-    x: Math.random() * Math.max(1, cw - margin * 2) + margin,
-    y: Math.random() * Math.max(1, ch - margin * 2) + margin
+    x: clamp(state.player.x + Math.cos(angle) * distance, margin, state.world.width - margin),
+    y: clamp(state.player.y + Math.sin(angle) * distance, margin, state.world.height - margin)
   };
 }
 
@@ -1103,6 +1147,7 @@ function update(dt) {
   }
 
   movePlayer(dt);
+  updateCamera();
   spawnThrusterTrail(dt);
   moveAsteroids(dt);
   moveLasers(dt);
@@ -1261,9 +1306,9 @@ function movePlayer(dt) {
   state.player.y += state.player.vy * dt;
 
   const minX = state.player.radius;
-  const maxX = cw - state.player.radius;
+  const maxX = state.world.width - state.player.radius;
   const minY = state.player.radius;
-  const maxY = ch - state.player.radius;
+  const maxY = state.world.height - state.player.radius;
   if (state.player.x < minX) {
     state.player.x = minX;
     state.player.vx = Math.max(0, state.player.vx);
@@ -1289,25 +1334,29 @@ function movePlayer(dt) {
 
 function moveAsteroids(dt) {
   let alive = 0;
+  const padding = getTuningValue("asteroidCullPadding", 160);
   for (const asteroid of state.asteroids) {
     asteroid.x += asteroid.vx * dt;
     asteroid.y += asteroid.vy * dt;
     asteroid.rotation += asteroid.spin;
     asteroid.hitFlash = Math.max(0, asteroid.hitFlash - dt * 4);
-    if (asteroid.x > -120 && asteroid.x < cw + 120 && asteroid.y > -120 && asteroid.y < ch + 120)
+    if (isCircleInCamera(asteroid, padding)) {
       state.asteroids[alive++] = asteroid;
+    }
   }
   state.asteroids.length = alive;
 }
 
 function moveLasers(dt) {
   let alive = 0;
+  const padding = getTuningValue("laserCullPadding", 120);
   for (const laser of state.lasers) {
     laser.x += laser.vx * dt;
     laser.y += laser.vy * dt;
     laser.life -= dt;
-    if (laser.life > 0 && laser.x > -40 && laser.x < cw + 40 && laser.y > -40 && laser.y < ch + 40)
+    if (laser.life > 0 && isCircleInCamera(laser, padding)) {
       state.lasers[alive++] = laser;
+    }
   }
   state.lasers.length = alive;
 }
@@ -1619,7 +1668,9 @@ function draw() {
   drawBackground(region);
   drawStars();
   drawRings(region);
-  drawAsteroidWarnings();
+
+  ctx.save();
+  ctx.translate(-state.camera.x, -state.camera.y);
   drawRouteChoice();
   drawCores();
   drawPowerUps();
@@ -1629,6 +1680,10 @@ function draw() {
   drawLasers();
   drawAsteroids();
   drawPlayer();
+  ctx.restore();
+
+  drawAsteroidWarnings();
+  drawRouteChoiceOverlay();
   drawHudOverlay(region);
   drawVignette();
   ctx.restore();
@@ -1654,8 +1709,8 @@ function drawBackground(region) {
 
   const drift = state.regionTimer * 18;
   const haze = getTuningValue("visualHazeStrength", 0.14);
-  const playerDx = (state.player.x - cw / 2) * 0.025;
-  const playerDy = (state.player.y - ch / 2) * 0.018;
+  const playerDx = (state.player.x - (state.camera.x + cw / 2)) * 0.025;
+  const playerDy = (state.player.y - (state.camera.y + ch / 2)) * 0.018;
   const glowA = ctx.createRadialGradient(180 + Math.sin(state.pulseTime * 0.35) * 34 - playerDx, 120 + drift % 180 - playerDy, 40, 180, 120, 340);
   glowA.addColorStop(0, rgba(region.tint, 0.2 + haze * 0.16));
   glowA.addColorStop(1, rgba(region.tint, 0));
@@ -1832,6 +1887,19 @@ function drawRouteChoice() {
 
   ctx.shadowBlur = 0;
   ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawRouteChoiceOverlay() {
+  if (!state.routeChoice.active) {
+    return;
+  }
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
   ctx.fillStyle = "rgba(230,242,255,0.92)";
   ctx.font = '700 15px "Segoe UI", sans-serif';
   ctx.fillText(`跃迁窗口 ${Math.ceil(state.routeChoice.timer)}s`, cw / 2, Math.max(38, ch * 0.16));
@@ -1842,30 +1910,34 @@ function drawRouteChoice() {
 
 function drawAsteroidWarnings() {
   ctx.save();
+  const warningDistance = getTuningValue("asteroidWarningDistance", 96);
+  const visible = getCameraRect(0);
+  const nearby = getCameraRect(warningDistance);
   for (const asteroid of state.asteroids) {
+    const screenX = asteroid.x - state.camera.x;
+    const screenY = asteroid.y - state.camera.y;
     const isInside =
-      asteroid.x >= 0 &&
-      asteroid.x <= cw &&
-      asteroid.y >= 0 &&
-      asteroid.y <= ch;
+      asteroid.x >= visible.left &&
+      asteroid.x <= visible.right &&
+      asteroid.y >= visible.top &&
+      asteroid.y <= visible.bottom;
 
     if (isInside) {
       continue;
     }
 
-    const nearHorizontal =
-      asteroid.x > -tuning.asteroidWarningDistance &&
-      asteroid.x < cw + tuning.asteroidWarningDistance;
-    const nearVertical =
-      asteroid.y > -tuning.asteroidWarningDistance &&
-      asteroid.y < ch + tuning.asteroidWarningDistance;
+    const isNearby =
+      asteroid.x >= nearby.left &&
+      asteroid.x <= nearby.right &&
+      asteroid.y >= nearby.top &&
+      asteroid.y <= nearby.bottom;
 
-    if (!nearHorizontal && !nearVertical) {
+    if (!isNearby) {
       continue;
     }
 
-    const x = Math.max(28, Math.min(cw - 28, asteroid.x));
-    const y = Math.max(28, Math.min(ch - 28, asteroid.y));
+    const x = clamp(screenX, 28, cw - 28);
+    const y = clamp(screenY, 28, ch - 28);
     const angle = Math.atan2(ch / 2 - y, cw / 2 - x);
 
     ctx.save();
