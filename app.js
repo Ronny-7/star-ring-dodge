@@ -468,6 +468,7 @@ const state = {
   regionId: DEFAULT_REGION_ID,
   regionTimer: 0,
   regionJunctions: 0,
+  eliteTimer: 0,
   world: {
     width: Math.max(cw, getTuningValue("worldWidth", 2400)),
     height: Math.max(ch, getTuningValue("worldHeight", 1600))
@@ -484,6 +485,7 @@ const state = {
   stats: {
     survivalTime: 0,
     destroyedAsteroids: 0,
+    destroyedElites: 0,
     collectedCores: 0,
     shotsFired: 0,
     shotsHit: 0,
@@ -558,11 +560,13 @@ function resetGame() {
   state.regionId = DEFAULT_REGION_ID;
   state.regionTimer = 0;
   state.regionJunctions = 0;
+  state.eliteTimer = 0;
   state.routeChoice.active = false;
   state.routeChoice.timer = 0;
   state.routeChoice.gates = [];
   state.stats.survivalTime = 0;
   state.stats.destroyedAsteroids = 0;
+  state.stats.destroyedElites = 0;
   state.stats.collectedCores = 0;
   state.stats.shotsFired = 0;
   state.stats.shotsHit = 0;
@@ -893,6 +897,15 @@ function getRouteAsteroidKeepScore(asteroid, x, y) {
 }
 
 function pruneAsteroidsAfterRoute(x, y) {
+  let kept = 0;
+  for (const asteroid of state.asteroids) {
+    if (!asteroid.elite) {
+      state.asteroids[kept++] = asteroid;
+    }
+  }
+  state.asteroids.length = kept;
+  state.eliteTimer = 0;
+
   const targetCount = Math.min(state.asteroids.length, Math.max(2, Math.floor(state.asteroids.length * 0.6)));
   if (state.asteroids.length <= targetCount) {
     return;
@@ -952,10 +965,33 @@ function handleRouteGateCollision() {
   }
 }
 
-function spawnAsteroid(region = getCurrentRegion()) {
-  const scale = getGameplayScale();
-  const radius = (Math.random() * tuning.asteroidRadiusRange + tuning.asteroidRadiusMin) * scale;
-  const minDistance = tuning.safeSpawnDistance + radius + state.player.radius;
+function makeAsteroid(x, y, radius, vx, vy, region, scale = getGameplayScale()) {
+  const shape = makeAsteroidShape(radius);
+  const mineralChance = Math.random();
+  const mineralTint = mineralChance > 0.82 ? region.tint : mineralChance > 0.68 ? region.secondaryTint : "160,180,220";
+
+  return {
+    x,
+    y,
+    radius,
+    vx,
+    vy,
+    spin: (Math.random() - 0.5) * 0.03,
+    rotation: Math.random() * Math.PI * 2,
+    points: shape.points,
+    craters: shape.craters,
+    cracks: shape.cracks,
+    glints: shape.glints,
+    mineralTint,
+    surfaceTone: 0.86 + Math.random() * 0.28,
+    rimAngle: Math.random() * Math.PI * 2,
+    hp: radius > tuning.largeAsteroidThreshold * scale ? 2 : 1,
+    hitFlash: 0,
+    elite: false
+  };
+}
+
+function findAsteroidSpawn(radius, minDistance) {
   let spawn = sampleAsteroidSpawn(radius);
   let bestDistance = Math.hypot(state.player.x - spawn.x, state.player.y - spawn.y);
 
@@ -968,32 +1004,152 @@ function spawnAsteroid(region = getCurrentRegion()) {
     }
   }
 
-  if (bestDistance < minDistance) return;
+  return bestDistance < minDistance ? null : spawn;
+}
+
+function spawnAsteroid(region = getCurrentRegion()) {
+  const scale = getGameplayScale();
+  const radius = (Math.random() * tuning.asteroidRadiusRange + tuning.asteroidRadiusMin) * scale;
+  const spawn = findAsteroidSpawn(radius, tuning.safeSpawnDistance + radius + state.player.radius);
+  if (!spawn) return;
 
   const angle = Math.atan2(state.player.y - spawn.y, state.player.x - spawn.x);
   const speed = (Math.random() * tuning.asteroidSpeedRange + tuning.asteroidSpeedBase) * state.speedScale * getRegionMultiplier(region, "asteroidSpeedMultiplier");
-  const shape = makeAsteroidShape(radius);
-  const mineralChance = Math.random();
-  const mineralTint = mineralChance > 0.82 ? region.tint : mineralChance > 0.68 ? region.secondaryTint : "160,180,220";
 
-  state.asteroids.push({
-    x: spawn.x,
-    y: spawn.y,
-    radius,
-    vx: Math.cos(angle) * speed,
-    vy: Math.sin(angle) * speed,
-    spin: (Math.random() - 0.5) * 0.03,
-    rotation: Math.random() * Math.PI * 2,
-    points: shape.points,
-    craters: shape.craters,
-    cracks: shape.cracks,
-    glints: shape.glints,
-    mineralTint,
-    surfaceTone: 0.86 + Math.random() * 0.28,
-    rimAngle: Math.random() * Math.PI * 2,
-    hp: radius > tuning.largeAsteroidThreshold * scale ? 2 : 1,
-    hitFlash: 0
-  });
+  state.asteroids.push(makeAsteroid(spawn.x, spawn.y, radius, Math.cos(angle) * speed, Math.sin(angle) * speed, region, scale));
+}
+
+function getRegionEliteChance(region) {
+  return typeof region.eliteChance === "number" ? region.eliteChance : 0;
+}
+
+function countEliteAsteroids() {
+  let count = 0;
+  for (const asteroid of state.asteroids) {
+    if (asteroid.elite) count += 1;
+  }
+  return count;
+}
+
+function spawnEliteAsteroid(region = getCurrentRegion()) {
+  const scale = getGameplayScale();
+  const radius = (tuning.asteroidRadiusMin + tuning.asteroidRadiusRange) * getTuningValue("eliteRadiusMultiplier", 2.05) * scale;
+  const spawn = findAsteroidSpawn(radius, tuning.safeSpawnDistance * 1.35 + radius + state.player.radius);
+  if (!spawn) return;
+
+  const regionSpeed = getRegionMultiplier(region, "asteroidSpeedMultiplier");
+  const angle = Math.atan2(state.player.y - spawn.y, state.player.x - spawn.x);
+  const speed = (tuning.asteroidSpeedBase + tuning.asteroidSpeedRange * 0.5) * state.speedScale * regionSpeed * getTuningValue("eliteSpeedMultiplier", 0.5);
+  const elite = makeAsteroid(spawn.x, spawn.y, radius, Math.cos(angle) * speed, Math.sin(angle) * speed, region, scale);
+
+  elite.elite = true;
+  elite.maxHp = Math.max(2, Math.round(getTuningValue("eliteHp", 6)));
+  elite.hp = elite.maxHp;
+  elite.spin *= 0.45;
+  elite.mineralTint = region.tint;
+  elite.pulseSeed = Math.random() * Math.PI * 2;
+  elite.maxSpeed = (tuning.asteroidSpeedBase + tuning.asteroidSpeedRange) * state.speedScale * regionSpeed * getTuningValue("eliteMaxSpeedMultiplier", 0.8);
+  state.asteroids.push(elite);
+
+  spawnRing(elite.x, elite.y, radius * 0.8, 240, rgba(region.tint, 0.82), 0.52, 3.2);
+  spawnRing(elite.x, elite.y, radius * 1.15, 160, rgba(region.secondaryTint, 0.5), 0.6, 2);
+  spawnMessage("精英陨石接近", elite.x, elite.y - radius - 18, rgba(region.tint, 0.95));
+  triggerScreenShake(0.24, 12);
+  playSound("explode");
+}
+
+function updateEliteFlow(dt, region) {
+  if (state.routeChoice.active) {
+    return;
+  }
+
+  state.eliteTimer += dt;
+  if (state.stats.survivalTime < getTuningValue("eliteFirstDelay", 16)) {
+    return;
+  }
+  if (state.eliteTimer < getTuningValue("eliteMinInterval", 22)) {
+    return;
+  }
+
+  state.eliteTimer = 0;
+  const chance = getRegionEliteChance(region);
+  if (chance <= 0 || Math.random() >= chance) {
+    return;
+  }
+  if (countEliteAsteroids() >= getTuningValue("eliteMaxActive", 1)) {
+    return;
+  }
+
+  spawnEliteAsteroid(region);
+}
+
+function steerEliteAsteroid(elite, dt) {
+  const dx = state.player.x - elite.x;
+  const dy = state.player.y - elite.y;
+  const distance = Math.hypot(dx, dy) || 1;
+  const accel = getTuningValue("eliteHomingAccel", 30);
+
+  elite.vx += (dx / distance) * accel * dt;
+  elite.vy += (dy / distance) * accel * dt;
+
+  const maxSpeed = elite.maxSpeed || 0;
+  if (maxSpeed <= 0) return;
+
+  const speed = Math.hypot(elite.vx, elite.vy);
+  if (speed > maxSpeed) {
+    elite.vx = (elite.vx / speed) * maxSpeed;
+    elite.vy = (elite.vy / speed) * maxSpeed;
+  }
+}
+
+function placeFragmentClearOfPlayer(x, y, radius) {
+  const minGap = state.player.radius + radius + getTuningValue("eliteFragmentSafeGap", 52);
+  const dx = x - state.player.x;
+  const dy = y - state.player.y;
+  const distance = Math.hypot(dx, dy);
+  const angle = distance > 0.001 ? Math.atan2(dy, dx) : Math.random() * Math.PI * 2;
+  const safeDistance = Math.max(distance, minGap);
+
+  return {
+    x: clamp(state.player.x + Math.cos(angle) * safeDistance, radius, state.world.width - radius),
+    y: clamp(state.player.y + Math.sin(angle) * safeDistance, radius, state.world.height - radius)
+  };
+}
+
+function spawnEliteFragments(elite, region) {
+  const scale = getGameplayScale();
+  const count = Math.max(2, Math.round(getTuningValue("eliteSplitCount", 3)));
+  const splitSpeed = getTuningValue("eliteSplitSpeed", 165);
+  const baseAngle = Math.random() * Math.PI * 2;
+
+  for (let i = 0; i < count; i += 1) {
+    const angle = baseAngle + (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+    const radius = (Math.random() * tuning.asteroidRadiusRange + tuning.asteroidRadiusMin) * scale;
+    const spawn = placeFragmentClearOfPlayer(
+      elite.x + Math.cos(angle) * elite.radius * 0.62,
+      elite.y + Math.sin(angle) * elite.radius * 0.62,
+      radius
+    );
+    const speed = splitSpeed * (0.75 + Math.random() * 0.5);
+    state.asteroids.push(makeAsteroid(spawn.x, spawn.y, radius, Math.cos(angle) * speed, Math.sin(angle) * speed, region, scale));
+  }
+}
+
+function repelPlayerFromElite(elite) {
+  const dx = state.player.x - elite.x;
+  const dy = state.player.y - elite.y;
+  const distance = Math.hypot(dx, dy);
+  const angle = distance > 0.001 ? Math.atan2(dy, dx) : Math.random() * Math.PI * 2;
+  const clearance = elite.radius + state.player.radius + 8;
+  const knockback = getTuningValue("eliteKnockback", 260);
+  const recoil = getTuningValue("eliteRecoil", 90);
+
+  state.player.x = clamp(elite.x + Math.cos(angle) * clearance, state.player.radius, state.world.width - state.player.radius);
+  state.player.y = clamp(elite.y + Math.sin(angle) * clearance, state.player.radius, state.world.height - state.player.radius);
+  state.player.vx = Math.cos(angle) * knockback;
+  state.player.vy = Math.sin(angle) * knockback;
+  elite.vx -= Math.cos(angle) * recoil;
+  elite.vy -= Math.sin(angle) * recoil;
 }
 
 function samplePickupPosition(margin) {
@@ -1120,6 +1276,7 @@ function update(dt) {
   }
   updateRegionFlow(dt);
   const region = getCurrentRegion();
+  updateEliteFlow(dt, region);
   state.spawnTimer += dt;
   state.coreTimer += dt;
   state.powerUpTimer += dt;
@@ -1335,12 +1492,16 @@ function movePlayer(dt) {
 function moveAsteroids(dt) {
   let alive = 0;
   const padding = getTuningValue("asteroidCullPadding", 160);
+  const elitePadding = getTuningValue("eliteCullPadding", 560);
   for (const asteroid of state.asteroids) {
+    if (asteroid.elite) {
+      steerEliteAsteroid(asteroid, dt);
+    }
     asteroid.x += asteroid.vx * dt;
     asteroid.y += asteroid.vy * dt;
     asteroid.rotation += asteroid.spin;
     asteroid.hitFlash = Math.max(0, asteroid.hitFlash - dt * 4);
-    if (isCircleInCamera(asteroid, padding)) {
+    if (isCircleInCamera(asteroid, asteroid.elite ? elitePadding : padding)) {
       state.asteroids[alive++] = asteroid;
     }
   }
@@ -1429,7 +1590,11 @@ function handleCollisions() {
       if (isWithinRadius(asteroid.x, asteroid.y, state.player.x, state.player.y, asteroid.radius + state.player.radius)) {
         spawnBurst(asteroid.x, asteroid.y, 20, ["#ff8ea1", "#ffc5cf", "#ffd7a1"]);
         spawnBurst(state.player.x, state.player.y, 16, ["#ff8ea1", "#ffd7a1", "#fff0d6"]);
-        state.asteroids.splice(i, 1);
+        if (asteroid.elite) {
+          repelPlayerFromElite(asteroid);
+        } else {
+          state.asteroids.splice(i, 1);
+        }
 
         if (state.shieldCharges > 0) {
           state.shieldCharges -= 1;
@@ -1477,12 +1642,26 @@ function handleCollisions() {
         triggerScreenShake(0.08, isLargeAsteroid ? 6 : 4);
 
         if (asteroid.hp <= 0) {
-          state.score += tuning.scoreAsteroid;
           state.stats.destroyedAsteroids += 1;
-          spawnBurst(asteroid.x, asteroid.y, isLargeAsteroid ? 28 : 20, ["#7fe8ff", "#dce7ff", "#95a5bf"]);
-          spawnExplosionEffect(asteroid.x, asteroid.y, asteroid.radius, isLargeAsteroid);
-          triggerScreenShake(isLargeAsteroid ? 0.18 : 0.12, isLargeAsteroid ? 12 : 7);
           state.asteroids.splice(j, 1);
+
+          if (asteroid.elite) {
+            const eliteScore = Math.round(getTuningValue("scoreElite", 140));
+            state.score += eliteScore;
+            state.stats.destroyedElites += 1;
+            spawnEliteFragments(asteroid, getCurrentRegion());
+            spawnBurst(asteroid.x, asteroid.y, 42, ["#7fe8ff", "#dce7ff", "#ffd7a1", "#95a5bf"]);
+            spawnExplosionEffect(asteroid.x, asteroid.y, asteroid.radius, true);
+            spawnRing(asteroid.x, asteroid.y, asteroid.radius * 0.9, 300, rgba(asteroid.mineralTint, 0.85), 0.6, 4);
+            spawnMessage(`精英击破 +${eliteScore}`, asteroid.x, asteroid.y - asteroid.radius * 0.6, rgba(asteroid.mineralTint, 0.95));
+            triggerScreenShake(0.36, 20);
+          } else {
+            state.score += tuning.scoreAsteroid;
+            spawnBurst(asteroid.x, asteroid.y, isLargeAsteroid ? 28 : 20, ["#7fe8ff", "#dce7ff", "#95a5bf"]);
+            spawnExplosionEffect(asteroid.x, asteroid.y, asteroid.radius, isLargeAsteroid);
+            triggerScreenShake(isLargeAsteroid ? 0.18 : 0.12, isLargeAsteroid ? 12 : 7);
+          }
+
           playSound("explode");
         } else {
           playSound("hit");
@@ -1634,17 +1813,20 @@ function endGame() {
 
   syncHud();
 
-  renderOverlayStats(
-    [
-      { label: "最终分数", value: String(finalScore) },
-      { label: "存活时间", value: formatDuration(state.stats.survivalTime) },
-      { label: "击毁陨石", value: String(state.stats.destroyedAsteroids) },
-      { label: "回收核心", value: String(state.stats.collectedCores) },
-      { label: "跃迁次数", value: String(state.regionJunctions) },
-      { label: "命中率", value: formatRate(state.stats.shotsHit, state.stats.shotsFired) }
-    ],
-    state.stats.newBest
-  );
+  const overlayStatList = [
+    { label: "最终分数", value: String(finalScore) },
+    { label: "存活时间", value: formatDuration(state.stats.survivalTime) },
+    { label: "击毁陨石", value: String(state.stats.destroyedAsteroids) },
+    { label: "回收核心", value: String(state.stats.collectedCores) },
+    { label: "跃迁次数", value: String(state.regionJunctions) },
+    { label: "命中率", value: formatRate(state.stats.shotsHit, state.stats.shotsFired) }
+  ];
+
+  if (state.stats.destroyedElites > 0) {
+    overlayStatList.push({ label: "精英击破", value: String(state.stats.destroyedElites) });
+  }
+
+  renderOverlayStats(overlayStatList, state.stats.newBest);
 
   showOverlay(
     "gameover",
@@ -1939,19 +2121,27 @@ function drawAsteroidWarnings() {
     const x = clamp(screenX, 28, cw - 28);
     const y = clamp(screenY, 28, ch - 28);
     const angle = Math.atan2(ch / 2 - y, cw / 2 - x);
+    const scale = asteroid.elite ? 1.45 : 1;
+    const tint = asteroid.elite ? asteroid.mineralTint || "255,111,135" : "255,111,135";
 
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
-    ctx.shadowBlur = 16;
-    ctx.shadowColor = "#ff8ea1";
-    ctx.fillStyle = "rgba(255, 111, 135, 0.88)";
+    ctx.scale(scale, scale);
+    ctx.shadowBlur = asteroid.elite ? 24 : 16;
+    ctx.shadowColor = rgba(tint, 1);
+    ctx.fillStyle = rgba(tint, 0.88);
     ctx.beginPath();
     ctx.moveTo(14, 0);
     ctx.lineTo(-8, -9);
     ctx.lineTo(-8, 9);
     ctx.closePath();
     ctx.fill();
+    if (asteroid.elite) {
+      ctx.strokeStyle = "rgba(246,252,255,0.9)";
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    }
     ctx.restore();
   }
   ctx.restore();
@@ -2346,7 +2536,49 @@ function drawAsteroids() {
     }
 
     ctx.restore();
+
+    if (asteroid.elite) {
+      drawEliteMarkings(asteroid);
+    }
   }
+}
+
+function drawEliteMarkings(elite) {
+  const tint = elite.mineralTint || "160,180,220";
+  const pulse = 0.62 + Math.sin(state.pulseTime * 3.2 + (elite.pulseSeed || 0)) * 0.38;
+  const ratio = clamp(elite.hp / Math.max(1, elite.maxHp || 1), 0, 1);
+  const ringRadius = elite.radius + 14;
+
+  ctx.save();
+  ctx.translate(elite.x, elite.y);
+
+  ctx.save();
+  ctx.rotate(elite.rotation * 0.45);
+  ctx.shadowBlur = 18;
+  ctx.shadowColor = rgba(tint, 0.55);
+  ctx.strokeStyle = rgba(tint, 0.34 + pulse * 0.3);
+  ctx.lineWidth = 2.4;
+  ctx.setLineDash([16, 12]);
+  ctx.beginPath();
+  ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(6,12,24,0.55)";
+  ctx.lineWidth = 4.4;
+  ctx.beginPath();
+  ctx.arc(0, 0, ringRadius + 8, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = ratio > 0.35 ? rgba(tint, 0.95) : "rgba(255,111,135,0.95)";
+  ctx.lineWidth = 4.4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(0, 0, ringRadius + 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ratio);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawCores() {

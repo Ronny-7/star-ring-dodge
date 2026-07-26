@@ -25,7 +25,22 @@ window.starRingConfig = {
     asteroidSpeedBase: 110,
     asteroidSpeedRange: 70,
     largeAsteroidThreshold: 34,
+    eliteRadiusMultiplier: 2.05,
+    eliteHp: 6,
+    eliteSpeedMultiplier: 0.5,
+    eliteMaxSpeedMultiplier: 0.8,
+    eliteHomingAccel: 30,
+    eliteFirstDelay: 16,
+    eliteMinInterval: 22,
+    eliteMaxActive: 1,
+    eliteCullPadding: 560,
+    eliteSplitCount: 3,
+    eliteSplitSpeed: 165,
+    eliteFragmentSafeGap: 52,
+    eliteKnockback: 260,
+    eliteRecoil: 90,
     scoreAsteroid: 18,
+    scoreElite: 140,
     scoreCore: 25,
     safeSpawnDistance: 260,
     maxSpawnAttempts: 8,
@@ -72,18 +87,20 @@ window.starRingConfig = {
       asteroidSpawnMultiplier: 1.12,
       asteroidSpeedMultiplier: 0.92,
       coreIntervalMultiplier: 1,
-      powerUpIntervalMultiplier: 1
+      powerUpIntervalMultiplier: 1,
+      eliteChance: 0.1
     },
     belt: {
       name: "密集陨带",
       label: "BELT",
-      description: "陨石更密更快，清障收益更高。",
+      description: "陨石更密更快，精英陨石频繁出没。",
       tint: "255,111,135",
       secondaryTint: "255,181,158",
       asteroidSpawnMultiplier: 0.76,
       asteroidSpeedMultiplier: 1.14,
       coreIntervalMultiplier: 1.08,
-      powerUpIntervalMultiplier: 1.1
+      powerUpIntervalMultiplier: 1.1,
+      eliteChance: 0.55
     },
     stream: {
       name: "核心流",
@@ -94,7 +111,8 @@ window.starRingConfig = {
       asteroidSpawnMultiplier: 0.96,
       asteroidSpeedMultiplier: 0.98,
       coreIntervalMultiplier: 0.56,
-      powerUpIntervalMultiplier: 1.05
+      powerUpIntervalMultiplier: 1.05,
+      eliteChance: 0.22
     },
     rift: {
       name: "跃迁裂隙",
@@ -105,7 +123,8 @@ window.starRingConfig = {
       asteroidSpawnMultiplier: 0.84,
       asteroidSpeedMultiplier: 1.08,
       coreIntervalMultiplier: 0.9,
-      powerUpIntervalMultiplier: 0.58
+      powerUpIntervalMultiplier: 0.58,
+      eliteChance: 0.38
     }
   },
 
