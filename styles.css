@@ -1061,6 +1061,8 @@ body.landscape-layout {
 }
 
 body.landscape-layout .app {
+  display: flex;
+  flex-direction: column;
   height: 100dvh;
   min-height: 0;
   padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
@@ -1073,6 +1075,7 @@ body.landscape-layout .topbar {
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
+  flex: 0 0 auto;
 }
 
 body.landscape-layout .brand-row {
@@ -1103,7 +1106,9 @@ body.landscape-layout .metric-value {
 }
 
 body.landscape-layout .stage-layout {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
@@ -1111,13 +1116,24 @@ body.landscape-layout .side-panel {
   display: none;
 }
 
+body.landscape-layout .playfield-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 body.landscape-layout .stage-frame {
-  height: calc(100% - 58px);
+  flex: 1 1 auto;
+  height: auto;
   min-height: 0;
   padding: 6px;
+  display: flex;
+  flex-direction: column;
 }
 
 body.landscape-layout .stage-head {
+  flex: 0 0 auto;
   min-height: 0;
   margin-bottom: 6px;
   padding: 0 4px;
@@ -1135,9 +1151,11 @@ body.landscape-layout .orientation-button {
 }
 
 body.landscape-layout .playfield {
-  height: calc(100% - 42px);
+  flex: 1 1 auto;
+  height: auto;
   min-height: 0;
   max-height: none;
+  width: 100%;
 }
 
 body.landscape-layout .touch-controls {
