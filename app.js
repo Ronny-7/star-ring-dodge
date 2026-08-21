@@ -3093,14 +3093,28 @@ window.addEventListener("blur", () => {
   }
 });
 
+function refreshViewportMeta() {
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  // Re-assigning the viewport meta forces Mobile Safari / some Android browsers to
+  // recompute the layout viewport to the new orientation width, otherwise the page
+  // stays pinned at the portrait width and the right side renders as a black strip.
+  meta.setAttribute("content", meta.getAttribute("content"));
+}
+
 startButton.addEventListener("click", handleOverlayAction);
 window.addEventListener("resize", () => {
+  refreshViewportMeta();
   if (!isPortraitViewport()) {
     document.body.classList.remove("force-landscape");
   }
   refreshCanvasSoon();
 });
-window.addEventListener("orientationchange", refreshCanvasSoon);
+window.addEventListener("orientationchange", () => {
+  refreshViewportMeta();
+  window.setTimeout(refreshViewportMeta, 300);
+  refreshCanvasSoon();
+});
 if (mobileViewportQuery.addEventListener) {
   mobileViewportQuery.addEventListener("change", refreshCanvasSoon);
 }
