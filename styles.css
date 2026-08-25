@@ -1199,6 +1199,7 @@ body.force-landscape .app {
   left: 0;
   width: 100dvh;
   height: 100dvw;
+  max-width: none;
   transform: rotate(90deg) translateY(-100%);
   transform-origin: top left;
 }
