@@ -1010,6 +1010,7 @@ function resolveRouteChoice(regionId, x = state.player.x, y = state.player.y) {
   spawnMessage(nextRegion.name, x, y - 34, rgba(nextRegion.tint, 0.95));
   triggerScreenShake(0.2, 10);
   playSound("pickup");
+  evaluateAchievements();
 }
 
 function handleRouteGateCollision() {
@@ -1324,6 +1325,11 @@ function update(dt) {
 
   state.score += dt * 7;
   state.stats.survivalTime += dt;
+  state.achievementTimer += dt;
+  if (state.achievementTimer >= 1) {
+    state.achievementTimer = 0;
+    evaluateAchievements();
+  }
   state.flashTimer = Math.max(0, state.flashTimer - dt);
   state.invulnerabilityTimer = Math.max(0, state.invulnerabilityTimer - dt);
   state.screenShakeTimer = Math.max(0, state.screenShakeTimer - dt);
@@ -1668,12 +1674,14 @@ function handleCollisions() {
         }
 
         state.health -= 1;
+        state.stats.damagedThisRun = true;
         state.invulnerabilityTimer = tuning.hitInvulnerability;
         state.flashTimer = tuning.hitFlashDuration;
         triggerScreenShake(0.28, 18);
         spawnHullImpactEffect(state.player.x, state.player.y);
         spawnMessage("HULL -1", state.player.x, state.player.y - 34, "#ff8ea1");
         playSound("hurt");
+        evaluateAchievements();
         if (state.health <= 0) {
           endGame();
           return;
@@ -1723,6 +1731,7 @@ function handleCollisions() {
           }
 
           playSound("explode");
+          evaluateAchievements();
         } else {
           playSound("hit");
         }
@@ -1744,6 +1753,7 @@ function handleCollisions() {
       spawnCorePickupEffect(core.x, core.y);
       spawnMessage("CORE +25", core.x, core.y - 22, "#8affd1");
       playSound("pickup");
+      evaluateAchievements();
     }
   }
 
