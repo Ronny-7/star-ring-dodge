@@ -1,5 +1,6 @@
 window.starRingConfig = {
   bestKey: "star-ring-dodge-best",
+  profileKey: "star-ring-dodge-profile",
 
   tuning: {
     playerRadius: 22,
@@ -140,5 +141,25 @@ window.starRingConfig = {
     restartButton: "再来一局",
     newRecord: (score) => `你创下了 ${score} 分的新纪录，按空格可以立即再来一局。`,
     gameOver: (score) => `你的分数是 ${score}。按空格可以立即重开。`
-  }
+  },
+
+  profileUi: {
+    achievementPrefix: "成就达成·",
+    achievementColor: "#ffd76a",
+    toastLife: 1.6,
+    statLabelPrefix: "成就·",
+    unlockedValue: "新达成",
+    totalRunsLabel: "累计局数",
+    totalDestroyedLabel: "累计击毁"
+  },
+
+  achievements: [
+    { id: "first-warp", label: "初次跃迁", scope: "total", metric: "warps", threshold: 1 },
+    { id: "warp-runner", label: "连续跃迁", scope: "run", metric: "regionJunctions", threshold: 5 },
+    { id: "sharpshooter", label: "神射手", scope: "run", metric: "accuracy", threshold: 80 },
+    { id: "untouchable", label: "完好无损", scope: "run", metric: "noDamageSurvival", threshold: 120 },
+    { id: "asteroid-bane", label: "陨石克星", scope: "total", metric: "destroyedAsteroids", threshold: 100 },
+    { id: "core-collector", label: "核心收藏家", scope: "total", metric: "collectedCores", threshold: 50 },
+    { id: "regular", label: "常客", scope: "total", metric: "runs", threshold: 20 }
+  ]
 };
