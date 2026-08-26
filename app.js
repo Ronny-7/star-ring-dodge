@@ -1,6 +1,6 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const { bestKey, tuning, uiText, regions } = window.starRingConfig;
+const { bestKey, profileKey, tuning, uiText, regions, achievements, profileUi } = window.starRingConfig;
 
 let audioCtx = null;
 let musicEnabled = true;
@@ -408,6 +408,59 @@ function formatRate(hits, shots) {
   return `${Math.round((hits / shots) * 100)}%`;
 }
 
+function createDefaultProfile() {
+  return {
+    version: 1,
+    totals: {
+      runs: 0,
+      destroyedAsteroids: 0,
+      collectedCores: 0,
+      warps: 0,
+      longestSurvival: 0,
+      bestAccuracy: 0
+    },
+    unlocked: {}
+  };
+}
+
+function normalizeProfile(raw) {
+  const fallback = createDefaultProfile();
+  if (!raw || typeof raw !== "object" || raw.version !== 1) {
+    return fallback;
+  }
+  const totals = raw.totals && typeof raw.totals === "object" ? raw.totals : {};
+  const num = (value) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0);
+  return {
+    version: 1,
+    totals: {
+      runs: num(totals.runs),
+      destroyedAsteroids: num(totals.destroyedAsteroids),
+      collectedCores: num(totals.collectedCores),
+      warps: num(totals.warps),
+      longestSurvival: num(totals.longestSurvival),
+      bestAccuracy: num(totals.bestAccuracy)
+    },
+    unlocked: raw.unlocked && typeof raw.unlocked === "object" ? { ...raw.unlocked } : {}
+  };
+}
+
+function loadProfile() {
+  try {
+    const raw = localStorage.getItem(profileKey);
+    return normalizeProfile(raw ? JSON.parse(raw) : null);
+  } catch {
+    return createDefaultProfile();
+  }
+}
+
+function saveProfile() {
+  try {
+    localStorage.setItem(profileKey, JSON.stringify(profile));
+  } catch {
+    // Ignore storage failures so the game still runs in restricted contexts.
+  }
+}
+
 function renderOverlayStats(stats, isRecord) {
   const statCards = stats.map(({ label, value }) => {
     const card = document.createElement("article");
@@ -436,6 +489,8 @@ function hideOverlayStats() {
 }
 
 let bestScore = readBestScore();
+let profile = loadProfile();
+let runAchievementUnlocks = [];
 let overlayMode = "start";
 const hudCache = {
   score: null,
