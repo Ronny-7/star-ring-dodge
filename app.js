@@ -461,6 +461,19 @@ function saveProfile() {
   }
 }
 
+function recordRunToProfile() {
+  const accuracy = state.stats.shotsFired > 0
+    ? Math.round((state.stats.shotsHit / state.stats.shotsFired) * 100)
+    : 0;
+  profile.totals.runs += 1;
+  profile.totals.destroyedAsteroids += state.stats.destroyedAsteroids;
+  profile.totals.collectedCores += state.stats.collectedCores;
+  profile.totals.warps += state.regionJunctions;
+  profile.totals.longestSurvival = Math.max(profile.totals.longestSurvival, Math.floor(state.stats.survivalTime));
+  profile.totals.bestAccuracy = Math.max(profile.totals.bestAccuracy, accuracy);
+  saveProfile();
+}
+
 function renderOverlayStats(stats, isRecord) {
   const statCards = stats.map(({ label, value }) => {
     const card = document.createElement("article");
@@ -1928,6 +1941,9 @@ function endGame() {
 
   syncHud();
 
+  evaluateAchievements({ silent: true });
+  recordRunToProfile();
+
   const overlayStatList = [
     { label: "最终分数", value: String(finalScore) },
     { label: "存活时间", value: formatDuration(state.stats.survivalTime) },
@@ -1939,6 +1955,18 @@ function endGame() {
 
   if (state.stats.destroyedElites > 0) {
     overlayStatList.push({ label: "精英击破", value: String(state.stats.destroyedElites) });
+  }
+
+  overlayStatList.push(
+    { label: profileUi.totalRunsLabel, value: String(profile.totals.runs) },
+    { label: profileUi.totalDestroyedLabel, value: String(profile.totals.destroyedAsteroids) }
+  );
+
+  for (const achievementId of runAchievementUnlocks) {
+    const achievement = achievements.find((item) => item.id === achievementId);
+    if (achievement) {
+      overlayStatList.push({ label: `${profileUi.statLabelPrefix}${achievement.label}`, value: profileUi.unlockedValue });
+    }
   }
 
   renderOverlayStats(overlayStatList, state.stats.newBest);
