@@ -523,6 +523,7 @@ const state = {
   regionId: DEFAULT_REGION_ID,
   regionTimer: 0,
   regionJunctions: 0,
+  achievementTimer: 0,
   eliteTimer: 0,
   world: {
     width: Math.max(cw, getTuningValue("worldWidth", 2400)),
@@ -544,6 +545,7 @@ const state = {
     collectedCores: 0,
     shotsFired: 0,
     shotsHit: 0,
+    damagedThisRun: false,
     newBest: false
   },
   player: {
@@ -626,6 +628,9 @@ function resetGame() {
   state.stats.shotsFired = 0;
   state.stats.shotsHit = 0;
   state.stats.newBest = false;
+  state.stats.damagedThisRun = false;
+  state.achievementTimer = 0;
+  runAchievementUnlocks.length = 0;
   state.world.width = Math.max(cw, getTuningValue("worldWidth", 2400));
   state.world.height = Math.max(ch, getTuningValue("worldHeight", 1600));
   state.player.radius = getPlayerRadius();
@@ -1839,15 +1844,60 @@ function spawnBurst(x, y, count, colors) {
   }
 }
 
-function spawnMessage(text, x, y, color = "#f2f7ff") {
+function spawnMessage(text, x, y, color = "#f2f7ff", life = 0.9) {
   state.messages.push({
     text,
     x,
     y,
     vy: -36,
     color,
-    life: 0.9
+    life
   });
+}
+
+function getRunAccuracy() {
+  if (state.stats.shotsFired < 10) {
+    return 0;
+  }
+  return Math.round((state.stats.shotsHit / state.stats.shotsFired) * 100);
+}
+
+function getNoDamageSurvival() {
+  return state.stats.damagedThisRun ? 0 : Math.floor(state.stats.survivalTime);
+}
+
+const metricGetters = {
+  regionJunctions: () => state.regionJunctions,
+  accuracy: getRunAccuracy,
+  noDamageSurvival: getNoDamageSurvival,
+  destroyedAsteroids: () => profile.totals.destroyedAsteroids + state.stats.destroyedAsteroids,
+  collectedCores: () => profile.totals.collectedCores + state.stats.collectedCores,
+  warps: () => profile.totals.warps + state.regionJunctions,
+  runs: () => profile.totals.runs + 1
+};
+
+function evaluateAchievements({ silent = false } = {}) {
+  for (const achievement of achievements) {
+    if (profile.unlocked[achievement.id]) {
+      continue;
+    }
+    const getter = metricGetters[achievement.metric];
+    if (!getter || getter() < achievement.threshold) {
+      continue;
+    }
+    profile.unlocked[achievement.id] = Date.now();
+    runAchievementUnlocks.push(achievement.id);
+    if (!silent) {
+      spawnMessage(
+        `${profileUi.achievementPrefix}${achievement.label}`,
+        state.player.x,
+        state.player.y - 48,
+        profileUi.achievementColor,
+        profileUi.toastLife
+      );
+    }
+  }
+  saveProfile();
 }
 
 function endGame() {
