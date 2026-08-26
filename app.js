@@ -1900,6 +1900,7 @@ const metricGetters = {
 };
 
 function evaluateAchievements({ silent = false } = {}) {
+  let unlocked = false;
   for (const achievement of achievements) {
     if (profile.unlocked[achievement.id]) {
       continue;
@@ -1910,6 +1911,7 @@ function evaluateAchievements({ silent = false } = {}) {
     }
     profile.unlocked[achievement.id] = Date.now();
     runAchievementUnlocks.push(achievement.id);
+    unlocked = true;
     if (!silent) {
       spawnMessage(
         `${profileUi.achievementPrefix}${achievement.label}`,
@@ -1920,7 +1922,9 @@ function evaluateAchievements({ silent = false } = {}) {
       );
     }
   }
-  saveProfile();
+  if (unlocked) {
+    saveProfile();
+  }
 }
 
 function endGame() {
