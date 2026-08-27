@@ -6,3 +6,6 @@ CLAUDE.md
 AGENTS.md
 # Added by code-review-graph
 .code-review-graph/
+# Local design/plan artifacts (kept local, not versioned)
+docs/
+.superpowers/
