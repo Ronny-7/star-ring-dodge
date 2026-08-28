@@ -551,6 +551,7 @@ const state = {
     timer: 0,
     gates: []
   },
+  vortexCenters: [],
   stats: {
     survivalTime: 0,
     destroyedAsteroids: 0,
@@ -634,6 +635,7 @@ function resetGame() {
   state.routeChoice.active = false;
   state.routeChoice.timer = 0;
   state.routeChoice.gates = [];
+  state.vortexCenters = [];
   state.stats.survivalTime = 0;
   state.stats.destroyedAsteroids = 0;
   state.stats.destroyedElites = 0;
@@ -861,6 +863,29 @@ function getCurrentRegion() {
   return regions[state.regionId] || regions[DEFAULT_REGION_ID];
 }
 
+function initRegionMechanics(region) {
+  state.vortexCenters = [];
+  const mechanic = region && region.mechanic;
+  if (!mechanic || mechanic.type !== "vortex") {
+    return;
+  }
+  const desired = Math.max(1, Math.floor(mechanic.centers || 1));
+  const safe = 400;
+  const margin = tuning.routeGateRadius;
+  const attempts = desired * 10;
+  let placed = 0;
+  for (let i = 0; i < attempts && placed < desired; i += 1) {
+    const x = margin + Math.random() * Math.max(1, state.world.width - margin * 2);
+    const y = margin + Math.random() * Math.max(1, state.world.height - margin * 2);
+    if (Math.hypot(x - state.player.x, y - state.player.y) < safe) continue;
+    state.vortexCenters.push({ x, y, phase: Math.random() * Math.PI * 2, spin: Math.random() < 0.5 ? 1 : -1 });
+    placed += 1;
+  }
+  if (placed === 0) {
+    state.vortexCenters.push({ x: state.world.width / 2, y: state.world.height / 2, phase: 0, spin: 1 });
+  }
+}
+
 function getRegionMultiplier(region, name) {
   const value = region[name];
   return typeof value === "number" ? value : 1;
@@ -1010,6 +1035,7 @@ function resolveRouteChoice(regionId, x = state.player.x, y = state.player.y) {
   }
 
   state.regionId = regionId;
+  initRegionMechanics(nextRegion);
   state.regionTimer = 0;
   state.regionJunctions += 1;
   state.routeChoice.active = false;
