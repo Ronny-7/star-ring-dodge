@@ -255,7 +255,7 @@ window.starRingConfig = {
       collectedCores: "回收核心", warps: "跃迁次数", accuracy: "命中率", eliteBreakStat: "精英击破",
       settings: "设置", audio: "音频", music: "背景音乐", sfx: "音效",
       ship: "飞船外形", fighter: "战斗机", delta: "三角翼", saucer: "飞碟",
-      shipColor: "飞船颜色", language: "语言", on: "开", off: "关", exit: "退出", landscape: "横屏"
+      shipColor: "飞船颜色", language: "语言", on: "开", off: "关", exit: "退出", landscape: "横屏", orientationHint: "横屏游玩视野更宽"
     },
     en: {
       sector: "SECTOR", threat: "THREAT", laser: "LASER", core: "CORE", shield: "SHIELD", double: "DOUBLE",
@@ -271,7 +271,7 @@ window.starRingConfig = {
       collectedCores: "Cores", warps: "Warps", accuracy: "Accuracy", eliteBreakStat: "Elites",
       settings: "SETTINGS", audio: "Audio", music: "Music", sfx: "SFX",
       ship: "Ship", fighter: "Fighter", delta: "Delta", saucer: "Saucer",
-      shipColor: "Ship Color", language: "Language", on: "ON", off: "OFF", exit: "Exit", landscape: "Landscape"
+      shipColor: "Ship Color", language: "Language", on: "ON", off: "OFF", exit: "Exit", landscape: "Landscape", orientationHint: "Landscape gives a wider view"
     }
   }
 };

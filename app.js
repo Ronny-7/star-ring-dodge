@@ -37,6 +37,21 @@ function setLanguage(lang) {
     saveProfile();
   }
   applyLanguageToDOM();
+  syncLandscapeUi();
+  if (overlay && !overlay.classList.contains("hidden")) {
+    if (overlayMode === "start") {
+      showOverlay("start", ui.startTitle, ui.startText, ui.startButton);
+    } else if (overlayMode === "pause") {
+      showOverlay("pause", ui.pauseTitle, ui.pauseText, ui.pauseButton);
+    } else if (overlayMode === "gameover") {
+      showOverlay(
+        "gameover",
+        lastGameOver.newBest ? ui.recordTitle : ui.gameOverTitle,
+        lastGameOver.newBest ? ui.newRecord(lastGameOver.score) : ui.gameOver(lastGameOver.score),
+        ui.restartButton
+      );
+    }
+  }
 }
 
 function applyLanguageToDOM() {
@@ -54,6 +69,7 @@ function applyLanguageToDOM() {
   set("skin-saucer", L("saucer"));
   set("settings-color-title", L("shipColor"));
   set("settings-language-title", L("language"));
+  set("orientation-hint", L("orientationHint"));
   syncToggleButton(musicBtn, musicEnabled);
   syncToggleButton(sfxBtn, sfxEnabled);
 }
@@ -563,6 +579,7 @@ let bestScore = readBestScore();
 let profile = loadProfile();
 let runAchievementUnlocks = [];
 let overlayMode = "start";
+let lastGameOver = { score: 0, newBest: false };
 const hudCache = {
   score: null,
   health: null,
@@ -2051,6 +2068,8 @@ function endGame() {
 
   const finalScore = Math.floor(state.score);
   state.stats.newBest = finalScore > bestScore;
+  lastGameOver.score = finalScore;
+  lastGameOver.newBest = state.stats.newBest;
 
   if (state.stats.newBest) {
     bestScore = finalScore;
@@ -3495,6 +3514,7 @@ syncLandscapeUi();
 resizeCanvas();
 renderSkinPreviews();
 applyLanguage();
+applyLanguageToDOM();
 showOverlay("start", ui.startTitle, ui.startText, ui.startButton);
 state.stars = Array.from({ length: tuning.starCount }, () => makeStar(true));
 draw();
