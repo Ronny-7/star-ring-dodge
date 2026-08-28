@@ -37,8 +37,6 @@ function setLanguage(lang) {
     saveProfile();
   }
   applyLanguageToDOM();
-  const langButtons = document.querySelectorAll("[data-lang]");
-  langButtons.forEach((b) => b.classList.toggle("active", b.dataset.lang === lang));
 }
 
 function applyLanguageToDOM() {
@@ -2360,7 +2358,7 @@ function drawRouteChoice() {
     ctx.font = '700 13px "Segoe UI", sans-serif';
     ctx.fillText(regionDisplayName(gate), gateX, gateY - 6);
     ctx.font = '11px "Segoe UI", sans-serif';
-    ctx.fillText(regionDisplayName(gate), gateX, gateY + 12);
+    ctx.fillText(state.lang === "en" ? gate.name : gate.label, gateX, gateY + 12);
     ctx.fillStyle = rgba(gate.tint, 0.9);
     drawWrappedTextLines(gate.descriptionLines, gateX, gateY + radius + 24, 14);
   }
@@ -3491,6 +3489,7 @@ if (mobileViewportQuery.addEventListener) {
 syncLandscapeUi();
 resizeCanvas();
 renderSkinPreviews();
+applyLanguage();
 showOverlay("start", ui.startTitle, ui.startText, ui.startButton);
 state.stars = Array.from({ length: tuning.starCount }, () => makeStar(true));
 draw();
