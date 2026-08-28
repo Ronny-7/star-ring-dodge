@@ -1,6 +1,65 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const { bestKey, profileKey, tuning, uiText, regions, achievements, profileUi } = window.starRingConfig;
+const { bestKey, profileKey, tuning, uiText, regions, achievements, profileUi, i18n } = window.starRingConfig;
+
+let ui = (window.starRingConfig.uiText && window.starRingConfig.uiText.zh) || {};
+
+function L(key, ...args) {
+  const table = (i18n && i18n[state ? state.lang : "zh"]) || {};
+  const entry = table[key];
+  if (typeof entry === "function") return entry(...args);
+  return entry != null ? entry : key;
+}
+
+function regionDisplayName(r) {
+  if (!r) return "";
+  return state.lang === "en" ? (r.label || r.name) : (r.name || r.label);
+}
+
+function achLabel(a) {
+  if (!a) return "";
+  return state.lang === "en" ? (a.labelEn || a.label) : (a.label || a.labelEn);
+}
+
+function applyLanguage() {
+  ui = (uiText && uiText[state.lang]) || uiText.zh || ui;
+  document.documentElement.lang = state.lang === "en" ? "en" : "zh-CN";
+  const langButtons = document.querySelectorAll("[data-lang]");
+  langButtons.forEach((b) => b.classList.toggle("active", b.dataset.lang === (state ? state.lang : "zh")));
+}
+
+function setLanguage(lang) {
+  if (lang !== "zh" && lang !== "en") return;
+  state.lang = lang;
+  applyLanguage();
+  if (typeof profile !== "undefined" && profile) {
+    profile.lang = lang;
+    saveProfile();
+  }
+  applyLanguageToDOM();
+  const langButtons = document.querySelectorAll("[data-lang]");
+  langButtons.forEach((b) => b.classList.toggle("active", b.dataset.lang === lang));
+}
+
+function applyLanguageToDOM() {
+  const set = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+  set("panel-label", L("settings"));
+  set("settings-audio-title", L("audio"));
+  set("settings-music-label", L("music"));
+  set("settings-sfx-label", L("sfx"));
+  set("settings-ship-title", L("ship"));
+  set("skin-fighter", L("fighter"));
+  set("skin-delta", L("delta"));
+  set("skin-saucer", L("saucer"));
+  set("settings-color-title", L("shipColor"));
+  set("settings-language-title", L("language"));
+  syncToggleButton(musicBtn, musicEnabled);
+  syncToggleButton(sfxBtn, sfxEnabled);
+}
+
 
 let audioCtx = null;
 let musicEnabled = true;
@@ -120,7 +179,7 @@ function stopMusic() {
 }
 
 function syncToggleButton(button, enabled) {
-  button.textContent = enabled ? "ON" : "OFF";
+  button.textContent = enabled ? L("on") : L("off");
   button.classList.toggle("active", enabled);
 }
 
@@ -353,7 +412,7 @@ function syncLandscapeUi() {
   const compactLandscape = mobileViewportQuery.matches && (forced || !isPortraitViewport());
   document.body.classList.toggle("landscape-layout", compactLandscape);
   if (orientationButton) {
-    orientationButton.textContent = forced ? "退出" : "横屏";
+    orientationButton.textContent = forced ? L("exit") : L("landscape");
   }
 }
 
@@ -366,7 +425,8 @@ function isCompactLandscapeMode() {
 }
 
 function refreshCanvasSoon() {
-  syncLandscapeUi();
+applyLanguage();
+syncLandscapeUi();
   requestAnimationFrame(() => {
     resizeCanvas();
     draw();
@@ -513,6 +573,7 @@ const hudCache = {
 bestEl.textContent = String(bestScore);
 
 const state = {
+  lang: (typeof profile !== "undefined" && profile && profile.lang) || "zh",
   running: false,
   paused: false,
   gameOver: false,
@@ -965,7 +1026,7 @@ function beginRouteChoice() {
   }
   refreshRouteGatePresentation();
   state.regionTimer = 0;
-  spawnMessage("选择跃迁门", state.camera.x + cw / 2, Math.max(state.camera.y + 42, gateY - 72), "#eaf4ff");
+  spawnMessage(L("chooseGate"), state.camera.x + cw / 2, Math.max(state.camera.y + 42, gateY - 72), "#eaf4ff");
 }
 
 function chooseFallbackRoute() {
@@ -1046,7 +1107,7 @@ function resolveRouteChoice(regionId, x = state.player.x, y = state.player.y) {
   spawnBurst(x, y, 36, [rgba(nextRegion.tint, 0.95), rgba(nextRegion.secondaryTint, 0.9), "#f4fbff"]);
   spawnRing(x, y, tuning.routeGateRadius * 0.9, 300, rgba(nextRegion.tint, 0.86), 0.52, 4);
   spawnRing(x, y, tuning.routeGateRadius * 1.4, 190, rgba(nextRegion.secondaryTint, 0.62), 0.6, 2.4);
-  spawnMessage(nextRegion.name, x, y - 34, rgba(nextRegion.tint, 0.95));
+  spawnMessage(regionDisplayName(nextRegion), x, y - 34, rgba(nextRegion.tint, 0.95));
   triggerScreenShake(0.2, 10);
   playSound("pickup");
   evaluateAchievements();
@@ -1153,7 +1214,7 @@ function spawnEliteAsteroid(region = getCurrentRegion()) {
 
   spawnRing(elite.x, elite.y, radius * 0.8, 240, rgba(region.tint, 0.82), 0.52, 3.2);
   spawnRing(elite.x, elite.y, radius * 1.15, 160, rgba(region.secondaryTint, 0.5), 0.6, 2);
-  spawnMessage("精英陨石接近", elite.x, elite.y - radius - 18, rgba(region.tint, 0.95));
+  spawnMessage(L("eliteApproach"), elite.x, elite.y - radius - 18, rgba(region.tint, 0.95));
   triggerScreenShake(0.24, 12);
   playSound("explode");
 }
@@ -1328,7 +1389,7 @@ function pauseGame() {
   }
   keys.clear();
   state.paused = true;
-  showOverlay("pause", uiText.pauseTitle, uiText.pauseText, uiText.pauseButton);
+  showOverlay("pause", ui.pauseTitle, ui.pauseText, ui.pauseButton);
 }
 
 function resumeGame() {
@@ -1736,7 +1797,7 @@ function handleCollisions() {
           triggerScreenShake(0.2, 12);
           spawnBurst(state.player.x, state.player.y, 18, ["#8affd1", "#d4fff4", "#62e4ff"]);
           spawnShieldImpactEffect(state.player.x, state.player.y);
-          spawnMessage("SHIELD -1", state.player.x, state.player.y - 34, "#8affd1");
+          spawnMessage(L("shieldMinus"), state.player.x, state.player.y - 34, "#8affd1");
           break;
         }
 
@@ -1746,7 +1807,7 @@ function handleCollisions() {
         state.flashTimer = tuning.hitFlashDuration;
         triggerScreenShake(0.28, 18);
         spawnHullImpactEffect(state.player.x, state.player.y);
-        spawnMessage("HULL -1", state.player.x, state.player.y - 34, "#ff8ea1");
+        spawnMessage(L("hullMinus"), state.player.x, state.player.y - 34, "#ff8ea1");
         playSound("hurt");
         evaluateAchievements();
         if (state.health <= 0) {
@@ -1788,7 +1849,7 @@ function handleCollisions() {
             spawnBurst(asteroid.x, asteroid.y, 42, ["#7fe8ff", "#dce7ff", "#ffd7a1", "#95a5bf"]);
             spawnExplosionEffect(asteroid.x, asteroid.y, asteroid.radius, true);
             spawnRing(asteroid.x, asteroid.y, asteroid.radius * 0.9, 300, rgba(asteroid.mineralTint, 0.85), 0.6, 4);
-            spawnMessage(`精英击破 +${eliteScore}`, asteroid.x, asteroid.y - asteroid.radius * 0.6, rgba(asteroid.mineralTint, 0.95));
+            spawnMessage(L("eliteBreak", eliteScore), asteroid.x, asteroid.y - asteroid.radius * 0.6, rgba(asteroid.mineralTint, 0.95));
             triggerScreenShake(0.36, 20);
           } else {
             state.score += tuning.scoreAsteroid;
@@ -1818,7 +1879,7 @@ function handleCollisions() {
       state.stats.collectedCores += 1;
       spawnBurst(core.x, core.y, 14, ["#8affd1", "#f3fffd", "#62e4ff"]);
       spawnCorePickupEffect(core.x, core.y);
-      spawnMessage("CORE +25", core.x, core.y - 22, "#8affd1");
+      spawnMessage(L("corePlus"), core.x, core.y - 22, "#8affd1");
       playSound("pickup");
       evaluateAchievements();
     }
@@ -1832,12 +1893,12 @@ function handleCollisions() {
         state.shieldCharges = 1;
         spawnBurst(powerUp.x, powerUp.y, 18, ["#8affd1", "#d9fffb", "#62e4ff"]);
         spawnShieldPickupEffect(state.player.x, state.player.y);
-        spawnMessage("SHIELD READY", powerUp.x, powerUp.y - 24, "#8affd1");
+        spawnMessage(L("shieldReady"), powerUp.x, powerUp.y - 24, "#8affd1");
       } else {
         state.doubleShotTimer = tuning.doubleShotDuration;
         spawnBurst(powerUp.x, powerUp.y, 18, ["#ffd7a1", "#ffb59e", "#ff8ea1"]);
         spawnDoubleFirePickupEffect(state.player.x, state.player.y);
-        spawnMessage("DOUBLE FIRE", powerUp.x, powerUp.y - 24, "#ffb59e");
+        spawnMessage(L("doubleFire"), powerUp.x, powerUp.y - 24, "#ffb59e");
       }
       triggerScreenShake(0.12, 8);
       playSound("pickup");
@@ -1968,7 +2029,7 @@ function evaluateAchievements({ silent = false } = {}) {
     unlocked = true;
     if (!silent) {
       spawnMessage(
-        `${profileUi.achievementPrefix}${achievement.label}`,
+        `${profileUi[state.lang].achievementPrefix}${achLabel(achievement)}`,
         state.player.x,
         state.player.y - 48,
         profileUi.achievementColor,
@@ -2003,27 +2064,27 @@ function endGame() {
   recordRunToProfile();
 
   const overlayStatList = [
-    { label: "最终分数", value: String(finalScore) },
-    { label: "存活时间", value: formatDuration(state.stats.survivalTime) },
-    { label: "击毁陨石", value: String(state.stats.destroyedAsteroids) },
-    { label: "回收核心", value: String(state.stats.collectedCores) },
-    { label: "跃迁次数", value: String(state.regionJunctions) },
-    { label: "命中率", value: formatRate(state.stats.shotsHit, state.stats.shotsFired) }
+    { label: L("finalScore"), value: String(finalScore) },
+    { label: L("survivalTime"), value: formatDuration(state.stats.survivalTime) },
+    { label: L("destroyedAsteroids"), value: String(state.stats.destroyedAsteroids) },
+    { label: L("collectedCores"), value: String(state.stats.collectedCores) },
+    { label: L("warps"), value: String(state.regionJunctions) },
+    { label: L("accuracy"), value: formatRate(state.stats.shotsHit, state.stats.shotsFired) }
   ];
 
   if (state.stats.destroyedElites > 0) {
-    overlayStatList.push({ label: "精英击破", value: String(state.stats.destroyedElites) });
+    overlayStatList.push({ label: L("eliteBreakStat"), value: String(state.stats.destroyedElites) });
   }
 
   overlayStatList.push(
-    { label: profileUi.totalRunsLabel, value: String(profile.totals.runs) },
-    { label: profileUi.totalDestroyedLabel, value: String(profile.totals.destroyedAsteroids) }
+    { label: profileUi[state.lang].totalRunsLabel, value: String(profile.totals.runs) },
+    { label: profileUi[state.lang].totalDestroyedLabel, value: String(profile.totals.destroyedAsteroids) }
   );
 
   for (const achievementId of runAchievementUnlocks) {
     const achievement = achievements.find((item) => item.id === achievementId);
     if (achievement) {
-      overlayStatList.push({ label: `${profileUi.statLabelPrefix}${achievement.label}`, value: profileUi.unlockedValue });
+      overlayStatList.push({ label: `${profileUi[state.lang].statLabelPrefix}${achLabel(achievement)}`, value: profileUi[state.lang].unlockedValue });
     }
   }
 
@@ -2031,9 +2092,9 @@ function endGame() {
 
   showOverlay(
     "gameover",
-    state.stats.newBest ? uiText.recordTitle : uiText.gameOverTitle,
-    state.stats.newBest ? uiText.newRecord(finalScore) : uiText.gameOver(finalScore),
-    uiText.restartButton
+    state.stats.newBest ? ui.recordTitle : ui.gameOverTitle,
+    state.stats.newBest ? ui.newRecord(finalScore) : ui.gameOver(finalScore),
+    ui.restartButton
   );
 }
 
@@ -2297,9 +2358,9 @@ function drawRouteChoice() {
     ctx.shadowBlur = 10;
     ctx.fillStyle = "rgba(238,248,255,0.96)";
     ctx.font = '700 13px "Segoe UI", sans-serif';
-    ctx.fillText(gate.label, gateX, gateY - 6);
+    ctx.fillText(regionDisplayName(gate), gateX, gateY - 6);
     ctx.font = '11px "Segoe UI", sans-serif';
-    ctx.fillText(gate.name, gateX, gateY + 12);
+    ctx.fillText(regionDisplayName(gate), gateX, gateY + 12);
     ctx.fillStyle = rgba(gate.tint, 0.9);
     drawWrappedTextLines(gate.descriptionLines, gateX, gateY + radius + 24, 14);
   }
@@ -2321,9 +2382,9 @@ function drawRouteChoiceOverlay() {
   ctx.globalAlpha = 1;
   ctx.fillStyle = "rgba(230,242,255,0.92)";
   ctx.font = '700 15px "Segoe UI", sans-serif';
-  ctx.fillText(`跃迁窗口 ${Math.ceil(state.routeChoice.timer)}s`, cw / 2, Math.max(38, ch * 0.16));
+  ctx.fillText(L("warpWindow", Math.ceil(state.routeChoice.timer)), cw / 2, Math.max(38, ch * 0.16));
   ctx.font = '12px "Segoe UI", sans-serif';
-  ctx.fillText("穿过任意跃迁门选择下一片星域", cw / 2, Math.max(60, ch * 0.16 + 22));
+  ctx.fillText(L("chooseGateHint"), cw / 2, Math.max(60, ch * 0.16 + 22));
   ctx.restore();
 }
 
@@ -3026,7 +3087,7 @@ function drawMinimap(region) {
       ctx.font = '7px "Segoe UI", sans-serif';
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText((g.label || "?").charAt(0), gx, gy);
+      ctx.fillText((state.lang === "en" ? g.label : g.name || g.label).charAt(0), gx, gy);
       ctx.textAlign = "left";
       ctx.textBaseline = "alphabetic";
     }
@@ -3049,35 +3110,35 @@ function drawHudOverlay(region) {
 
   ctx.fillStyle = "rgba(190, 210, 255, 0.9)";
   ctx.font = '12px "Segoe UI", sans-serif';
-  ctx.fillText(`SECTOR ${region.label}`, 28, 38);
-  ctx.fillText(`THREAT x${state.asteroids.length}`, cw - 126, 38);
-  ctx.fillText(`LASER ${state.shootCooldown > 0 ? "COOLDOWN" : "READY"}`, 28, ch - 26);
-  ctx.fillText(`CORE x${state.stats.collectedCores}`, 28, 58);
+  ctx.fillText(`${L("sector")} ${regionDisplayName(region)}`, 28, 38);
+  ctx.fillText(`${L("threat")} x${state.asteroids.length}`, cw - 126, 38);
+  ctx.fillText(`${L("laser")} ${state.shootCooldown > 0 ? L("cooldown") : L("ready")}`, 28, ch - 26);
+  ctx.fillText(`${L("core")} x${state.stats.collectedCores}`, 28, 58);
   ctx.fillStyle = rgba(region.tint, 0.92);
-  ctx.fillText(region.name, 28, 78);
+  ctx.fillText(regionDisplayName(region), 28, 78);
   ctx.fillText(
-    state.routeChoice.active ? `WARP ${Math.ceil(state.routeChoice.timer)}s` : `NEXT ${Math.round(routeProgress * 100)}%`,
+    state.routeChoice.active ? `${L("warp")} ${Math.ceil(state.routeChoice.timer)}s` : `${L("next")} ${Math.round(routeProgress * 100)}%`,
     cw - 126,
     58
   );
 
   if (state.shieldCharges > 0) {
     ctx.fillStyle = "rgba(138, 255, 209, 0.96)";
-    ctx.fillText(`SHIELD x${state.shieldCharges}`, cw - 130, ch - 42);
+    ctx.fillText(`${L("shield")} x${state.shieldCharges}`, cw - 130, ch - 42);
   } else if (state.invulnerabilityTimer > 0) {
     ctx.fillStyle = "rgba(144, 244, 255, 0.95)";
-    ctx.fillText("SHIELDING", cw - 116, ch - 42);
+    ctx.fillText(L("shielding"), cw - 116, ch - 42);
   }
 
   if (state.doubleShotTimer > 0) {
     ctx.fillStyle = "rgba(255, 196, 168, 0.98)";
-    ctx.fillText(`DOUBLE x${Math.ceil(state.doubleShotTimer)}s`, cw - 128, ch - 24);
+    ctx.fillText(`${L("double")} x${Math.ceil(state.doubleShotTimer)}s`, cw - 128, ch - 24);
   }
 
   if (state.paused) {
     ctx.fillStyle = "rgba(224, 237, 255, 0.9)";
     ctx.font = '14px "Segoe UI", sans-serif';
-    ctx.fillText("PAUSED", cw - 88, ch - 24);
+    ctx.fillText(L("paused"), cw - 88, ch - 24);
   }
   drawMinimap(region);
   ctx.restore();
@@ -3430,7 +3491,7 @@ if (mobileViewportQuery.addEventListener) {
 syncLandscapeUi();
 resizeCanvas();
 renderSkinPreviews();
-showOverlay("start", uiText.startTitle, uiText.startText, uiText.startButton);
+showOverlay("start", ui.startTitle, ui.startText, ui.startButton);
 state.stars = Array.from({ length: tuning.starCount }, () => makeStar(true));
 draw();
 requestAnimationFrame(loop);
