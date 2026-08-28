@@ -126,6 +126,56 @@ window.starRingConfig = {
       coreIntervalMultiplier: 0.9,
       powerUpIntervalMultiplier: 0.58,
       eliteChance: 0.38
+    },
+    vortex: {
+      name: "引力涡流区",
+      label: "VORTEX",
+      description: "空间被多股引力涡流扭曲，陨石轨迹会被弯折，注意预判。",
+      tint: "114,240,255",
+      secondaryTint: "98,228,255",
+      asteroidSpawnMultiplier: 1,
+      asteroidSpeedMultiplier: 1,
+      coreIntervalMultiplier: 1,
+      powerUpIntervalMultiplier: 1,
+      eliteChance: 0.3,
+      mechanic: { type: "vortex", centers: 3, radius: 200, strength: 140 }
+    },
+    nebula: {
+      name: "静默星云",
+      label: "NEBULA",
+      description: "浓密星云遮蔽视野，但补给刷新更快，以视野换补给。",
+      tint: "118,128,158",
+      secondaryTint: "138,150,190",
+      asteroidSpawnMultiplier: 1.05,
+      asteroidSpeedMultiplier: 0.95,
+      coreIntervalMultiplier: 0.95,
+      powerUpIntervalMultiplier: 0.6,
+      eliteChance: 0.25,
+      mechanic: { type: "nebula", hazeBoost: 0.18, vignetteBoost: 0.12 }
+    },
+    aurora: {
+      name: "极光带",
+      label: "AURORA",
+      description: "极光在星空中流动，节奏舒缓，适合重整航线。",
+      tint: "138,120,255",
+      secondaryTint: "98,228,255",
+      asteroidSpawnMultiplier: 1,
+      asteroidSpeedMultiplier: 0.95,
+      coreIntervalMultiplier: 1,
+      powerUpIntervalMultiplier: 1.05,
+      eliteChance: 0.2
+    },
+    forge: {
+      name: "恒星熔炉",
+      label: "FORGE",
+      description: "恒星活动剧烈，陨石密而快，精英频繁出没。",
+      tint: "255,166,98",
+      secondaryTint: "255,96,96",
+      asteroidSpawnMultiplier: 0.72,
+      asteroidSpeedMultiplier: 1.18,
+      coreIntervalMultiplier: 1,
+      powerUpIntervalMultiplier: 1,
+      eliteChance: 0.5
     }
   },
 
