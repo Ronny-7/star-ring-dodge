@@ -149,46 +149,54 @@
   <div class="settings-overlay hidden" id="settings-overlay">
     <div class="settings-panel">
       <div class="settings-header">
-        <span class="panel-label">SETTINGS</span>
+        <span class="panel-label" id="panel-label">SETTINGS</span>
         <button class="settings-close" type="button" aria-label="关闭">✕</button>
       </div>
 
       <div class="settings-section">
-        <p class="settings-section-title">音频</p>
+        <p class="settings-section-title" id="settings-audio-title">音频</p>
         <div class="settings-row">
-          <span>背景音乐</span>
+          <span id="settings-music-label">背景音乐</span>
           <button class="toggle-btn active" id="settings-music-btn" type="button">ON</button>
         </div>
         <div class="settings-row">
-          <span>音效</span>
+          <span id="settings-sfx-label">音效</span>
           <button class="toggle-btn active" id="settings-sfx-btn" type="button">ON</button>
         </div>
       </div>
 
       <div class="settings-section">
-        <p class="settings-section-title">飞船外形</p>
+        <p class="settings-section-title" id="settings-ship-title">飞船外形</p>
         <div class="skin-grid">
           <button class="skin-card active" data-skin="default" type="button">
             <canvas class="skin-preview" width="72" height="72"></canvas>
-            <span>战斗机</span>
+            <span id="skin-fighter">战斗机</span>
           </button>
           <button class="skin-card" data-skin="delta" type="button">
             <canvas class="skin-preview" width="72" height="72"></canvas>
-            <span>三角翼</span>
+            <span id="skin-delta">三角翼</span>
           </button>
           <button class="skin-card" data-skin="saucer" type="button">
             <canvas class="skin-preview" width="72" height="72"></canvas>
-            <span>飞碟</span>
+            <span id="skin-saucer">飞碟</span>
           </button>
         </div>
       </div>
 
       <div class="settings-section">
-        <p class="settings-section-title">飞船颜色</p>
+        <p class="settings-section-title" id="settings-color-title">飞船颜色</p>
         <div class="color-row">
           <button class="color-swatch active" data-color="blue" type="button" aria-label="蓝色" style="--c:#62e4ff"></button>
           <button class="color-swatch" data-color="red" type="button" aria-label="红色" style="--c:#ff6f87"></button>
           <button class="color-swatch" data-color="green" type="button" aria-label="绿色" style="--c:#8affd1"></button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <p class="settings-section-title" id="settings-language-title">语言</p>
+        <div class="settings-row">
+          <button class="lang-card active" data-lang="zh" type="button">中文</button>
+          <button class="lang-card" data-lang="en" type="button">English</button>
         </div>
       </div>
     </div>

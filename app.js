@@ -762,6 +762,7 @@ let pausedBeforeSettings = false;
 
 function openSettings() {
   settingsOverlay.classList.remove("hidden");
+  applyLanguageToDOM();
   pausedBeforeSettings = state.paused;
   if (state.running && !state.paused && !state.gameOver) {
     state.paused = true;
@@ -3393,6 +3394,10 @@ if (orientationButton) {
 if (settingsButton) {
   settingsButton.addEventListener("click", openSettings);
 }
+
+document.querySelectorAll("[data-lang]").forEach((button) => {
+  button.addEventListener("click", () => setLanguage(button.dataset.lang));
+});
 
 if (settingsCloseButton) {
   settingsCloseButton.addEventListener("click", closeSettings);
