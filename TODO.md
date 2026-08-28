@@ -2,7 +2,7 @@
 
 记录已讨论但尚未实现的玩法方向。完成一项后从下面移除，并同步 `README.md` 与 `index.html` 的版本标签。
 
-基线版本：v3.6
+基线版本：v3.7
 
 已完成：**Boss 战 / 精英陨石**（v3.3）—— 精英陨石带血量与追踪、击破分裂、按星域概率出现，撞击玩家改为弹开而非消失。
 
@@ -11,6 +11,8 @@
 已完成：**新星域模板**（v3.5）—— 在 `config.js` 的 `regions` 由 4 个扩展为 8 个，新增引力涡流、静默星云、极光带、恒星熔炉四区。关键实现点：切区触发 `app.js:1038`、涡流引力加速度 `app.js:1607`、涡心渲染 `app.js:2085`、星云暗化 `app.js:2130 / app.js:3017`、`config.js` 新增 4 区配置。
 
 已完成：**小地图 / 雷达**（v3.6）—— 屏幕左下角常驻雷达，按世界比例缩放显示玩家、视口框、跃迁门（强调）、陨石与道具；移动端复用 mobileViewportQuery 上移避让手势摇杆；关键实现点：drawMinimap()（app.js 新增）、HUD 接入（drawHudOverlay 内调用）、config.js 新增 minimap 调参。
+
+已完成：**中英文语言切换**（v3.7）—— 设置弹窗新增语言分区，默认中文，覆盖全部 UI 并持久化；关键实现点：config.js 双语 uiText/profileUi + i18n 表、app.js L()/setLanguage()/applyLanguageToDOM() 与星域/成就双语帮助函数、index.html 语言切换按钮。
 
 ---
 
