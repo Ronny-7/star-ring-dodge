@@ -2114,12 +2114,20 @@ function getBackgroundGradient() {
   return backgroundGradient;
 }
 
+function getRegionVisualBoosts(region) {
+  const mechanic = region && region.mechanic;
+  if (mechanic && mechanic.type === "nebula") {
+    return { hazeBoost: mechanic.hazeBoost || 0, vignetteBoost: mechanic.vignetteBoost || 0 };
+  }
+  return { hazeBoost: 0, vignetteBoost: 0 };
+}
+
 function drawBackground(region) {
   ctx.fillStyle = getBackgroundGradient();
   ctx.fillRect(0, 0, cw, ch);
 
   const drift = state.regionTimer * 18;
-  const haze = getTuningValue("visualHazeStrength", 0.14);
+  const haze = getTuningValue("visualHazeStrength", 0.14) + getRegionVisualBoosts(region).hazeBoost;
   const playerDx = (state.player.x - (state.camera.x + cw / 2)) * 0.025;
   const playerDy = (state.player.y - (state.camera.y + ch / 2)) * 0.018;
   const glowA = ctx.createRadialGradient(180 + Math.sin(state.pulseTime * 0.35) * 34 - playerDx, 120 + drift % 180 - playerDy, 40, 180, 120, 340);
@@ -3006,7 +3014,7 @@ function drawHudOverlay(region) {
 
 function drawVignette() {
   const region = getCurrentRegion();
-  const tint = getTuningValue("visualVignetteTint", 0.16);
+  const tint = getTuningValue("visualVignetteTint", 0.16) + getRegionVisualBoosts(region).vignetteBoost;
   const vignette = ctx.createRadialGradient(
     cw / 2,
     ch / 2,
