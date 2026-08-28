@@ -2970,6 +2970,76 @@ function drawLasers() {
   }
 }
 
+function drawMinimap(region) {
+  const size = getTuningValue("minimapSize", 150);
+  const margin = getTuningValue("minimapMargin", 14);
+  const mobileClearance = getTuningValue("minimapMobileClearance", 140);
+  const worldW = Math.max(1, state.world.width);
+  const worldH = Math.max(1, state.world.height);
+  const mobile = mobileViewportQuery.matches;
+  const left = margin;
+  const top = mobile ? (ch - mobileClearance - size) : (ch - margin - size);
+
+  ctx.save();
+
+  ctx.fillStyle = "rgba(8,16,28,0.42)";
+  ctx.fillRect(left, top, size, size);
+  ctx.strokeStyle = rgba(region.tint, 0.14);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(left + 0.5, top + 0.5, size - 1, size - 1);
+
+  const toX = (wx) => left + (wx / worldW) * size;
+  const toY = (wy) => top + (wy / worldH) * size;
+
+  ctx.strokeStyle = rgba(region.tint, 0.6);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(toX(state.camera.x), toY(state.camera.y), (cw / worldW) * size, (ch / worldH) * size);
+
+  for (const a of state.asteroids) {
+    ctx.fillStyle = a.elite ? "rgba(255,120,140,0.95)" : "rgba(200,214,240,0.5)";
+    ctx.beginPath();
+    ctx.arc(toX(a.x), toY(a.y), a.elite ? 2.2 : 1.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = "rgba(138,255,209,0.85)";
+  for (const p of state.powerUps) {
+    ctx.beginPath();
+    ctx.arc(toX(p.x), toY(p.y), 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (state.routeChoice.active) {
+    for (const g of state.routeChoice.gates) {
+      const gx = toX(g.x);
+      const gy = toY(g.y);
+      ctx.fillStyle = rgba(g.tint, 0.95);
+      ctx.beginPath();
+      ctx.arc(gx, gy, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = rgba(g.tint, 0.9);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(gx, gy, 5.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#0b1320";
+      ctx.font = '7px "Segoe UI", sans-serif';
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText((g.label || "?").charAt(0), gx, gy);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+    }
+  }
+
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.beginPath();
+  ctx.arc(toX(state.player.x), toY(state.player.y), 2.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
 function drawHudOverlay(region) {
   const routeProgress = Math.min(1, state.regionTimer / tuning.routeChoiceInterval);
   ctx.save();
@@ -3009,6 +3079,7 @@ function drawHudOverlay(region) {
     ctx.font = '14px "Segoe UI", sans-serif';
     ctx.fillText("PAUSED", cw - 88, ch - 24);
   }
+  drawMinimap(region);
   ctx.restore();
 }
 
