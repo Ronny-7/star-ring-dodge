@@ -1598,10 +1598,13 @@ function moveAsteroids(dt) {
   let alive = 0;
   const padding = getTuningValue("asteroidCullPadding", 160);
   const elitePadding = getTuningValue("eliteCullPadding", 560);
+  const vortexRegion = getCurrentRegion();
+  const vortexMechanic = vortexRegion.mechanic && vortexRegion.mechanic.type === "vortex" ? vortexRegion.mechanic : null;
   for (const asteroid of state.asteroids) {
     if (asteroid.elite) {
       steerEliteAsteroid(asteroid, dt);
     }
+    applyVortexForces(asteroid, vortexMechanic, dt);
     asteroid.x += asteroid.vx * dt;
     asteroid.y += asteroid.vy * dt;
     asteroid.rotation += asteroid.spin;
@@ -1611,6 +1614,31 @@ function moveAsteroids(dt) {
     }
   }
   state.asteroids.length = alive;
+}
+
+function applyVortexForces(asteroid, mechanic, dt) {
+  if (!mechanic || !state.vortexCenters.length) return;
+  const radius = mechanic.radius || 200;
+  const strength = mechanic.strength || 140;
+  for (const center of state.vortexCenters) {
+    const dx = asteroid.x - center.x;
+    const dy = asteroid.y - center.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist >= radius || dist < 0.001) continue;
+    const falloff = 1 - dist / radius;
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const tx = -ny * center.spin;
+    const ty = nx * center.spin;
+    let rx = nx * falloff * strength;
+    let ry = ny * falloff * strength;
+    if (dist < radius * 0.35) {
+      rx = -nx * falloff * strength * 0.8;
+      ry = -ny * falloff * strength * 0.8;
+    }
+    asteroid.vx += (rx + tx * falloff * strength) * dt;
+    asteroid.vy += (ry + ty * falloff * strength) * dt;
+  }
 }
 
 function moveLasers(dt) {
@@ -2009,6 +2037,33 @@ function endGame() {
   );
 }
 
+function drawVortexCenters() {
+  if (!state.vortexCenters.length) return;
+  const region = getCurrentRegion();
+  const mechanic = region.mechanic;
+  if (!mechanic || mechanic.type !== "vortex") return;
+  const radius = mechanic.radius || 200;
+  for (const center of state.vortexCenters) {
+    const t = state.regionTimer * 0.8 + center.phase;
+    ctx.save();
+    ctx.translate(center.x, center.y);
+    ctx.rotate(t * center.spin);
+    ctx.strokeStyle = rgba(region.secondaryTint, 0.5);
+    ctx.lineWidth = 1.5;
+    for (let ring = 0; ring < 3; ring += 1) {
+      const r = radius * (0.3 + ring * 0.28);
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 1.5);
+      ctx.stroke();
+    }
+    ctx.fillStyle = rgba(region.tint, 0.7);
+    ctx.beginPath();
+    ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 function draw() {
   const region = getCurrentRegion();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -2027,6 +2082,7 @@ function draw() {
   ctx.save();
   ctx.translate(-state.camera.x, -state.camera.y);
   drawRouteChoice();
+  drawVortexCenters();
   drawCores();
   drawPowerUps();
   drawParticles();
