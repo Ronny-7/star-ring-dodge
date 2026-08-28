@@ -183,36 +183,95 @@ window.starRingConfig = {
   },
 
   uiText: {
-    startTitle: "按空格开始",
-    startText: "方向键或 WASD 移动，J 发射激光，P 或 Esc 暂停。拾取蓝色能量核得分，存活后选择跃迁门进入不同星域。",
-    startButton: "开始游戏",
-    pauseTitle: "已暂停",
-    pauseText: "按 P、Esc 或点击按钮继续。",
-    pauseButton: "继续游戏",
-    recordTitle: "刷新纪录",
-    gameOverTitle: "本局结束",
-    restartButton: "再来一局",
-    newRecord: (score) => `你创下了 ${score} 分的新纪录，按空格可以立即再来一局。`,
-    gameOver: (score) => `你的分数是 ${score}。按空格可以立即重开。`
+    zh: {
+      startTitle: "按空格开始",
+      startText: "方向键或 WASD 移动，J 发射激光，P 或 Esc 暂停。拾取蓝色能量核得分，存活后选择跃迁门进入不同星域。",
+      startButton: "开始游戏",
+      pauseTitle: "已暂停",
+      pauseText: "按 P、Esc 或点击按钮继续。",
+      pauseButton: "继续游戏",
+      recordTitle: "刷新纪录",
+      gameOverTitle: "本局结束",
+      restartButton: "再来一局",
+      newRecord: (score) => `你创下了 ${score} 分的新纪录，按空格可以立即再来一局。`,
+      gameOver: (score) => `你的分数是 ${score}。按空格可以立即重开。`
+    },
+    en: {
+      startTitle: "Press Space to Start",
+      startText: "Move with arrows or WASD, J fires laser, P or Esc pauses. Collect blue energy cores for score, then pick a warp gate to enter a new sector.",
+      startButton: "Start Game",
+      pauseTitle: "Paused",
+      pauseText: "Press P, Esc, or the button to continue.",
+      pauseButton: "Resume",
+      recordTitle: "New Record",
+      gameOverTitle: "Game Over",
+      restartButton: "Play Again",
+      newRecord: (score) => `You set a new record of ${score}. Press Space to replay.`,
+      gameOver: (score) => `Your score is ${score}. Press Space to restart.`
+    }
   },
 
   profileUi: {
-    achievementPrefix: "成就达成·",
     achievementColor: "#ffd76a",
     toastLife: 1.6,
-    statLabelPrefix: "成就·",
-    unlockedValue: "新达成",
-    totalRunsLabel: "累计局数",
-    totalDestroyedLabel: "累计击毁"
+    zh: {
+      achievementPrefix: "成就达成·",
+      statLabelPrefix: "成就·",
+      unlockedValue: "新达成",
+      totalRunsLabel: "累计局数",
+      totalDestroyedLabel: "累计击毁"
+    },
+    en: {
+      achievementPrefix: "Achievement: ",
+      statLabelPrefix: "Ach: ",
+      unlockedValue: "Unlocked",
+      totalRunsLabel: "Total Runs",
+      totalDestroyedLabel: "Total Destroyed"
+    }
   },
 
   achievements: [
-    { id: "first-warp", label: "初次跃迁", scope: "total", metric: "warps", threshold: 1 },
-    { id: "warp-runner", label: "连续跃迁", scope: "run", metric: "regionJunctions", threshold: 5 },
-    { id: "sharpshooter", label: "神射手", scope: "run", metric: "accuracy", threshold: 80 },
-    { id: "untouchable", label: "完好无损", scope: "run", metric: "noDamageSurvival", threshold: 120 },
-    { id: "asteroid-bane", label: "陨石克星", scope: "total", metric: "destroyedAsteroids", threshold: 100 },
-    { id: "core-collector", label: "核心收藏家", scope: "total", metric: "collectedCores", threshold: 50 },
-    { id: "regular", label: "常客", scope: "total", metric: "runs", threshold: 20 }
-  ]
+    { id: "first-warp", label: "初次跃迁", labelEn: "First Warp", scope: "total", metric: "warps", threshold: 1 },
+    { id: "warp-runner", label: "连续跃迁", labelEn: "Warp Runner", scope: "run", metric: "regionJunctions", threshold: 5 },
+    { id: "sharpshooter", label: "神射手", labelEn: "Sharpshooter", scope: "run", metric: "accuracy", threshold: 80 },
+    { id: "untouchable", label: "完好无损", labelEn: "Untouchable", scope: "run", metric: "noDamageSurvival", threshold: 120 },
+    { id: "asteroid-bane", label: "陨石克星", labelEn: "Asteroid Bane", scope: "total", metric: "destroyedAsteroids", threshold: 100 },
+    { id: "core-collector", label: "核心收藏家", labelEn: "Core Collector", scope: "total", metric: "collectedCores", threshold: 50 },
+    { id: "regular", label: "常客", labelEn: "Regular", scope: "total", metric: "runs", threshold: 20 }
+  ],
+
+  i18n: {
+    zh: {
+      sector: "星域", threat: "威胁", laser: "激光", core: "核心", shield: "护盾", double: "双发",
+      paused: "暂停", ready: "就绪", cooldown: "冷却", warp: "跃迁", next: "下一区", shielding: "护盾中",
+      warpWindow: (s) => `跃迁窗口 ${s}s`,
+      chooseGate: "选择跃迁门",
+      chooseGateHint: "穿过任意跃迁门选择下一片星域",
+      eliteApproach: "精英陨石接近",
+      eliteBreak: (n) => `精英击破 +${n}`,
+      shieldMinus: "护盾 -1", hullMinus: "船体 -1", corePlus: "核心 +25",
+      shieldReady: "护盾就绪", doubleFire: "双发火力",
+      finalScore: "最终分数", survivalTime: "存活时间", destroyedAsteroids: "击毁陨石",
+      collectedCores: "回收核心", warps: "跃迁次数", accuracy: "命中率", eliteBreakStat: "精英击破",
+      settings: "设置", audio: "音频", music: "背景音乐", sfx: "音效",
+      ship: "飞船外形", fighter: "战斗机", delta: "三角翼", saucer: "飞碟",
+      shipColor: "飞船颜色", language: "语言", on: "开", off: "关", exit: "退出", landscape: "横屏"
+    },
+    en: {
+      sector: "SECTOR", threat: "THREAT", laser: "LASER", core: "CORE", shield: "SHIELD", double: "DOUBLE",
+      paused: "PAUSED", ready: "READY", cooldown: "COOLDOWN", warp: "WARP", next: "NEXT", shielding: "SHIELDING",
+      warpWindow: (s) => `WARP ${s}s`,
+      chooseGate: "Choose a warp gate",
+      chooseGateHint: "Cross any warp gate to pick the next sector",
+      eliteApproach: "Elite asteroid near",
+      eliteBreak: (n) => `Elite down +${n}`,
+      shieldMinus: "SHIELD -1", hullMinus: "HULL -1", corePlus: "CORE +25",
+      shieldReady: "SHIELD READY", doubleFire: "DOUBLE FIRE",
+      finalScore: "Final Score", survivalTime: "Survival", destroyedAsteroids: "Asteroids",
+      collectedCores: "Cores", warps: "Warps", accuracy: "Accuracy", eliteBreakStat: "Elites",
+      settings: "SETTINGS", audio: "Audio", music: "Music", sfx: "SFX",
+      ship: "Ship", fighter: "Fighter", delta: "Delta", saucer: "Saucer",
+      shipColor: "Ship Color", language: "Language", on: "ON", off: "OFF", exit: "Exit", landscape: "Landscape"
+    }
+  }
 };
