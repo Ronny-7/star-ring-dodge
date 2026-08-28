@@ -75,7 +75,10 @@ window.starRingConfig = {
     visualShadowOffset: 8,
     visualShadowAlpha: 0.22,
     visualLaserTrail: 0.58,
-    visualVignetteTint: 0.16
+    visualVignetteTint: 0.16,
+    minimapSize: 150,
+    minimapMargin: 14,
+    minimapMobileClearance: 140
   },
 
   regions: {
