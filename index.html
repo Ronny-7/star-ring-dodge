@@ -19,23 +19,23 @@
       <div class="brand-block">
         <p class="kicker">Arcade / Survival Run</p>
         <div class="brand-row">
-          <h1>星环闪避</h1>
+          <h1 id="game-title">星环闪避</h1>
           <span class="build-tag">v3.7</span>
         </div>
-        <p class="subtitle">在流动星域中机动穿梭，规避陨石流，回收高能核心，并选择跃迁门探索下一片区域。</p>
+        <p class="subtitle" id="game-subtitle">在流动星域中机动穿梭，规避陨石流，回收高能核心，并选择跃迁门探索下一片区域。</p>
       </div>
 
       <div class="top-stats">
         <article class="metric-card">
-          <span class="metric-label">分数</span>
+          <span class="metric-label" id="score-label">分数</span>
           <strong class="metric-value" id="score">0</strong>
         </article>
         <article class="metric-card">
-          <span class="metric-label">生命</span>
+          <span class="metric-label" id="health-label">生命</span>
           <strong class="metric-value" id="health">3</strong>
         </article>
         <article class="metric-card">
-          <span class="metric-label">最高</span>
+          <span class="metric-label" id="best-label">最高</span>
           <strong class="metric-value" id="best">0</strong>
         </article>
       </div>
@@ -44,34 +44,34 @@
     <section class="stage-layout">
       <aside class="side-panel">
         <section class="info-panel">
-          <p class="panel-label">任务概要</p>
+          <p class="panel-label" id="mission-overview">任务概要</p>
           <div class="mission-stack">
             <div class="mission-item">
               <span class="mission-index" style="--i: 0">01</span>
               <div>
-                <h2>探索</h2>
-                <p>穿越流动星域，定期选择跃迁门进入风险与收益不同的区域。</p>
+                <h2 id="mission-1-title">探索</h2>
+                <p id="mission-1-desc">穿越流动星域，定期选择跃迁门进入风险与收益不同的区域。</p>
               </div>
             </div>
             <div class="mission-item">
               <span class="mission-index" style="--i: 1">02</span>
               <div>
-                <h2>回收</h2>
-                <p>接触蓝色能量核以获得高额分数补给，不同星域会改变资源节奏。</p>
+                <h2 id="mission-2-title">回收</h2>
+                <p id="mission-2-desc">接触蓝色能量核以获得高额分数补给，不同星域会改变资源节奏。</p>
               </div>
             </div>
             <div class="mission-item">
               <span class="mission-index" style="--i: 2">03</span>
               <div>
-                <h2>火力</h2>
-                <p>使用激光清除障碍，优先处理大型陨石，为跃迁选择留出空间。</p>
+                <h2 id="mission-3-title">火力</h2>
+                <p id="mission-3-desc">使用激光清除障碍，优先处理大型陨石，为跃迁选择留出空间。</p>
               </div>
             </div>
           </div>
         </section>
 
         <section class="control-panel">
-          <p class="panel-label">操作</p>
+          <p class="panel-label" id="controls-label">操作</p>
           <div class="key-grid wasd-grid">
             <div class="key empty"></div>
             <div class="key move-key">W</div>
@@ -88,9 +88,9 @@
             <div class="key empty"></div>
           </div>
           <div class="control-notes">
-            <p>方向键或 WASD 移动</p>
-            <p>J 发射激光</p>
-            <p>Space 开始或重开，P 或 Esc 暂停</p>
+            <p id="control-hint-1">方向键或 WASD 移动</p>
+            <p id="control-hint-2">J 发射激光</p>
+            <p id="control-hint-3">Space 开始或重开，P 或 Esc 暂停</p>
           </div>
         </section>
       </aside>
@@ -99,7 +99,7 @@
         <div class="stage-frame">
           <div class="stage-head">
             <div>
-              <p class="panel-label">战术视图</p>
+              <p class="panel-label" id="tactical-view-label">战术视图</p>
               <p class="stage-caption">Hazard Field Monitor</p>
             </div>
             <div class="signal-group" aria-hidden="true">
@@ -115,16 +115,16 @@
             <canvas id="game" width="960" height="600" aria-label="游戏画面"></canvas>
             <div class="scanlines" aria-hidden="true"></div>
             <div class="orientation-hint" id="orientation-hint" data-orientation-hint>横屏游玩视野更宽</div>
-            <div class="touch-controls" aria-label="触控操作">
+            <div class="touch-controls" id="touch-controls-wrap" aria-label="触控操作">
               <div class="gesture-pad" data-gesture-pad aria-label="拖动移动">
                 <div class="gesture-ring">
                   <div class="gesture-thumb"></div>
                 </div>
-                <span>拖动移动</span>
+                <span id="touch-drag-label">拖动移动</span>
               </div>
               <div class="touch-actions">
-                <button class="touch-button touch-fire" type="button" data-touch-action="fire" aria-label="发射">开火</button>
-                <button class="touch-button" type="button" data-touch-action="pause" aria-label="暂停">暂停</button>
+                <button class="touch-button touch-fire" type="button" data-touch-action="fire" aria-label="发射" id="touch-fire-btn">开火</button>
+                <button class="touch-button" type="button" data-touch-action="pause" aria-label="暂停" id="touch-pause-btn">暂停</button>
               </div>
             </div>
 

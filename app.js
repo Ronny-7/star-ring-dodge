@@ -50,6 +50,32 @@ function setLanguage(lang) {
         lastGameOver.newBest ? ui.newRecord(lastGameOver.score) : ui.gameOver(lastGameOver.score),
         ui.restartButton
       );
+      if (lastOverlayStatValues.length) {
+        const v = lastOverlayStatValues;
+        const stats = [
+          { label: L("finalScore"), value: v[0] },
+          { label: L("survivalTime"), value: v[1] },
+          { label: L("destroyedAsteroids"), value: v[2] },
+          { label: L("collectedCores"), value: v[3] },
+          { label: L("warps"), value: v[4] },
+          { label: L("accuracy"), value: v[5] }
+        ];
+        let idx = 6;
+        if (state.stats.destroyedElites > 0) {
+          stats.push({ label: L("eliteBreakStat"), value: v[idx++] });
+        }
+        stats.push(
+          { label: profileUi[state.lang].totalRunsLabel, value: v[idx++] },
+          { label: profileUi[state.lang].totalDestroyedLabel, value: v[idx++] }
+        );
+        for (const achievementId of runAchievementUnlocks) {
+          const achievement = achievements.find((item) => item.id === achievementId);
+          if (achievement) {
+            stats.push({ label: `${profileUi[state.lang].statLabelPrefix}${achLabel(achievement)}`, value: v[idx++] });
+          }
+        }
+        renderOverlayStats(stats, lastOverlayIsRecord);
+      }
     }
   }
 }
@@ -59,6 +85,36 @@ function applyLanguageToDOM() {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
   };
+  const setAttr = (id, attr, text) => {
+    const el = document.getElementById(id);
+    if (el) el.setAttribute(attr, text);
+  };
+  document.title = L("gameTitle");
+  set("game-title", L("gameTitle"));
+  set("game-subtitle", L("gameSubtitle"));
+  set("score-label", L("scoreLabel"));
+  set("health-label", L("healthLabel"));
+  set("best-label", L("bestLabel"));
+  set("mission-overview", L("missionOverview"));
+  set("mission-1-title", L("mission1Title"));
+  set("mission-1-desc", L("mission1Desc"));
+  set("mission-2-title", L("mission2Title"));
+  set("mission-2-desc", L("mission2Desc"));
+  set("mission-3-title", L("mission3Title"));
+  set("mission-3-desc", L("mission3Desc"));
+  set("controls-label", L("controlsLabel"));
+  set("control-hint-1", L("controlHint1"));
+  set("control-hint-2", L("controlHint2"));
+  set("control-hint-3", L("controlHint3"));
+  set("tactical-view-label", L("tacticalView"));
+  set("orientation-hint", L("orientationHint"));
+  set("touch-drag-label", L("touchDrag"));
+  set("touch-fire-btn", L("touchFire"));
+  set("touch-pause-btn", L("touchPause"));
+  set("overlay-record", L("newRecord"));
+  setAttr("game", "aria-label", L("gameTitle"));
+  setAttr("settings-button", "aria-label", L("settings"));
+  setAttr("touch-controls-wrap", "aria-label", L("touchDrag"));
   set("panel-label", L("settings"));
   set("settings-audio-title", L("audio"));
   set("settings-music-label", L("music"));
@@ -69,7 +125,6 @@ function applyLanguageToDOM() {
   set("skin-saucer", L("saucer"));
   set("settings-color-title", L("shipColor"));
   set("settings-language-title", L("language"));
-  set("orientation-hint", L("orientationHint"));
   syncToggleButton(musicBtn, musicEnabled);
   syncToggleButton(sfxBtn, sfxEnabled);
 }
@@ -580,6 +635,8 @@ let profile = loadProfile();
 let runAchievementUnlocks = [];
 let overlayMode = "start";
 let lastGameOver = { score: 0, newBest: false };
+let lastOverlayStatValues = [];
+let lastOverlayIsRecord = false;
 const hudCache = {
   score: null,
   health: null,
@@ -2107,6 +2164,8 @@ function endGame() {
   }
 
   renderOverlayStats(overlayStatList, state.stats.newBest);
+  lastOverlayStatValues = overlayStatList.map((s) => s.value);
+  lastOverlayIsRecord = state.stats.newBest;
 
   showOverlay(
     "gameover",
