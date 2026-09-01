@@ -13,7 +13,12 @@ function L(key, ...args) {
 
 function regionDisplayName(r) {
   if (!r) return "";
-  return state.lang === "en" ? (r.label || r.name) : (r.name || r.label);
+  return state.lang === "en" ? (r.nameEn || r.label || r.name) : (r.name || r.label || r.nameEn);
+}
+
+function regionDescription(r) {
+  if (!r) return "";
+  return state.lang === "en" ? (r.descriptionEn || r.description || "") : (r.description || r.descriptionEn || "");
 }
 
 function achLabel(a) {
@@ -38,6 +43,7 @@ function setLanguage(lang) {
   }
   applyLanguageToDOM();
   syncLandscapeUi();
+  refreshRouteGatePresentation();
   if (overlay && !overlay.classList.contains("hidden")) {
     if (overlayMode === "start") {
       showOverlay("start", ui.startTitle, ui.startText, ui.startButton);
@@ -114,6 +120,7 @@ function applyLanguageToDOM() {
   set("overlay-record", L("newRecord"));
   setAttr("game", "aria-label", L("gameTitle"));
   setAttr("settings-button", "aria-label", L("settings"));
+  setAttr("settings-close-button", "aria-label", L("close"));
   setAttr("touch-controls-wrap", "aria-label", L("touchDrag"));
   set("panel-label", L("settings"));
   set("settings-audio-title", L("audio"));
@@ -127,6 +134,12 @@ function applyLanguageToDOM() {
   set("settings-language-title", L("language"));
   syncToggleButton(musicBtn, musicEnabled);
   syncToggleButton(sfxBtn, sfxEnabled);
+  document.querySelectorAll(".skin-card").forEach((el) => {
+    el.setAttribute("aria-pressed", String(el.dataset.skin === activeSkin));
+  });
+  document.querySelectorAll(".color-swatch").forEach((el) => {
+    el.setAttribute("aria-pressed", String(el.dataset.color === activeColor));
+  });
 }
 
 
@@ -250,6 +263,7 @@ function stopMusic() {
 function syncToggleButton(button, enabled) {
   button.textContent = enabled ? L("on") : L("off");
   button.classList.toggle("active", enabled);
+  button.setAttribute("aria-pressed", String(enabled));
 }
 
 function toggleMusic() {
@@ -509,7 +523,8 @@ syncLandscapeUi();
 
 function readBestScore() {
   try {
-    return Number(localStorage.getItem(bestKey) || 0);
+    const score = Number(localStorage.getItem(bestKey) || 0);
+    return Number.isFinite(score) && score >= 0 ? score : 0;
   } catch {
     return 0;
   }
@@ -540,6 +555,7 @@ function formatRate(hits, shots) {
 function createDefaultProfile() {
   return {
     version: 1,
+    lang: "zh",
     totals: {
       runs: 0,
       destroyedAsteroids: 0,
@@ -561,6 +577,7 @@ function normalizeProfile(raw) {
   const num = (value) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0);
   return {
     version: 1,
+    lang: raw.lang === "en" ? "en" : "zh",
     totals: {
       runs: num(totals.runs),
       destroyedAsteroids: num(totals.destroyedAsteroids),
@@ -833,29 +850,83 @@ function hideOverlay() {
 const settingsOverlay = document.getElementById("settings-overlay");
 
 let pausedBeforeSettings = false;
+let settingsReturnFocus = null;
+
+function getSettingsFocusableElements() {
+  return Array.from(settingsOverlay.querySelectorAll("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex=\"-1\"])"))
+    .filter((element) => element.getClientRects().length > 0);
+}
+
+function handleSettingsKeydown(event) {
+  if (settingsOverlay.classList.contains("hidden")) {
+    return false;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeSettings();
+    return true;
+  }
+  if (event.key !== "Tab") {
+    return true;
+  }
+
+  const focusable = getSettingsFocusableElements();
+  if (!focusable.length) {
+    event.preventDefault();
+    return true;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+  return true;
+}
 
 function openSettings() {
+  if (!settingsOverlay.classList.contains("hidden")) {
+    return;
+  }
+  settingsReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : settingsButton;
   settingsOverlay.classList.remove("hidden");
+  settingsOverlay.setAttribute("aria-hidden", "false");
+  settingsButton.setAttribute("aria-expanded", "true");
   applyLanguageToDOM();
   pausedBeforeSettings = state.paused;
   if (state.running && !state.paused && !state.gameOver) {
     state.paused = true;
     keys.clear();
   }
+  window.requestAnimationFrame(() => settingsCloseButton?.focus());
 }
 
 function closeSettings() {
+  if (settingsOverlay.classList.contains("hidden")) {
+    return;
+  }
   settingsOverlay.classList.add("hidden");
+  settingsOverlay.setAttribute("aria-hidden", "true");
+  settingsButton.setAttribute("aria-expanded", "false");
   if (state.running && state.paused && !state.gameOver && !pausedBeforeSettings) {
     state.paused = false;
     state.lastTime = 0;
   }
+  if (settingsReturnFocus instanceof HTMLElement && document.contains(settingsReturnFocus)) {
+    settingsReturnFocus.focus();
+  }
+  settingsReturnFocus = null;
 }
 
 function selectSkin(name) {
   activeSkin = name;
   document.querySelectorAll(".skin-card").forEach(el => {
-    el.classList.toggle("active", el.dataset.skin === name);
+    const active = el.dataset.skin === name;
+    el.classList.toggle("active", active);
+    el.setAttribute("aria-pressed", String(active));
   });
   renderSkinPreviews();
 }
@@ -863,7 +934,9 @@ function selectSkin(name) {
 function selectColor(name) {
   activeColor = name;
   document.querySelectorAll(".color-swatch").forEach(el => {
-    el.classList.toggle("active", el.dataset.color === name);
+    const active = el.dataset.color === name;
+    el.classList.toggle("active", active);
+    el.setAttribute("aria-pressed", String(active));
   });
   renderSkinPreviews();
 }
@@ -1057,7 +1130,7 @@ function refreshRouteGatePresentation() {
   ctx.font = '11px "Segoe UI", sans-serif';
   const maxWidth = Math.max(76, Math.min(160, cw * 0.27));
   for (const gate of state.routeChoice.gates) {
-    gate.descriptionLines = wrapCanvasText(gate.description, maxWidth, 2);
+    gate.descriptionLines = wrapCanvasText(regionDescription(gate), maxWidth, 2);
   }
   ctx.restore();
 }
@@ -1071,7 +1144,9 @@ function makeRouteGate(regionId, x, y) {
     radius: tuning.routeGateRadius,
     label: region.label,
     name: region.name,
+    nameEn: region.nameEn || region.label,
     description: region.description,
+    descriptionEn: region.descriptionEn || region.description,
     tint: region.tint,
     secondaryTint: region.secondaryTint,
     age: 0,
@@ -1083,7 +1158,11 @@ function beginRouteChoice() {
   const candidates = REGION_IDS.filter(id => id !== state.regionId);
   const first = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0];
   const second = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0];
-  const margin = Math.max(getTuningValue("routeGateMargin", 120), cw * 0.16);
+  const minGateGap = tuning.routeGateRadius * 2 + 28;
+  const margin = Math.min(
+    Math.max(getTuningValue("routeGateMargin", 120), cw * 0.16),
+    Math.max(tuning.routeGateRadius, (cw - minGateGap) / 2)
+  );
   const gateY = clamp(state.player.y, state.player.radius + 90, state.world.height - state.player.radius - 90);
   const leftX = clamp(state.camera.x + margin, tuning.routeGateRadius, state.world.width - tuning.routeGateRadius);
   const rightX = clamp(state.camera.x + cw - margin, tuning.routeGateRadius, state.world.width - tuning.routeGateRadius);
@@ -1741,7 +1820,7 @@ function moveAsteroids(dt) {
     applyVortexForces(asteroid, vortexMechanic, dt);
     asteroid.x += asteroid.vx * dt;
     asteroid.y += asteroid.vy * dt;
-    asteroid.rotation += asteroid.spin;
+    asteroid.rotation += asteroid.spin * dt;
     asteroid.hitFlash = Math.max(0, asteroid.hitFlash - dt * 4);
     if (isCircleInCamera(asteroid, asteroid.elite ? elitePadding : padding)) {
       state.asteroids[alive++] = asteroid;
@@ -2437,7 +2516,7 @@ function drawRouteChoice() {
     ctx.font = '700 13px "Segoe UI", sans-serif';
     ctx.fillText(regionDisplayName(gate), gateX, gateY - 6);
     ctx.font = '11px "Segoe UI", sans-serif';
-    ctx.fillText(state.lang === "en" ? gate.name : gate.label, gateX, gateY + 12);
+    ctx.fillText(state.lang === "en" ? gate.label : gate.name, gateX, gateY + 12);
     ctx.fillStyle = rgba(gate.tint, 0.9);
     drawWrappedTextLines(gate.descriptionLines, gateX, gateY + radius + 24, 14);
   }
@@ -3187,7 +3266,7 @@ function drawHudOverlay(region) {
 
   ctx.fillStyle = "rgba(190, 210, 255, 0.9)";
   ctx.font = '12px "Segoe UI", sans-serif';
-  ctx.fillText(`${L("sector")} ${regionDisplayName(region)}`, 28, 38);
+  ctx.fillText(`${L("sector")} ${region.label}`, 28, 38);
   ctx.fillText(`${L("threat")} x${state.asteroids.length}`, cw - 126, 38);
   ctx.fillText(`${L("laser")} ${state.shootCooldown > 0 ? L("cooldown") : L("ready")}`, 28, ch - 26);
   ctx.fillText(`${L("core")} x${state.stats.collectedCores}`, 28, 58);
@@ -3481,6 +3560,14 @@ if (settingsCloseButton) {
   settingsCloseButton.addEventListener("click", closeSettings);
 }
 
+if (settingsOverlay) {
+  settingsOverlay.addEventListener("click", (event) => {
+    if (event.target === settingsOverlay) {
+      closeSettings();
+    }
+  });
+}
+
 if (musicBtn) {
   musicBtn.addEventListener("click", toggleMusic);
 }
@@ -3498,6 +3585,9 @@ for (const button of colorSwatches) {
 }
 
 window.addEventListener("keydown", (event) => {
+  if (handleSettingsKeydown(event)) {
+    return;
+  }
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
   if (event.code === "Space") {

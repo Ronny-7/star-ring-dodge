@@ -588,6 +588,12 @@ button:active {
   transform: translateY(0);
 }
 
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-3);
+  outline-offset: 3px;
+}
+
 .touch-controls {
   position: absolute;
   inset: auto 18px 18px;
@@ -1340,6 +1346,8 @@ body.force-landscape .overlay-panel > button {
   place-items: center;
   padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
   background: rgba(2, 6, 14, 0.82);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 
@@ -1351,10 +1359,12 @@ body.force-landscape .overlay-panel > button {
 
 .settings-panel {
   width: min(380px, 100%);
+  max-height: min(720px, calc(100dvh - 32px));
   border-radius: 12px;
   border: 1px solid rgba(98, 228, 255, 0.2);
   background: rgba(5, 11, 22, 0.98);
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .settings-header {

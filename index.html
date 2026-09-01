@@ -108,7 +108,7 @@
               <span></span>
             </div>
             <button class="orientation-button" type="button" data-orientation-button>横屏</button>
-            <button class="audio-button" id="settings-button" type="button" aria-label="设置" style="font-size:1.1rem">⚙</button>
+            <button class="audio-button" id="settings-button" type="button" aria-label="设置" aria-expanded="false" aria-controls="settings-overlay" style="font-size:1.1rem">⚙</button>
           </div>
 
           <div class="playfield">
@@ -146,37 +146,37 @@
     </section>
   </main>
 
-  <div class="settings-overlay hidden" id="settings-overlay">
-    <div class="settings-panel">
+  <div class="settings-overlay hidden" id="settings-overlay" role="dialog" aria-modal="true" aria-labelledby="panel-label" aria-hidden="true">
+    <div class="settings-panel" tabindex="-1">
       <div class="settings-header">
         <span class="panel-label" id="panel-label">SETTINGS</span>
-        <button class="settings-close" type="button" aria-label="关闭">✕</button>
+        <button class="settings-close" id="settings-close-button" type="button" aria-label="关闭">✕</button>
       </div>
 
       <div class="settings-section">
         <p class="settings-section-title" id="settings-audio-title">音频</p>
         <div class="settings-row">
           <span id="settings-music-label">背景音乐</span>
-          <button class="toggle-btn active" id="settings-music-btn" type="button">ON</button>
+          <button class="toggle-btn active" id="settings-music-btn" type="button" aria-pressed="true">ON</button>
         </div>
         <div class="settings-row">
           <span id="settings-sfx-label">音效</span>
-          <button class="toggle-btn active" id="settings-sfx-btn" type="button">ON</button>
+          <button class="toggle-btn active" id="settings-sfx-btn" type="button" aria-pressed="true">ON</button>
         </div>
       </div>
 
       <div class="settings-section">
         <p class="settings-section-title" id="settings-ship-title">飞船外形</p>
         <div class="skin-grid">
-          <button class="skin-card active" data-skin="default" type="button">
+          <button class="skin-card active" data-skin="default" type="button" aria-pressed="true">
             <canvas class="skin-preview" width="72" height="72"></canvas>
             <span id="skin-fighter">战斗机</span>
           </button>
-          <button class="skin-card" data-skin="delta" type="button">
+          <button class="skin-card" data-skin="delta" type="button" aria-pressed="false">
             <canvas class="skin-preview" width="72" height="72"></canvas>
             <span id="skin-delta">三角翼</span>
           </button>
-          <button class="skin-card" data-skin="saucer" type="button">
+          <button class="skin-card" data-skin="saucer" type="button" aria-pressed="false">
             <canvas class="skin-preview" width="72" height="72"></canvas>
             <span id="skin-saucer">飞碟</span>
           </button>
@@ -186,17 +186,17 @@
       <div class="settings-section">
         <p class="settings-section-title" id="settings-color-title">飞船颜色</p>
         <div class="color-row">
-          <button class="color-swatch active" data-color="blue" type="button" aria-label="蓝色" style="--c:#62e4ff"></button>
-          <button class="color-swatch" data-color="red" type="button" aria-label="红色" style="--c:#ff6f87"></button>
-          <button class="color-swatch" data-color="green" type="button" aria-label="绿色" style="--c:#8affd1"></button>
+          <button class="color-swatch active" data-color="blue" type="button" aria-label="蓝色" aria-pressed="true" style="--c:#62e4ff"></button>
+          <button class="color-swatch" data-color="red" type="button" aria-label="红色" aria-pressed="false" style="--c:#ff6f87"></button>
+          <button class="color-swatch" data-color="green" type="button" aria-label="绿色" aria-pressed="false" style="--c:#8affd1"></button>
         </div>
       </div>
 
       <div class="settings-section">
         <p class="settings-section-title" id="settings-language-title">语言</p>
         <div class="settings-row">
-          <button class="lang-card active" data-lang="zh" type="button">中文</button>
-          <button class="lang-card" data-lang="en" type="button">English</button>
+          <button class="lang-card active" data-lang="zh" type="button" aria-pressed="true">中文</button>
+          <button class="lang-card" data-lang="en" type="button" aria-pressed="false">English</button>
         </div>
       </div>
     </div>
