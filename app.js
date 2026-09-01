@@ -1,6 +1,12 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const { bestKey, profileKey, tuning, uiText, regions, achievements, profileUi, i18n } = window.starRingConfig;
+const audioController = window.starRingAudio.createAudioController({ windowObject: window, navigatorObject: navigator });
+const storageController = window.starRingStorage;
+
+const startMusic = () => audioController.startMusic();
+const stopMusic = () => audioController.stopMusic();
+const playSound = (type) => audioController.playSound(type);
 
 let ui = (window.starRingConfig.uiText && window.starRingConfig.uiText.zh) || {};
 
@@ -36,10 +42,11 @@ function applyLanguage() {
 function setLanguage(lang) {
   if (lang !== "zh" && lang !== "en") return;
   state.lang = lang;
+  gameSession.setLanguage(lang);
   applyLanguage();
   if (typeof profile !== "undefined" && profile) {
     profile.lang = lang;
-    saveProfile();
+    storageController.saveProfile(localStorage, profileKey, profile);
   }
   applyLanguageToDOM();
   syncLandscapeUi();
@@ -132,8 +139,8 @@ function applyLanguageToDOM() {
   set("skin-saucer", L("saucer"));
   set("settings-color-title", L("shipColor"));
   set("settings-language-title", L("language"));
-  syncToggleButton(musicBtn, musicEnabled);
-  syncToggleButton(sfxBtn, sfxEnabled);
+  syncToggleButton(musicBtn, audioController.isMusicEnabled());
+  syncToggleButton(sfxBtn, audioController.isSfxEnabled());
   document.querySelectorAll(".skin-card").forEach((el) => {
     el.setAttribute("aria-pressed", String(el.dataset.skin === activeSkin));
   });
@@ -143,9 +150,6 @@ function applyLanguageToDOM() {
 }
 
 
-let audioCtx = null;
-let musicEnabled = true;
-let sfxEnabled = true;
 let activeSkin = "default";
 let activeColor = "blue";
 
@@ -182,84 +186,6 @@ function shortestAngleDelta(from, to) {
 function isWithinRadius(ax, ay, bx, by, radius) {
   return distanceSquared(ax, ay, bx, by) < radius * radius;
 }
-let musicGain = null;
-let musicNodes = [];
-
-function getAudioContext() {
-  if (audioCtx) {
-    return audioCtx;
-  }
-  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextCtor) {
-    return null;
-  }
-  try {
-    audioCtx = new AudioContextCtor();
-    return audioCtx;
-  } catch {
-    return null;
-  }
-}
-
-async function ensureAudioRunning(ctx) {
-  if (ctx.state !== "suspended") {
-    return true;
-  }
-  try {
-    await ctx.resume();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function startMusic() {
-  if (!musicEnabled || musicNodes.length) return;
-  const ctxAudio = getAudioContext();
-  if (!ctxAudio || !(await ensureAudioRunning(ctxAudio))) return;
-  if (!musicEnabled || musicNodes.length) return;
-  const master = ctxAudio.createGain();
-  master.gain.setValueAtTime(0.06, ctxAudio.currentTime);
-  master.connect(ctxAudio.destination);
-  musicGain = master;
-
-  // bass drone
-  const bass = ctxAudio.createOscillator();
-  const bassG = ctxAudio.createGain();
-  bass.type = "sine";
-  bass.frequency.value = 55;
-  bassG.gain.value = 0.5;
-  bass.connect(bassG); bassG.connect(master);
-  bass.start();
-
-  // mid pad
-  const pad = ctxAudio.createOscillator();
-  const padG = ctxAudio.createGain();
-  pad.type = "triangle";
-  pad.frequency.value = 110;
-  padG.gain.value = 0.3;
-  pad.connect(padG); padG.connect(master);
-  pad.start();
-
-  // slow LFO on pad volume for breathing effect
-  const lfo = ctxAudio.createOscillator();
-  const lfoG = ctxAudio.createGain();
-  lfo.frequency.value = 0.18;
-  lfoG.gain.value = 0.15;
-  lfo.connect(lfoG); lfoG.connect(padG.gain);
-  lfo.start();
-
-  musicNodes = [bass, pad, lfo, bassG, padG, lfoG, master];
-}
-
-function stopMusic() {
-  for (const node of musicNodes) {
-    try { node.stop ? node.stop() : node.disconnect(); } catch {}
-  }
-  musicNodes = [];
-  musicGain = null;
-}
-
 function syncToggleButton(button, enabled) {
   button.textContent = enabled ? L("on") : L("off");
   button.classList.toggle("active", enabled);
@@ -267,82 +193,13 @@ function syncToggleButton(button, enabled) {
 }
 
 function toggleMusic() {
-  musicEnabled = !musicEnabled;
-  if (musicEnabled) startMusic();
-  else stopMusic();
-  syncToggleButton(musicBtn, musicEnabled);
+  const enabled = audioController.toggleMusic();
+  syncToggleButton(musicBtn, enabled);
 }
 
 function toggleSfx() {
-  sfxEnabled = !sfxEnabled;
-  syncToggleButton(sfxBtn, sfxEnabled);
-}
-
-const vibrationMap = { shoot: 10, hit: 20, explode: 40, pickup: 15, hurt: 80 };
-
-function playSound(type) {
-  if (!sfxEnabled) return;
-  const vibrationDuration = vibrationMap[type];
-  if (!vibrationDuration) return;
-  if (navigator.vibrate) navigator.vibrate(vibrationDuration);
-
-  const ctxAudio = getAudioContext();
-  if (!ctxAudio) return;
-  if (ctxAudio.state === "suspended") {
-    ctxAudio.resume().catch(() => {});
-  }
-  const now = ctxAudio.currentTime;
-  const osc = ctxAudio.createOscillator();
-  const gain = ctxAudio.createGain();
-  osc.connect(gain);
-  gain.connect(ctxAudio.destination);
-
-  if (type === "shoot") {
-    // crisp laser zap: triangle + quick pitch drop
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(900, now);
-    osc.frequency.exponentialRampToValueAtTime(300, now + 0.07);
-    gain.gain.setValueAtTime(0.12, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-    osc.start(now); osc.stop(now + 0.07);
-  } else if (type === "hit") {
-    // dull thud: low sawtooth
-    osc.type = "sawtooth";
-    osc.frequency.setValueAtTime(180, now);
-    osc.frequency.exponentialRampToValueAtTime(60, now + 0.1);
-    gain.gain.setValueAtTime(0.1, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-    osc.start(now); osc.stop(now + 0.1);
-  } else if (type === "explode") {
-    // rumble: noise-like via detuned sawtooth + filter
-    osc.type = "sawtooth";
-    osc.frequency.setValueAtTime(80, now);
-    osc.frequency.exponentialRampToValueAtTime(18, now + 0.35);
-    const filter = ctxAudio.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 400;
-    osc.disconnect(); osc.connect(filter); filter.connect(gain);
-    gain.gain.setValueAtTime(0.22, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-    osc.start(now); osc.stop(now + 0.35);
-  } else if (type === "pickup") {
-    // bright chime: two-tone arpeggio
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(660, now);
-    osc.frequency.setValueAtTime(880, now + 0.08);
-    gain.gain.setValueAtTime(0.12, now);
-    gain.gain.setValueAtTime(0.1, now + 0.08);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-    osc.start(now); osc.stop(now + 0.22);
-  } else if (type === "hurt") {
-    // harsh buzz: square wave descend
-    osc.type = "square";
-    osc.frequency.setValueAtTime(220, now);
-    osc.frequency.exponentialRampToValueAtTime(55, now + 0.28);
-    gain.gain.setValueAtTime(0.13, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
-    osc.start(now); osc.stop(now + 0.28);
-  }
+  const enabled = audioController.toggleSfx();
+  syncToggleButton(sfxBtn, enabled);
 }
 
 const particlePool = [];
@@ -366,13 +223,9 @@ const overlayStatGrid = document.getElementById("overlay-stat-grid");
 const overlayRecord = document.getElementById("overlay-record");
 const startButton = document.getElementById("start-button");
 const playfieldEl = canvas.parentElement;
-const touchControls = document.querySelectorAll("[data-touch-action]");
-const gesturePad = document.querySelector("[data-gesture-pad]");
 const orientationButton = document.querySelector("[data-orientation-button]");
 const settingsButton = document.getElementById("settings-button");
 const settingsCloseButton = document.querySelector(".settings-close");
-const skinCards = document.querySelectorAll("[data-skin]");
-const colorSwatches = document.querySelectorAll("[data-color]");
 const mobileViewportQuery = window.matchMedia("(pointer: coarse), (max-width: 780px)");
 
 function getDisplaySize() {
@@ -521,23 +374,6 @@ syncLandscapeUi();
 }
 
 
-function readBestScore() {
-  try {
-    const score = Number(localStorage.getItem(bestKey) || 0);
-    return Number.isFinite(score) && score >= 0 ? score : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function writeBestScore(score) {
-  try {
-    localStorage.setItem(bestKey, String(score));
-  } catch {
-    // Ignore storage failures so the game still runs in restricted contexts.
-  }
-}
-
 function formatDuration(seconds) {
   const totalSeconds = Math.max(0, Math.floor(seconds));
   const minutes = Math.floor(totalSeconds / 60);
@@ -552,72 +388,9 @@ function formatRate(hits, shots) {
   return `${Math.round((hits / shots) * 100)}%`;
 }
 
-function createDefaultProfile() {
-  return {
-    version: 1,
-    lang: "zh",
-    totals: {
-      runs: 0,
-      destroyedAsteroids: 0,
-      collectedCores: 0,
-      warps: 0,
-      longestSurvival: 0,
-      bestAccuracy: 0
-    },
-    unlocked: {}
-  };
-}
-
-function normalizeProfile(raw) {
-  const fallback = createDefaultProfile();
-  if (!raw || typeof raw !== "object" || raw.version !== 1) {
-    return fallback;
-  }
-  const totals = raw.totals && typeof raw.totals === "object" ? raw.totals : {};
-  const num = (value) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0);
-  return {
-    version: 1,
-    lang: raw.lang === "en" ? "en" : "zh",
-    totals: {
-      runs: num(totals.runs),
-      destroyedAsteroids: num(totals.destroyedAsteroids),
-      collectedCores: num(totals.collectedCores),
-      warps: num(totals.warps),
-      longestSurvival: num(totals.longestSurvival),
-      bestAccuracy: num(totals.bestAccuracy)
-    },
-    unlocked: raw.unlocked && typeof raw.unlocked === "object" ? { ...raw.unlocked } : {}
-  };
-}
-
-function loadProfile() {
-  try {
-    const raw = localStorage.getItem(profileKey);
-    return normalizeProfile(raw ? JSON.parse(raw) : null);
-  } catch {
-    return createDefaultProfile();
-  }
-}
-
-function saveProfile() {
-  try {
-    localStorage.setItem(profileKey, JSON.stringify(profile));
-  } catch {
-    // Ignore storage failures so the game still runs in restricted contexts.
-  }
-}
-
 function recordRunToProfile() {
-  const accuracy = state.stats.shotsFired > 0
-    ? Math.round((state.stats.shotsHit / state.stats.shotsFired) * 100)
-    : 0;
-  profile.totals.runs += 1;
-  profile.totals.destroyedAsteroids += state.stats.destroyedAsteroids;
-  profile.totals.collectedCores += state.stats.collectedCores;
-  profile.totals.warps += state.regionJunctions;
-  profile.totals.longestSurvival = Math.max(profile.totals.longestSurvival, Math.floor(state.stats.survivalTime));
-  profile.totals.bestAccuracy = Math.max(profile.totals.bestAccuracy, accuracy);
-  saveProfile();
+  storageController.recordRun(profile, state.stats, state.regionJunctions);
+  storageController.saveProfile(localStorage, profileKey, profile);
 }
 
 function renderOverlayStats(stats, isRecord) {
@@ -647,8 +420,8 @@ function hideOverlayStats() {
   overlayStatGrid.replaceChildren();
 }
 
-let bestScore = readBestScore();
-let profile = loadProfile();
+let bestScore = storageController.readBestScore(localStorage, bestKey);
+let profile = storageController.loadProfile(localStorage, profileKey);
 let runAchievementUnlocks = [];
 let overlayMode = "start";
 let lastGameOver = { score: 0, newBest: false };
@@ -740,22 +513,14 @@ const state = {
   }
 };
 
-const keys = new Set();
-const fireKeys = new Set(["j", "J"]);
-let fireHeld = false;
-const gestureMovement = {
-  active: false,
-  pointerId: null,
-  startX: 0,
-  startY: 0,
-  dx: 0,
-  dy: 0
-};
+const gameSession = window.starRingGameSession.createGameSession(DEFAULT_REGION_ID);
+gameSession.setLanguage(state.lang);
+let inputController = null;
+let gestureMovement = null;
 
 function resetGame() {
-  keys.clear();
-  fireHeld = false;
-  clearGestureMovement();
+  gameSession.start();
+  inputController.clearAll();
   resizeCanvas();
   state.running = true;
   state.paused = false;
@@ -899,7 +664,8 @@ function openSettings() {
   pausedBeforeSettings = state.paused;
   if (state.running && !state.paused && !state.gameOver) {
     state.paused = true;
-    keys.clear();
+    gameSession.pause();
+    inputController.clearAll();
   }
   window.requestAnimationFrame(() => settingsCloseButton?.focus());
 }
@@ -912,6 +678,7 @@ function closeSettings() {
   settingsOverlay.setAttribute("aria-hidden", "true");
   settingsButton.setAttribute("aria-expanded", "false");
   if (state.running && state.paused && !state.gameOver && !pausedBeforeSettings) {
+    gameSession.resume();
     state.paused = false;
     state.lastTime = 0;
   }
@@ -1247,6 +1014,7 @@ function resolveRouteChoice(regionId, x = state.player.x, y = state.player.y) {
     return;
   }
 
+  gameSession.warp(regionId);
   state.regionId = regionId;
   initRegionMechanics(nextRegion);
   state.regionTimer = 0;
@@ -1363,6 +1131,7 @@ function spawnEliteAsteroid(region = getCurrentRegion()) {
   elite.pulseSeed = Math.random() * Math.PI * 2;
   elite.maxSpeed = (tuning.asteroidSpeedBase + tuning.asteroidSpeedRange) * state.speedScale * regionSpeed * getTuningValue("eliteMaxSpeedMultiplier", 0.8);
   state.asteroids.push(elite);
+  gameSession.markEliteSpawned();
 
   spawnRing(elite.x, elite.y, radius * 0.8, 240, rgba(region.tint, 0.82), 0.52, 3.2);
   spawnRing(elite.x, elite.y, radius * 1.15, 160, rgba(region.secondaryTint, 0.5), 0.6, 2);
@@ -1539,7 +1308,8 @@ function pauseGame() {
   if (!state.running || state.gameOver || state.paused) {
     return;
   }
-  keys.clear();
+  gameSession.pause();
+  inputController.clearAll();
   state.paused = true;
   showOverlay("pause", ui.pauseTitle, ui.pauseText, ui.pauseButton);
 }
@@ -1548,6 +1318,7 @@ function resumeGame() {
   if (!state.paused || state.gameOver) {
     return;
   }
+  gameSession.resume();
   state.paused = false;
   state.lastTime = 0;
   hideOverlay();
@@ -1589,7 +1360,7 @@ function update(dt) {
   state.warpFlash.timer = Math.max(0, state.warpFlash.timer - dt);
   state.shootCooldown = Math.max(0, state.shootCooldown - dt);
   state.doubleShotTimer = Math.max(0, state.doubleShotTimer - dt);
-  if (fireHeld) {
+  if (inputController.isFireHeld()) {
     fireLaser();
   }
   updateRegionFlow(dt);
@@ -1727,25 +1498,12 @@ function updateMessages(dt) {
   state.messages.length = alive;
 }
 
-function getKeyboardMovement() {
-  let dx = 0;
-  let dy = 0;
-
-  if (keys.has("ArrowLeft") || keys.has("a")) dx -= 1;
-  if (keys.has("ArrowRight") || keys.has("d")) dx += 1;
-  if (keys.has("ArrowUp") || keys.has("w")) dy -= 1;
-  if (keys.has("ArrowDown") || keys.has("s")) dy += 1;
-
-  return { dx, dy };
-}
-
 function hasActiveMovement() {
-  const keyboard = getKeyboardMovement();
-  return keyboard.dx !== 0 || keyboard.dy !== 0 || gestureMovement.dx !== 0 || gestureMovement.dy !== 0;
+  return inputController.hasActiveMovement();
 }
 
 function movePlayer(dt) {
-  const keyboard = getKeyboardMovement();
+  const keyboard = inputController.getKeyboardMovement();
   const dx = keyboard.dx + gestureMovement.dx;
   const dy = keyboard.dy + gestureMovement.dy;
   const inputLength = Math.hypot(dx, dy);
@@ -2190,11 +1948,12 @@ function evaluateAchievements({ silent = false } = {}) {
     }
   }
   if (unlocked) {
-    saveProfile();
+    storageController.saveProfile(localStorage, profileKey, profile);
   }
 }
 
 function endGame() {
+  gameSession.end();
   state.running = false;
   state.paused = false;
   state.gameOver = true;
@@ -2209,7 +1968,7 @@ function endGame() {
 
   if (state.stats.newBest) {
     bestScore = finalScore;
-    writeBestScore(finalScore);
+    storageController.writeBestScore(localStorage, bestKey, finalScore);
   }
 
   syncHud();
@@ -3353,25 +3112,6 @@ function drawVignette() {
   }
 }
 
-let lastIdleFrame = 0;
-
-function loop(timestamp) {
-  if (!state.lastTime) {
-    state.lastTime = timestamp;
-  }
-
-  const dt = Math.min(0.032, (timestamp - state.lastTime) / 1000);
-  state.lastTime = timestamp;
-
-  update(dt);
-  const isActiveFrame = state.running && !state.paused && !state.gameOver;
-  if (isActiveFrame || timestamp - lastIdleFrame >= tuning.idleFrameInterval) {
-    draw();
-    lastIdleFrame = timestamp;
-  }
-  requestAnimationFrame(loop);
-}
-
 function startGame() {
   resetGame();
 }
@@ -3382,47 +3122,6 @@ function handleOverlayAction() {
     return;
   }
   startGame();
-}
-
-function updateGestureVisual() {
-  if (!gesturePad) {
-    return;
-  }
-
-  const thumbRange = isCompactLandscapeMode() ? 30 : 36;
-  gesturePad.style.setProperty("--gesture-x", `${gestureMovement.dx * thumbRange}px`);
-  gesturePad.style.setProperty("--gesture-y", `${gestureMovement.dy * thumbRange}px`);
-  gesturePad.classList.toggle("is-active", gestureMovement.active);
-}
-
-function setGestureMovement(event) {
-  const maxDistance = isCompactLandscapeMode() ? 30 : 48;
-  const deadZone = isCompactLandscapeMode() ? 4 : 7;
-  const screenX = event.clientX - gestureMovement.startX;
-  const screenY = event.clientY - gestureMovement.startY;
-  const rawX = isForceLandscapeMode() ? screenY : screenX;
-  const rawY = isForceLandscapeMode() ? -screenX : screenY;
-  const distance = Math.hypot(rawX, rawY);
-
-  if (distance < deadZone) {
-    gestureMovement.dx = 0;
-    gestureMovement.dy = 0;
-    updateGestureVisual();
-    return;
-  }
-
-  const scale = Math.min(1, distance / maxDistance);
-  gestureMovement.dx = (rawX / distance) * scale;
-  gestureMovement.dy = (rawY / distance) * scale;
-  updateGestureVisual();
-}
-
-function clearGestureMovement() {
-  gestureMovement.active = false;
-  gestureMovement.pointerId = null;
-  gestureMovement.dx = 0;
-  gestureMovement.dy = 0;
-  updateGestureVisual();
 }
 
 async function requestLandscapeMode() {
@@ -3466,173 +3165,6 @@ async function requestLandscapeMode() {
   }, 320);
 }
 
-function setTouchButtonActive(button, active) {
-  button.classList.toggle("is-active", active);
-}
-
-function releaseTouchControl(button) {
-  const key = button.dataset.touchKey;
-  const action = button.dataset.touchAction;
-
-  if (key) {
-    keys.delete(key);
-  }
-  if (action === "fire") {
-    fireHeld = false;
-  }
-  setTouchButtonActive(button, false);
-}
-
-function pressTouchControl(button) {
-  const key = button.dataset.touchKey;
-  const action = button.dataset.touchAction;
-
-  if (key && !state.paused) {
-    keys.add(key);
-  }
-  if (action === "fire") {
-    fireHeld = true;
-    fireLaser();
-  }
-  if (action === "pause") {
-    togglePause();
-  }
-  setTouchButtonActive(button, true);
-}
-
-for (const button of touchControls) {
-  button.addEventListener("pointerdown", (event) => {
-    event.preventDefault();
-    button.setPointerCapture(event.pointerId);
-    pressTouchControl(button);
-  });
-  button.addEventListener("pointerup", (event) => {
-    event.preventDefault();
-    releaseTouchControl(button);
-  });
-  button.addEventListener("pointercancel", () => releaseTouchControl(button));
-  button.addEventListener("lostpointercapture", () => releaseTouchControl(button));
-}
-
-if (gesturePad) {
-  gesturePad.addEventListener("pointerdown", (event) => {
-    event.preventDefault();
-    gestureMovement.active = true;
-    gestureMovement.pointerId = event.pointerId;
-    gestureMovement.startX = event.clientX;
-    gestureMovement.startY = event.clientY;
-    gesturePad.setPointerCapture(event.pointerId);
-    setGestureMovement(event);
-  });
-
-  gesturePad.addEventListener("pointermove", (event) => {
-    if (!gestureMovement.active || gestureMovement.pointerId !== event.pointerId) {
-      return;
-    }
-    event.preventDefault();
-    setGestureMovement(event);
-  });
-
-  gesturePad.addEventListener("pointerup", (event) => {
-    if (gestureMovement.pointerId === event.pointerId) {
-      event.preventDefault();
-      clearGestureMovement();
-    }
-  });
-
-  gesturePad.addEventListener("pointercancel", clearGestureMovement);
-  gesturePad.addEventListener("lostpointercapture", clearGestureMovement);
-}
-
-if (orientationButton) {
-  orientationButton.addEventListener("click", requestLandscapeMode);
-}
-
-if (settingsButton) {
-  settingsButton.addEventListener("click", openSettings);
-}
-
-document.querySelectorAll("[data-lang]").forEach((button) => {
-  button.addEventListener("click", () => setLanguage(button.dataset.lang));
-});
-
-if (settingsCloseButton) {
-  settingsCloseButton.addEventListener("click", closeSettings);
-}
-
-if (settingsOverlay) {
-  settingsOverlay.addEventListener("click", (event) => {
-    if (event.target === settingsOverlay) {
-      closeSettings();
-    }
-  });
-}
-
-if (musicBtn) {
-  musicBtn.addEventListener("click", toggleMusic);
-}
-
-if (sfxBtn) {
-  sfxBtn.addEventListener("click", toggleSfx);
-}
-
-for (const button of skinCards) {
-  button.addEventListener("click", () => selectSkin(button.dataset.skin));
-}
-
-for (const button of colorSwatches) {
-  button.addEventListener("click", () => selectColor(button.dataset.color));
-}
-
-window.addEventListener("keydown", (event) => {
-  if (handleSettingsKeydown(event)) {
-    return;
-  }
-  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-
-  if (event.code === "Space") {
-    event.preventDefault();
-    if (!state.running || state.gameOver) {
-      startGame();
-      return;
-    }
-  }
-
-  if (key === "p" || key === "Escape") {
-    event.preventDefault();
-    togglePause();
-    return;
-  }
-
-  if (fireKeys.has(event.key)) {
-    event.preventDefault();
-    fireHeld = true;
-    fireLaser();
-    return;
-  }
-
-  if (!state.paused) {
-    keys.add(key);
-  }
-});
-
-window.addEventListener("keyup", (event) => {
-  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-  keys.delete(key);
-  if (fireKeys.has(event.key)) {
-    fireHeld = false;
-  }
-});
-
-window.addEventListener("blur", () => {
-  keys.clear();
-  fireHeld = false;
-  clearGestureMovement();
-  if (state.running && !state.paused && !state.gameOver) {
-    pauseGame();
-  }
-});
-
 function refreshViewportMeta() {
   const meta = document.querySelector('meta[name="viewport"]');
   if (!meta) return;
@@ -3641,6 +3173,29 @@ function refreshViewportMeta() {
   // stays pinned at the portrait width and the right side renders as a black strip.
   meta.setAttribute("content", meta.getAttribute("content"));
 }
+
+inputController = window.starRingInput.createInputController({
+  windowObject: window,
+  documentObject: document,
+  getState: () => state,
+  fireLaser,
+  startGame,
+  togglePause,
+  pauseGame,
+  handleSettingsKeydown,
+  isCompactLandscapeMode,
+  isForceLandscapeMode,
+  requestLandscapeMode,
+  openSettings,
+  setLanguage,
+  closeSettings,
+  toggleMusic,
+  toggleSfx,
+  selectSkin,
+  selectColor
+});
+gestureMovement = inputController.gestureMovement;
+inputController.bind();
 
 startButton.addEventListener("click", handleOverlayAction);
 window.addEventListener("resize", () => {
@@ -3667,4 +3222,33 @@ applyLanguageToDOM();
 showOverlay("start", ui.startTitle, ui.startText, ui.startButton);
 state.stars = Array.from({ length: tuning.starCount }, () => makeStar(true));
 draw();
-requestAnimationFrame(loop);
+window.starRingRenderer.createRenderLoop({
+  windowObject: window,
+  state,
+  tuning,
+  update,
+  draw
+}).start();
+
+if (new URLSearchParams(window.location.search).has("test")) {
+  window.starRingTestApi = {
+    getState: () => ({
+      running: state.running,
+      paused: state.paused,
+      gameOver: state.gameOver,
+      regionId: state.regionId,
+      regionJunctions: state.regionJunctions,
+      eliteCount: state.asteroids.filter((asteroid) => asteroid.elite).length,
+      language: state.lang,
+      title: document.title,
+      overlayHidden: overlay.classList.contains("hidden")
+    }),
+    startGame,
+    pauseGame,
+    resumeGame,
+    resolveRouteChoice,
+    spawnEliteAsteroid,
+    setLanguage,
+    endGame
+  };
+}

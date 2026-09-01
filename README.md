@@ -2,7 +2,7 @@
 
 纯前端 Canvas 太空生存射击小游戏。玩家驾驶飞船在流动星域中规避陨石流，回收能量核心，使用激光清除障碍，并通过跃迁门选择下一片区域。
 
-当前版本：v3.7
+当前版本：v3.8
 
 ## 运行方式
 
@@ -64,6 +64,14 @@
 index.html   页面结构
 styles.css   界面样式、响应式布局和移动端横屏样式
 config.js    游戏参数和界面文案（含所有可调数值）
-app.js       游戏主逻辑、绘制、输入、横屏模式和碰撞
+app.js       游戏主逻辑、绘制、横屏模式和碰撞
+input.js     键盘、触控和设置交互控制器
+audio.js     Web Audio 音效、背景音乐和触觉反馈
+storage.js   最高分和累计档案存取
+renderer.js  Canvas 帧循环
+game-session.js  可测试的游戏会话状态迁移
+tests/smoke.test.js  Node 原生自动化冒烟测试
 TODO.md      已规划但尚未实现的玩法方向
 ```
+
+运行测试：`npm test`。测试使用 Node.js 内置测试模块，并在检测到 Microsoft Edge 时加载真实页面执行浏览器集成冒烟测试；未安装 Edge 时该浏览器测试会跳过，模块级测试仍会执行。

@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<body>Loading browser smoke test...</body>
+<script>
+  const result = { error: null, checks: [] };
+  const check = (name, condition) => {
+    if (!condition) throw new Error(name);
+    result.checks.push(name);
+  };
+
+  const finish = () => {
+    document.body.textContent = "SMOKE_RESULT:" + JSON.stringify(result);
+    document.title = "SMOKE_RESULT:" + JSON.stringify(result);
+  };
+
+  const frame = document.createElement("iframe");
+  frame.src = "../index.html?test=1";
+  frame.style.display = "none";
+  frame.onload = () => {
+    try {
+      const api = frame.contentWindow.starRingTestApi;
+      check("page exposes integration test API", Boolean(api));
+      check("initial game is not running", api.getState().running === false);
+
+      api.startGame();
+      check("startGame starts the real app", api.getState().running === true && api.getState().gameOver === false);
+      api.pauseGame();
+      check("pauseGame pauses the real app", api.getState().paused === true);
+      api.resumeGame();
+      check("resumeGame resumes the real app", api.getState().paused === false);
+
+      api.resolveRouteChoice("belt");
+      check("resolveRouteChoice changes region", api.getState().regionId === "belt" && api.getState().regionJunctions === 1);
+      api.spawnEliteAsteroid();
+      check("spawnEliteAsteroid creates an elite", api.getState().eliteCount === 1);
+      api.setLanguage("en");
+      check("setLanguage updates app state and title", api.getState().language === "en" && api.getState().title === "Star Ring Dodge");
+      api.endGame();
+      check("endGame ends the real app", api.getState().gameOver === true && api.getState().running === false);
+      api.startGame();
+      const restarted = api.getState();
+      check("restart resets region and warp count", restarted.regionId === "drift" && restarted.regionJunctions === 0);
+      check("restart clears elite asteroids", restarted.eliteCount === 0);
+    } catch (error) {
+      result.error = error.message;
+    }
+    finish();
+  };
+  frame.onerror = () => {
+    result.error = "failed to load index.html";
+    finish();
+  };
+  document.body.append(frame);
+</script>
