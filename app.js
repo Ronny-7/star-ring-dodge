@@ -1135,7 +1135,9 @@ function movePlayer(dt) {
   const thrustTarget = moving ? Math.max(0.4, speedRatio) : 0.3;
   state.player.thrust += (thrustTarget - state.player.thrust) * (1 - Math.exp(-10 * dt));
 
-  // Bank into strafes and turns; the camera roll sells the 3D feel.
+  // Bank into strafes and turns. Positive `roll` dips the starboard wing,
+  // which is what "sliding right" should look like; the ship is held centre
+  // by the chase camera so this lean is the main cue for lateral motion.
   const rollTarget = clamp(move.strafe * 0.9 + look.yaw * 22, -1, 1);
   state.player.roll += (rollTarget - state.player.roll) * (1 - Math.exp(-9 * dt));
 }

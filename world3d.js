@@ -352,8 +352,10 @@ export function createWorld({ world, tuning }) {
     },
     render(state, cameraState, dt) {
       // Ship pose: model faces +z, yaw turns right (matches makeBasis).
+      // A positive roll must dip the starboard (+x local) wing, so the model
+      // rotates the other way from the raw value.
       shipGroup.position.set(state.player.x, state.player.y, state.player.z);
-      shipGroup.rotation.set(-state.player.pitch, -state.player.yaw, -state.player.roll, "YXZ");
+      shipGroup.rotation.set(-state.player.pitch, -state.player.yaw, state.player.roll, "YXZ");
       if (shipGroup.userData.glow) {
         shipGroup.userData.glow.intensity = 60 + state.player.thrust * 140;
       }

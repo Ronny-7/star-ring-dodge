@@ -9,7 +9,9 @@
     const audioWindow = windowObject || (typeof window !== "undefined" ? window : {});
     const audioNavigator = navigatorObject || (typeof navigator !== "undefined" ? navigator : {});
     let audioCtx = null;
-    let musicEnabled = true;
+    // Background music starts off: the drone is not to everyone's taste and
+    // autoplaying audio is intrusive. Players opt in from the settings panel.
+    let musicEnabled = false;
     let sfxEnabled = true;
     let musicNodes = [];
 
@@ -40,33 +42,107 @@
       const ctxAudio = getAudioContext();
       if (!ctxAudio || !(await ensureAudioRunning(ctxAudio))) return;
       if (!musicEnabled || musicNodes.length) return;
+
+      // Ambient pad: a slow minor-key progression with drifting detune and a
+      // long attack, close to the sparse organ-and-strings feel of the
+      // Interstellar score. All synthesised, so nothing is bundled.
       const master = ctxAudio.createGain();
-      master.gain.setValueAtTime(0.06, ctxAudio.currentTime);
+      master.gain.setValueAtTime(0, ctxAudio.currentTime);
+      master.gain.linearRampToValueAtTime(0.085, ctxAudio.currentTime + 3);
       master.connect(ctxAudio.destination);
 
-      const bass = ctxAudio.createOscillator();
-      const bassG = ctxAudio.createGain();
-      bass.type = "sine";
-      bass.frequency.value = 55;
-      bassG.gain.value = 0.5;
-      bass.connect(bassG); bassG.connect(master);
-      bass.start();
+      const reverb = ctxAudio.createConvolver();
+      reverb.buffer = makeReverbImpulse(ctxAudio, 2.8, 2.4);
+      const wet = ctxAudio.createGain();
+      wet.gain.value = 0.55;
+      reverb.connect(wet);
+      wet.connect(master);
 
-      const pad = ctxAudio.createOscillator();
-      const padG = ctxAudio.createGain();
-      pad.type = "triangle";
-      pad.frequency.value = 110;
-      padG.gain.value = 0.3;
-      pad.connect(padG); padG.connect(master);
-      pad.start();
+      const bus = ctxAudio.createGain();
+      bus.connect(master);
+      bus.connect(reverb);
 
-      const lfo = ctxAudio.createOscillator();
-      const lfoG = ctxAudio.createGain();
-      lfo.frequency.value = 0.18;
-      lfoG.gain.value = 0.15;
-      lfo.connect(lfoG); lfoG.connect(padG.gain);
-      lfo.start();
-      musicNodes = [bass, pad, lfo, bassG, padG, lfoG, master];
+      // Am - F - C - G, one chord every 8 seconds, voiced low and wide.
+      const chords = [
+        [110.0, 164.81, 261.63],
+        [87.31, 130.81, 220.0],
+        [130.81, 196.0, 329.63],
+        [98.0, 146.83, 246.94]
+      ];
+
+      const voices = [];
+      const lfos = [];
+      for (let i = 0; i < chords.length; i += 1) {
+        const chordGain = ctxAudio.createGain();
+        chordGain.gain.value = 0;
+        chordGain.connect(bus);
+
+        for (const freq of chords[i]) {
+          for (const detune of [-4, 4]) {
+            const osc = ctxAudio.createOscillator();
+            osc.type = "sine";
+            osc.frequency.value = freq;
+            osc.detune.value = detune;
+            const g = ctxAudio.createGain();
+            g.gain.value = 0.22;
+            osc.connect(g);
+            g.connect(chordGain);
+            osc.start();
+            voices.push(osc);
+          }
+        }
+
+        // Slow swell so the pad breathes instead of sitting flat.
+        const lfo = ctxAudio.createOscillator();
+        const lfoGain = ctxAudio.createGain();
+        lfo.frequency.value = 0.045 + i * 0.011;
+        lfoGain.gain.value = 0.12;
+        lfo.connect(lfoGain);
+        lfoGain.connect(chordGain.gain);
+        lfo.start();
+        lfos.push(lfo);
+
+        const start = ctxAudio.currentTime + i * 8;
+        chordGain.gain.setValueAtTime(0, start);
+        chordGain.gain.linearRampToValueAtTime(0.5, start + 4);
+        chordGain.gain.linearRampToValueAtTime(0.18, start + 8);
+      }
+
+      // Sub drone that ties the progression together.
+      const drone = ctxAudio.createOscillator();
+      const droneGain = ctxAudio.createGain();
+      drone.type = "sine";
+      drone.frequency.value = 55;
+      droneGain.gain.value = 0.3;
+      drone.connect(droneGain);
+      droneGain.connect(bus);
+      drone.start();
+
+      // Tick a metronome-free pulse: a soft low note every 8s marks the change.
+      const pulse = ctxAudio.createOscillator();
+      const pulseGain = ctxAudio.createGain();
+      pulse.type = "triangle";
+      pulse.frequency.value = 55;
+      pulseGain.gain.value = 0;
+      pulse.connect(pulseGain);
+      pulseGain.connect(bus);
+      pulse.start();
+
+      musicNodes = [master, reverb, wet, bus, drone, droneGain, pulse, pulseGain, ...voices, ...lfos];
+    }
+
+    // Cheap synthetic impulse response so the pad gets a long tail.
+    function makeReverbImpulse(ctxAudio, seconds, decay) {
+      const rate = ctxAudio.sampleRate;
+      const length = Math.floor(rate * seconds);
+      const buffer = ctxAudio.createBuffer(2, length, rate);
+      for (let channel = 0; channel < 2; channel += 1) {
+        const data = buffer.getChannelData(channel);
+        for (let i = 0; i < length; i += 1) {
+          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+        }
+      }
+      return buffer;
     }
 
     function stopMusic() {
