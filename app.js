@@ -366,8 +366,6 @@ const state = {
   regionJunctions: 0,
   achievementTimer: 0,
   eliteTimer: 0,
-  laneOffset: 0,
-  approachSpeed: 195,
   routeChoice: { active: false, timer: 0, gates: [] },
   shipColor: COLORS.blue,
   stats: {
@@ -380,6 +378,7 @@ const state = {
     damagedThisRun: false,
     newBest: false
   },
+  // Free-flight ship: yaw/pitch aim the nose, velocity is in world space.
   player: {
     x: 0,
     y: 0,
@@ -387,10 +386,25 @@ const state = {
     radius: 26,
     vx: 0,
     vy: 0,
-    thrust: 0,
-    roll: 0,
+    vz: 0,
+    yaw: 0,
     pitch: 0,
+    roll: 0,
+    thrust: 0,
     trailTimer: 0
+  },
+  // Camera lags the ship so turns read as motion rather than a snap.
+  camera: {
+    x: 0,
+    y: 0,
+    z: 0,
+    yaw: 0,
+    pitch: 0
+  },
+  world: {
+    width: getTuningValue("worldWidth3d", 2400),
+    height: getTuningValue("worldHeight3d", 1600),
+    depth: getTuningValue("worldDepth3d", 900)
   },
   asteroids: [],
   cores: [],
@@ -455,8 +469,6 @@ function resetGame() {
   state.regionTimer = 0;
   state.regionJunctions = 0;
   state.eliteTimer = 0;
-  state.laneOffset = 0;
-  state.approachSpeed = getTuningValue("approachSpeedBase", 195);
   state.routeChoice.active = false;
   state.routeChoice.timer = 0;
   state.routeChoice.gates = [];
@@ -471,14 +483,18 @@ function resetGame() {
   state.achievementTimer = 0;
   runAchievementUnlocks.length = 0;
   state.player.radius = getPlayerRadius();
-  state.player.x = 0;
-  state.player.y = 0;
-  state.player.z = 0;
+  state.player.x = state.world.width / 2;
+  state.player.y = state.world.depth / 2;
+  state.player.z = state.world.height / 2;
   state.player.vx = 0;
   state.player.vy = 0;
-  state.player.thrust = 0;
-  state.player.roll = 0;
+  state.player.vz = 0;
+  state.player.yaw = 0;
   state.player.pitch = 0;
+  state.player.roll = 0;
+  state.player.thrust = 0;
+  state.player.trailTimer = 0;
+  snapCameraToShip();
   state.asteroids = [];
   state.cores = [];
   state.powerUps = [];
@@ -648,28 +664,21 @@ function renderSkinPreviews() {
 
 /* ---------- 3D 世界 ---------- */
 
-function makeStar(randomDepth = false) {
-  const far = getTuningValue("farDistance", 1700);
+// Stars are fixed points in the room; the camera moving is what makes them move.
+function makeStar() {
   return {
-    x: (Math.random() - 0.5) * 2 * getTuningValue("laneHalfWidth", 340) * 2.4,
-    y: (Math.random() - 0.5) * 2 * getTuningValue("laneHalfHeight", 220) * 2.4,
-    z: randomDepth ? Math.random() * far : far,
+    x: Math.random() * state.world.width,
+    y: Math.random() * state.world.depth,
+    z: Math.random() * state.world.height,
     size: Math.random() * 1.6 + 0.5,
     alpha: Math.random() * 0.55 + 0.2,
     tint: Math.random() > 0.82 ? "150,190,255" : "222,238,255"
   };
 }
 
-function updateStars(dt) {
-  const far = getTuningValue("farDistance", 1700);
-  const speed = getTuningValue("starApproachSpeed", 150);
-  for (const star of state.stars3d) {
-    star.z -= speed * dt * (state.running && !state.paused ? 1 : 0.25);
-    if (star.z < -40) {
-      Object.assign(star, makeStar(false));
-      star.z = far;
-    }
-  }
+function updateStars() {
+  // Static field, but keep the count topped up if the world grew.
+  while (state.stars3d.length < tuning.starCount) state.stars3d.push(makeStar());
 }
 
 function makeAsteroidShape(radius) {
@@ -683,7 +692,7 @@ function makeAsteroidShape(radius) {
   return { craters };
 }
 
-function makeAsteroid(x, y, z, radius, vx, vy, region, scale = getGameplayScale()) {
+function makeAsteroid(x, y, z, radius, vx, vy, vz, region, scale = getGameplayScale()) {
   const shape = makeAsteroidShape(radius);
   const mineralChance = Math.random();
   const mineralTint = mineralChance > 0.82 ? region.tint : mineralChance > 0.68 ? region.secondaryTint : "160,180,220";
@@ -694,6 +703,7 @@ function makeAsteroid(x, y, z, radius, vx, vy, region, scale = getGameplayScale(
     radius,
     vx,
     vy,
+    vz,
     spin: (Math.random() - 0.5) * 0.9,
     rotation: Math.random() * Math.PI * 2,
     craters: shape.craters,
@@ -701,24 +711,48 @@ function makeAsteroid(x, y, z, radius, vx, vy, region, scale = getGameplayScale(
     surfaceTone: 0.86 + Math.random() * 0.28,
     hp: radius > tuning.largeAsteroidThreshold * scale ? 2 : 1,
     hitFlash: 0,
-    elite: false,
-    approachFactor: 0.85 + Math.random() * 0.4
+    elite: false
+  };
+}
+
+// Random point in an ellipsoid shell around a centre, so spawns stay fair.
+function sampleAround(centerX, centerY, centerZ, minDistance, maxDistance) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  const distance = minDistance + Math.random() * (maxDistance - minDistance);
+  const sinPhi = Math.sin(phi);
+  const x = centerX + Math.cos(theta) * sinPhi * distance;
+  const y = centerY + Math.cos(phi) * distance;
+  const z = centerZ + Math.sin(theta) * sinPhi * distance;
+  return {
+    x: clamp(x, 40, state.world.width - 40),
+    y: clamp(y, 40, state.world.depth - 40),
+    z: clamp(z, 40, state.world.height - 40)
   };
 }
 
 function spawnAsteroid(region = getCurrentRegion()) {
   const scale = getGameplayScale();
-  const radius = (Math.random() * getTuningValue("asteroidRadiusRange3d", 20) + getTuningValue("asteroidRadiusMin3d", 24)) * scale;
-  const halfW = getTuningValue("laneHalfWidth", 340) - radius;
-  const halfH = getTuningValue("laneHalfHeight", 220) - radius;
-  const drift = getTuningValue("asteroidDriftSpeed", 46) * (Math.random() - 0.5) * 2;
+  const radius = (Math.random() * getTuningValue("asteroidRadiusRange3d", 34) + getTuningValue("asteroidRadiusMin3d", 30)) * scale;
+  const spawn = sampleAround(
+    state.player.x,
+    state.player.y,
+    state.player.z,
+    tuning.safeSpawnDistance + radius,
+    getTuningValue("farDistance", 1700) * 0.8
+  );
+  const speed = (Math.random() * getTuningValue("asteroidSpeedRange3d", 55) + getTuningValue("asteroidSpeed3d", 70))
+    * state.speedScale
+    * getRegionMultiplier(region, "asteroidSpeedMultiplier");
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+
   state.asteroids.push(makeAsteroid(
-    (Math.random() - 0.5) * 2 * halfW,
-    (Math.random() - 0.5) * 2 * halfH,
-    getTuningValue("farDistance", 1700),
+    spawn.x, spawn.y, spawn.z,
     radius,
-    drift * 0.4,
-    drift * 0.4,
+    Math.cos(theta) * Math.sin(phi) * speed,
+    Math.cos(phi) * speed,
+    Math.sin(theta) * Math.sin(phi) * speed,
     region,
     scale
   ));
@@ -735,21 +769,12 @@ function countEliteAsteroids() {
 function spawnEliteAsteroid(region = getCurrentRegion()) {
   const scale = getGameplayScale();
   const radius = (tuning.asteroidRadiusMin + tuning.asteroidRadiusRange) * getTuningValue("eliteRadiusMultiplier", 2.05) * scale;
-  const elite = makeAsteroid(
-    (Math.random() - 0.5) * 1.3 * getTuningValue("laneHalfWidth", 340),
-    (Math.random() - 0.5) * 1.3 * getTuningValue("laneHalfHeight", 220),
-    getTuningValue("farDistance", 1700) * 0.86,
-    radius,
-    0,
-    0,
-    region,
-    scale
-  );
+  const spawn = sampleAround(state.player.x, state.player.y, state.player.z, 520, 900);
+  const elite = makeAsteroid(spawn.x, spawn.y, spawn.z, radius, 0, 0, 0, region, scale);
   elite.elite = true;
   elite.hp = getTuningValue("eliteHp", 6);
   elite.maxHp = elite.hp;
-  elite.maxSpeed = getTuningValue("eliteMaxSpeedMultiplier", 0.8) * getTuningValue("shipSpeed3d", 300);
-  elite.approachFactor = getTuningValue("eliteSpeedMultiplier", 0.5);
+  elite.maxSpeed = getTuningValue("eliteMaxSpeedMultiplier", 0.8) * getTuningValue("shipSpeed3d", 330);
   state.asteroids.push(elite);
   return elite;
 }
@@ -775,26 +800,32 @@ function steerEliteAsteroid(elite, dt) {
   const accel = getTuningValue("eliteHomingAccel", 30);
   const dx = state.player.x - elite.x;
   const dy = state.player.y - elite.y;
-  const dist = Math.hypot(dx, dy) || 1;
+  const dz = state.player.z - elite.z;
+  const dist = Math.hypot(dx, dy, dz) || 1;
   elite.vx += (dx / dist) * accel * dt;
   elite.vy += (dy / dist) * accel * dt;
-  const speed = Math.hypot(elite.vx, elite.vy);
+  elite.vz += (dz / dist) * accel * dt;
+  const speed = Math.hypot(elite.vx, elite.vy, elite.vz);
   if (speed > elite.maxSpeed) {
     elite.vx = (elite.vx / speed) * elite.maxSpeed;
     elite.vy = (elite.vy / speed) * elite.maxSpeed;
+    elite.vz = (elite.vz / speed) * elite.maxSpeed;
   }
 }
 
 function repelPlayerFromElite(elite) {
   const dx = state.player.x - elite.x;
   const dy = state.player.y - elite.y;
-  const dist = Math.hypot(dx, dy) || 1;
+  const dz = state.player.z - elite.z;
+  const dist = Math.hypot(dx, dy, dz) || 1;
   const knockback = getTuningValue("eliteKnockback", 260) * getGameplayScale();
   state.player.vx += (dx / dist) * knockback;
   state.player.vy += (dy / dist) * knockback;
+  state.player.vz += (dz / dist) * knockback;
   elite.vx -= (dx / dist) * getTuningValue("eliteRecoil", 90);
   elite.vy -= (dy / dist) * getTuningValue("eliteRecoil", 90);
-  clampPlayerToLane();
+  elite.vz -= (dz / dist) * getTuningValue("eliteRecoil", 90);
+  clampPlayerToWorld();
 }
 
 function spawnEliteFragments(elite, region) {
@@ -802,16 +833,23 @@ function spawnEliteFragments(elite, region) {
   const speed = getTuningValue("eliteSplitSpeed", 165) * getGameplayScale();
   const safeGap = getTuningValue("eliteFragmentSafeGap", 52);
   for (let i = 0; i < count; i += 1) {
-    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+    const theta = (Math.PI * 2 * i) / count + Math.random() * 0.4;
     const radius = (tuning.asteroidRadiusMin + Math.random() * tuning.asteroidRadiusRange) * getGameplayScale();
-    let x = elite.x + Math.cos(angle) * (elite.radius + radius);
-    let y = elite.y + Math.sin(angle) * (elite.radius + radius);
-    if (Math.hypot(x - state.player.x, y - state.player.y) < safeGap) {
-      x = elite.x - Math.cos(angle) * (elite.radius + radius);
-      y = elite.y - Math.sin(angle) * (elite.radius + radius);
+    const offset = elite.radius + radius;
+    const fragment = makeAsteroid(
+      elite.x + Math.cos(theta) * offset,
+      elite.y + (Math.random() - 0.5) * offset,
+      elite.z + Math.sin(theta) * offset,
+      radius,
+      Math.cos(theta) * speed,
+      (Math.random() - 0.5) * speed * 0.4,
+      Math.sin(theta) * speed,
+      region
+    );
+    if (Math.hypot(fragment.x - state.player.x, fragment.y - state.player.y, fragment.z - state.player.z) < safeGap) {
+      fragment.vx *= -1;
+      fragment.vz *= -1;
     }
-    const fragment = makeAsteroid(x, y, elite.z, radius, Math.cos(angle) * speed, Math.sin(angle) * speed, region);
-    fragment.approachFactor = 0.9;
     state.asteroids.push(fragment);
   }
 }
@@ -821,10 +859,7 @@ function spawnEliteFragments(elite, region) {
 function updateRegionFlow(dt) {
   if (state.routeChoice.active) {
     state.routeChoice.timer = Math.max(0, state.routeChoice.timer - dt);
-    for (const gate of state.routeChoice.gates) {
-      gate.age = (gate.age || 0) + dt;
-      gate.z = Math.max(220, gate.z - 95 * dt);
-    }
+    for (const gate of state.routeChoice.gates) gate.age = (gate.age || 0) + dt;
     if (state.routeChoice.timer <= 0) chooseFallbackRoute();
     return;
   }
@@ -832,11 +867,12 @@ function updateRegionFlow(dt) {
   if (state.regionTimer >= tuning.routeChoiceInterval) beginRouteChoice();
 }
 
-function makeRouteGate(regionId, x, z) {
+function makeRouteGate(regionId, x, y, z) {
   const region = regions[regionId];
   return {
     regionId,
     x,
+    y,
     z,
     age: 0,
     label: region ? region.label : regionId,
@@ -844,18 +880,24 @@ function makeRouteGate(regionId, x, z) {
   };
 }
 
+// Two rings float ahead of the ship inside the room, not on a fixed track.
 function beginRouteChoice() {
   const ids = Object.keys(regions).filter((id) => id !== state.regionId);
   const picks = [];
   while (picks.length < 2 && ids.length) {
     picks.push(ids.splice(Math.floor(Math.random() * ids.length), 1)[0]);
   }
-  const z = getTuningValue("farDistance", 1700) * 0.5;
+  const forward = projection.makeBasis(state.player.yaw, state.player.pitch).forward;
+  const right = projection.makeBasis(state.player.yaw, 0).right;
+  const baseX = state.player.x + forward.x * 620;
+  const baseY = state.player.y + forward.y * 620;
+  const baseZ = state.player.z + forward.z * 620;
+
   state.routeChoice.active = true;
   state.routeChoice.timer = tuning.routeChoiceDuration;
   state.routeChoice.gates = [
-    makeRouteGate(picks[0], -getTuningValue("laneHalfWidth", 340) * 0.62, z),
-    makeRouteGate(picks[1], getTuningValue("laneHalfWidth", 340) * 0.62, z)
+    makeRouteGate(picks[0], baseX - right.x * 260, baseY + 40, baseZ - right.z * 260),
+    makeRouteGate(picks[1], baseX + right.x * 260, baseY - 40, baseZ + right.z * 260)
   ];
   playSound("pickup");
 }
@@ -868,7 +910,7 @@ function chooseFallbackRoute() {
   let best = state.routeChoice.gates[0];
   let bestDistance = Infinity;
   for (const gate of state.routeChoice.gates) {
-    const distance = Math.hypot(gate.x - state.player.x, gate.z - state.player.z);
+    const distance = Math.hypot(gate.x - state.player.x, gate.y - state.player.y, gate.z - state.player.z);
     if (distance < bestDistance) {
       bestDistance = distance;
       best = gate;
@@ -877,11 +919,9 @@ function chooseFallbackRoute() {
   resolveRouteChoice(best.regionId);
 }
 
+// Warping clears the field, which is also how you shake an elite.
 function pruneAsteroidsAfterRoute() {
-  state.asteroids = state.asteroids.filter((asteroid) => {
-    if (asteroid.elite) return false;
-    return asteroid.z > getTuningValue("farDistance", 1700) * 0.3;
-  });
+  state.asteroids = state.asteroids.filter((asteroid) => !asteroid.elite);
   state.eliteTimer = 0;
 }
 
@@ -910,10 +950,7 @@ function resolveRouteChoice(regionId) {
 function handleRouteGateCollision() {
   if (!state.routeChoice.active) return;
   for (const gate of state.routeChoice.gates) {
-    const dx = state.player.x - gate.x;
-    const dy = state.player.y;
-    const dz = state.player.z - gate.z;
-    if (dx * dx + dy * dy < tuning.routeGateRadius * tuning.routeGateRadius && Math.abs(dz) < 90) {
+    if (isWithinRadius3d(gate.x, gate.y, gate.z, state.player.x, state.player.y, state.player.z, tuning.routeGateRadius)) {
       resolveRouteChoice(gate.regionId);
       return;
     }
@@ -923,13 +960,13 @@ function handleRouteGateCollision() {
 /* ---------- 拾取物 ---------- */
 
 function samplePickupPosition() {
-  const halfW = getTuningValue("laneHalfWidth", 340);
-  const halfH = getTuningValue("laneHalfHeight", 220);
-  return {
-    x: (Math.random() - 0.5) * 1.5 * halfW,
-    y: (Math.random() - 0.5) * 1.5 * halfH,
-    z: 420 + Math.random() * 620
-  };
+  return sampleAround(
+    state.player.x,
+    state.player.y,
+    state.player.z,
+    200,
+    getTuningValue("farDistance", 1700) * 0.5
+  );
 }
 
 function findSafePickupPosition(radius) {
@@ -939,8 +976,11 @@ function findSafePickupPosition(radius) {
     const candidate = samplePickupPosition();
     let score = Infinity;
     for (const asteroid of state.asteroids) {
-      if (asteroid.z > candidate.z + 60 || asteroid.z < candidate.z - 60) continue;
-      score = Math.min(score, Math.hypot(candidate.x - asteroid.x, candidate.y - asteroid.y) - asteroid.radius - radius);
+      score = Math.min(score, Math.hypot(
+        candidate.x - asteroid.x,
+        candidate.y - asteroid.y,
+        candidate.z - asteroid.z
+      ) - asteroid.radius - radius);
     }
     if (score > bestScore) {
       bestScore = score;
@@ -994,7 +1034,7 @@ function hasActiveMovement() {
 
 function update(dt) {
   state.pulseTime += dt;
-  updateStars(dt);
+  updateStars();
   updateParticles(dt);
   updateRings(dt);
   updateMessages(dt);
@@ -1030,10 +1070,6 @@ function update(dt) {
     state.difficultyTimer = 0;
     state.speedScale = Math.min(tuning.maxSpeedScale, state.speedScale + tuning.asteroidSpeedStep);
     state.spawnInterval = Math.max(tuning.minSpawnInterval, state.spawnInterval - tuning.spawnIntervalStep);
-    state.approachSpeed = Math.min(
-      getTuningValue("approachSpeedMax", 330),
-      state.approachSpeed + getTuningValue("approachSpeedStep", 0.075) * tuning.difficultyStep
-    );
   }
 
   if (state.spawnTimer >= getRouteAdjustedSpawnInterval(region)) {
@@ -1052,7 +1088,7 @@ function update(dt) {
   }
 
   movePlayer(dt);
-  state.laneOffset += state.approachSpeed * dt;
+  updateCamera(dt);
   spawnThrusterTrail(dt);
   moveAsteroids(dt);
   moveLasers(dt);
@@ -1061,58 +1097,116 @@ function update(dt) {
   syncHud();
 }
 
+// Free flight: yaw/pitch aim the nose, W/S fly along it, A/D strafe sideways.
 function movePlayer(dt) {
-  const keyboard = inputController.getKeyboardMovement();
-  const dx = keyboard.dx + gestureMovement.dx;
-  const dy = keyboard.dy + gestureMovement.dy;
-  const inputLength = Math.hypot(dx, dy);
-  const maxSpeed = getTuningValue("shipSpeed3d", 300);
-  const acceleration = getTuningValue("shipAccel3d", 14);
-  const deceleration = getTuningValue("shipDecel3d", 20);
+  const look = inputController.consumeLook();
+  state.player.yaw += look.yaw;
+  state.player.pitch = clamp(
+    state.player.pitch - look.pitch,
+    -getTuningValue("maxPitch", 1.15),
+    getTuningValue("maxPitch", 1.15)
+  );
 
-  if (inputLength > 0) {
-    const nx = dx / inputLength;
-    const ny = dy / inputLength;
-    const inputScale = Math.min(1, inputLength);
-    const blend = 1 - Math.exp(-acceleration * dt);
-    state.player.vx += (nx * maxSpeed * inputScale - state.player.vx) * blend;
-    state.player.vy += (ny * maxSpeed * inputScale - state.player.vy) * blend;
-  } else {
-    const blend = Math.exp(-deceleration * dt);
-    state.player.vx *= blend;
-    state.player.vy *= blend;
-  }
+  const move = inputController.getMoveInput();
+  const basis = projection.makeBasis(state.player.yaw, state.player.pitch);
+  const forwardSpeed = getTuningValue("shipSpeed3d", 330);
+  const strafeSpeed = getTuningValue("strafeSpeed3d", 260);
+  const acceleration = getTuningValue("shipAccel3d", 9);
+  const deceleration = getTuningValue("shipDecel3d", 14);
+
+  const targetVx = basis.forward.x * forwardSpeed * move.forward + basis.right.x * strafeSpeed * move.strafe;
+  const targetVy = basis.forward.y * forwardSpeed * move.forward;
+  const targetVz = basis.forward.z * forwardSpeed * move.forward + basis.right.z * strafeSpeed * move.strafe;
+  const moving = move.forward !== 0 || move.strafe !== 0;
+  const blend = moving ? 1 - Math.exp(-acceleration * dt) : 1 - Math.exp(-deceleration * dt);
+
+  state.player.vx += (targetVx - state.player.vx) * blend;
+  state.player.vy += (targetVy - state.player.vy) * blend;
+  state.player.vz += (targetVz - state.player.vz) * blend;
 
   state.player.x += state.player.vx * dt;
   state.player.y += state.player.vy * dt;
-  clampPlayerToLane();
+  state.player.z += state.player.vz * dt;
+  clampPlayerToWorld();
 
-  const speedRatio = Math.min(1, Math.hypot(state.player.vx, state.player.vy) / maxSpeed);
-  const thrustTarget = inputLength > 0 ? Math.max(0.4, speedRatio) : 0.35;
+  const speedRatio = Math.min(1, Math.hypot(state.player.vx, state.player.vy, state.player.vz) / forwardSpeed);
+  const thrustTarget = moving ? Math.max(0.4, speedRatio) : 0.3;
   state.player.thrust += (thrustTarget - state.player.thrust) * (1 - Math.exp(-10 * dt));
 
-  const rollTarget = clamp(state.player.vx / maxSpeed, -1, 1);
-  const pitchTarget = clamp(state.player.vy / maxSpeed, -1, 1);
+  // Bank into strafes and turns; the camera roll sells the 3D feel.
+  const rollTarget = clamp(move.strafe * 0.9 + look.yaw * 22, -1, 1);
   state.player.roll += (rollTarget - state.player.roll) * (1 - Math.exp(-9 * dt));
-  state.player.pitch += (pitchTarget - state.player.pitch) * (1 - Math.exp(-9 * dt));
 }
 
-// 管状软边界：贴边时推回并吃掉朝外的速度，而不是硬停。
-function clampPlayerToLane() {
-  const halfW = getTuningValue("laneHalfWidth", 340) - state.player.radius;
-  const halfH = getTuningValue("laneHalfHeight", 220) - state.player.radius;
-  if (state.player.x < -halfW || state.player.x > halfW) {
-    const limit = state.player.x < 0 ? -halfW : halfW;
-    const overshoot = state.player.x - limit;
-    state.player.x = limit + overshoot * 0.35;
-    state.player.vx *= -0.15;
+// Soft boundary: push back and bleed the outward velocity instead of stopping dead.
+function clampPlayerToWorld() {
+  const pad = getTuningValue("boundaryPadding", 60) + state.player.radius;
+  const axes = [
+    ["x", 0, state.world.width],
+    ["y", 0, state.world.depth],
+    ["z", 0, state.world.height]
+  ];
+  for (const [axis, min, max] of axes) {
+    const lo = min + pad;
+    const hi = max - pad;
+    const value = state.player[axis];
+    if (value < lo) {
+      state.player[axis] = lo + (value - lo) * 0.35;
+      state.player[`v${axis}`] = Math.max(0, state.player[`v${axis}`] * -0.15);
+    } else if (value > hi) {
+      state.player[axis] = hi + (value - hi) * 0.35;
+      state.player[`v${axis}`] = Math.min(0, state.player[`v${axis}`] * -0.15);
+    }
   }
-  if (state.player.y < -halfH || state.player.y > halfH) {
-    const limit = state.player.y < 0 ? -halfH : halfH;
-    const overshoot = state.player.y - limit;
-    state.player.y = limit + overshoot * 0.35;
-    state.player.vy *= -0.15;
-  }
+}
+
+/* ---------- 相机 ---------- */
+
+function cameraForward() {
+  return projection.makeBasis(state.camera.yaw, state.camera.pitch).forward;
+}
+
+function placeCameraAtShip() {
+  const cam = projection.createChaseCamera({
+    ship: state.player,
+    yaw: state.player.yaw,
+    pitch: state.player.pitch,
+    distance: getTuningValue("cameraDistance", 320),
+    height: getTuningValue("cameraHeight", 90),
+    width: cw,
+    heightPx: ch,
+    fovDegrees: getTuningValue("fovDegrees", 62)
+  });
+  state.camera.x = cam.x;
+  state.camera.y = cam.y;
+  state.camera.z = cam.z;
+}
+
+function snapCameraToShip() {
+  state.camera.yaw = state.player.yaw;
+  state.camera.pitch = state.player.pitch;
+  placeCameraAtShip();
+}
+
+function updateCamera(dt) {
+  const lag = getTuningValue("cameraLag", 8);
+  const blend = 1 - Math.exp(-lag * dt);
+  state.camera.yaw += (state.player.yaw - state.camera.yaw) * blend;
+  state.camera.pitch += (state.player.pitch - state.camera.pitch) * blend;
+  placeCameraAtShip();
+}
+
+function getActiveCamera() {
+  return projection.createCamera({
+    x: state.camera.x,
+    y: state.camera.y,
+    z: state.camera.z,
+    yaw: state.camera.yaw,
+    pitch: state.camera.pitch,
+    width: cw,
+    height: ch,
+    fovDegrees: getTuningValue("fovDegrees", 62)
+  });
 }
 
 function spawnThrusterTrail(dt) {
@@ -1124,14 +1218,16 @@ function spawnThrusterTrail(dt) {
   if (state.player.trailTimer < getTuningValue("thrusterTrailInterval", 0.035)) return;
   state.player.trailTimer = 0;
   const color = state.shipColor;
+  const basis = projection.makeBasis(state.player.yaw, state.player.pitch);
   for (let i = 0; i < 2; i += 1) {
+    // Exhaust fires backwards out of the engine, along -forward.
     state.particles.push(acquireParticle(
-      state.player.x + (Math.random() - 0.5) * 14,
-      state.player.y + (Math.random() - 0.5) * 10,
-      state.player.z - 18,
-      -state.player.vx * 0.12 + (Math.random() - 0.5) * 26,
-      -state.player.vy * 0.12 + (Math.random() - 0.5) * 26,
-      -140 - Math.random() * 80,
+      state.player.x - basis.forward.x * 20 + (Math.random() - 0.5) * 14,
+      state.player.y - basis.forward.y * 20,
+      state.player.z - basis.forward.z * 20 + (Math.random() - 0.5) * 14,
+      -basis.forward.x * (150 + Math.random() * 80) + (Math.random() - 0.5) * 30,
+      -basis.forward.y * (150 + Math.random() * 80) + (Math.random() - 0.5) * 30,
+      -basis.forward.z * (150 + Math.random() * 80) + (Math.random() - 0.5) * 30,
       0.2 + Math.random() * 0.2,
       2 + Math.random() * 2.4,
       Math.random() > 0.5 ? color.hi : rgba(color.rgb, 0.8)
@@ -1140,44 +1236,47 @@ function spawnThrusterTrail(dt) {
 }
 
 function moveAsteroids(dt) {
-  const approach = state.approachSpeed;
-  const cullZ = -getTuningValue("behindCull", 120);
+  const pad = getTuningValue("boundaryPadding", 60);
   let alive = 0;
   for (const asteroid of state.asteroids) {
     if (asteroid.elite) steerEliteAsteroid(asteroid, dt);
-    asteroid.z -= approach * asteroid.approachFactor * dt;
     asteroid.x += asteroid.vx * dt;
     asteroid.y += asteroid.vy * dt;
+    asteroid.z += asteroid.vz * dt;
     asteroid.rotation += asteroid.spin * dt;
     asteroid.hitFlash = Math.max(0, asteroid.hitFlash - dt * 4);
 
-    const halfW = getTuningValue("laneHalfWidth", 340);
-    const halfH = getTuningValue("laneHalfHeight", 220);
-    if (asteroid.x < -halfW || asteroid.x > halfW) asteroid.vx *= -0.6;
-    if (asteroid.y < -halfH || asteroid.y > halfH) asteroid.vy *= -0.6;
+    // Bounce off the room walls so rocks stay inside the play space.
+    if (asteroid.x < pad || asteroid.x > state.world.width - pad) asteroid.vx *= -0.85;
+    if (asteroid.y < pad || asteroid.y > state.world.depth - pad) asteroid.vy *= -0.85;
+    if (asteroid.z < pad || asteroid.z > state.world.height - pad) asteroid.vz *= -0.85;
+    asteroid.x = clamp(asteroid.x, pad, state.world.width - pad);
+    asteroid.y = clamp(asteroid.y, pad, state.world.depth - pad);
+    asteroid.z = clamp(asteroid.z, pad, state.world.height - pad);
 
-    if (asteroid.z > cullZ) state.asteroids[alive++] = asteroid;
+    state.asteroids[alive++] = asteroid;
   }
   state.asteroids.length = alive;
 }
 
 function moveLasers(dt) {
   let alive = 0;
-  const cullZ = getTuningValue("farDistance", 1700);
   for (const laser of state.lasers) {
+    laser.x += laser.vx * dt;
+    laser.y += laser.vy * dt;
     laser.z += laser.vz * dt;
     laser.life -= dt;
-    if (laser.life > 0 && laser.z < cullZ) state.lasers[alive++] = laser;
+    const inside = laser.x > -200 && laser.x < state.world.width + 200
+      && laser.y > -200 && laser.y < state.world.depth + 200
+      && laser.z > -200 && laser.z < state.world.height + 200;
+    if (laser.life > 0 && inside) state.lasers[alive++] = laser;
   }
   state.lasers.length = alive;
 }
 
 function updatePickups(dt) {
-  const approach = state.approachSpeed * 0.55;
   for (const core of state.cores) core.pulse += dt * 3;
   for (const powerUp of state.powerUps) powerUp.pulse += dt * 3.5;
-  state.cores = state.cores.filter((core) => { core.z -= approach * dt; return core.z > -60; });
-  state.powerUps = state.powerUps.filter((powerUp) => { powerUp.z -= approach * dt; return powerUp.z > -60; });
 }
 
 function updateParticles(dt) {
@@ -1227,26 +1326,41 @@ function fireLaser() {
   state.shootCooldown = tuning.shootCooldown;
   playSound("shoot");
 
-  const speed = tuning.laserSpeed * 2.4;
-  const offsetX = tuning.doubleShotOffset;
+  // Fire along the nose, which is where the crosshair points.
+  const basis = projection.makeBasis(state.player.yaw, state.player.pitch);
+  const speed = getTuningValue("laserSpeed3d", 1400);
+  const offset = state.player.radius + 6;
+  const baseX = state.player.x + basis.forward.x * offset;
+  const baseY = state.player.y + basis.forward.y * offset;
+  const baseZ = state.player.z + basis.forward.z * offset;
+
   if (state.doubleShotTimer > 0) {
+    const side = tuning.doubleShotOffset;
     state.stats.shotsFired += 2;
-    spawnLaser(state.player.x - offsetX, state.player.y, speed);
-    spawnLaser(state.player.x + offsetX, state.player.y, speed);
+    spawnLaser(baseX + basis.right.x * side, baseY, baseZ + basis.right.z * side, basis, speed);
+    spawnLaser(baseX - basis.right.x * side, baseY, baseZ - basis.right.z * side, basis, speed);
     return;
   }
   state.stats.shotsFired += 1;
-  spawnLaser(state.player.x, state.player.y, speed);
+  spawnLaser(baseX, baseY, baseZ, basis, speed);
 }
 
-function spawnLaser(x, y, speed) {
-  state.lasers.push({ x, y, z: 8, vz: speed, life: tuning.laserLife });
+function spawnLaser(x, y, z, basis, speed) {
+  state.lasers.push({
+    x,
+    y,
+    z,
+    vx: basis.forward.x * speed,
+    vy: basis.forward.y * speed,
+    vz: basis.forward.z * speed,
+    life: tuning.laserLife * 1.6
+  });
   for (let i = 0; i < 4; i += 1) {
     state.particles.push(acquireParticle(
-      x, y, 10,
-      (Math.random() - 0.5) * 60,
-      (Math.random() - 0.5) * 60,
-      120 + Math.random() * 140,
+      x, y, z,
+      basis.forward.x * (120 + Math.random() * 140) + (Math.random() - 0.5) * 60,
+      basis.forward.y * (120 + Math.random() * 140) + (Math.random() - 0.5) * 60,
+      basis.forward.z * (120 + Math.random() * 140) + (Math.random() - 0.5) * 60,
       0.1 + Math.random() * 0.1,
       1.6 + Math.random() * 2,
       Math.random() > 0.5 ? "#77ebff" : "#b7f4ff"
@@ -1543,19 +1657,7 @@ function endGame() {
 /* ---------- 渲染 ---------- */
 
 function makeCamera() {
-  return projection.createCamera({
-    player: {
-      x: state.player.x * 0.7,
-      y: state.player.y * 0.7,
-      z: state.player.z
-    },
-    width: cw,
-    height: ch,
-    fovDegrees: getTuningValue("fovDegrees", 55),
-    cameraDistance: getTuningValue("cameraDistance", 520),
-    cameraHeight: getTuningValue("cameraHeight", 150),
-    cameraPitch: getTuningValue("cameraPitch", 0.16)
-  });
+  return getActiveCamera();
 }
 
 function draw() {
@@ -1583,10 +1685,43 @@ function draw() {
 
   drawMessages(camera);
   drawVignette();
+  drawBoundaryFence(camera);
   drawLaneRadar();
   drawHudOverlay(region);
   drawWarpFlash();
+  drawCrosshair();
   ctx.restore();
+}
+
+// Faint edge lines mark the room bounds, so the soft boundary is legible.
+function drawBoundaryFence(camera) {
+  const corners = (y) => [
+    { x: 0, y, z: 0 },
+    { x: state.world.width, y, z: 0 },
+    { x: state.world.width, y, z: state.world.height },
+    { x: 0, y, z: state.world.height }
+  ];
+  ctx.save();
+  ctx.strokeStyle = rgba(getCurrentRegion().tint, getTuningValue("fenceAlpha", 0.16));
+  ctx.lineWidth = 1;
+  for (const y of [0, state.world.depth]) {
+    const points = corners(y).map((c) => projection.projectPoint(c, camera));
+    if (!points.every((p) => p.visible)) continue;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
+    ctx.closePath();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCrosshair() {
+  const el = document.getElementById("crosshair");
+  const active = state.running && !state.paused && !state.gameOver;
+  el?.classList.toggle("is-active", active);
+  const lookPad = document.querySelector("[data-look-pad]");
+  lookPad?.classList.toggle("is-active", active && mobileViewportQuery.matches);
 }
 
 function drawMessages(camera) {
@@ -1603,18 +1738,17 @@ function drawMessages(camera) {
   }
 }
 
+// Top-down radar centred on the ship: horizontal = world x, vertical = world z.
 function drawLaneRadar() {
   const size = tuning.minimapSize;
   const margin = tuning.minimapMargin;
-  // Top-right: the ship sits near the bottom of a 3D frame, so the old
-  // bottom-left radar would cover it.
   const left = cw - size - margin;
   const top = margin + 46;
 
-  const far = getTuningValue("farDistance", 1700);
-  const halfW = getTuningValue("laneHalfWidth", 340);
-  const toX = (wx) => left + ((wx / halfW) * 0.5 + 0.5) * size;
-  const toY = (wz) => top + size - (wz / far) * size;
+  const viewRadius = 900;
+  const toX = (wx) => left + size / 2 + ((wx - state.player.x) / viewRadius) * (size / 2);
+  const toY = (wz) => top + size / 2 - ((wz - state.player.z) / viewRadius) * (size / 2);
+  const inRange = (obj) => Math.hypot(obj.x - state.player.x, obj.z - state.player.z) < viewRadius;
 
   ctx.save();
   ctx.globalAlpha = 0.82;
@@ -1629,25 +1763,25 @@ function drawLaneRadar() {
 
   ctx.strokeStyle = "rgba(98,228,255,0.14)";
   for (let i = 1; i < 4; i += 1) {
-    const y = top + (size * i) / 4;
+    const offset = (size * i) / 4;
     ctx.beginPath();
-    ctx.moveTo(left, y);
-    ctx.lineTo(left + size, y);
+    ctx.moveTo(left + offset, top);
+    ctx.lineTo(left + offset, top + size);
+    ctx.moveTo(left, top + offset);
+    ctx.lineTo(left + size, top + offset);
     ctx.stroke();
   }
 
   for (const asteroid of state.asteroids) {
-    if (asteroid.z < 0) continue;
-    const x = toX(asteroid.x);
-    const y = toY(asteroid.z);
+    if (!inRange(asteroid)) continue;
     ctx.fillStyle = asteroid.elite ? "rgba(255,181,158,0.95)" : "rgba(150,168,196,0.75)";
     ctx.beginPath();
-    ctx.arc(x, y, asteroid.elite ? 2.6 : 1.7, 0, Math.PI * 2);
+    ctx.arc(toX(asteroid.x), toY(asteroid.z), asteroid.elite ? 2.6 : 1.7, 0, Math.PI * 2);
     ctx.fill();
   }
 
   for (const core of state.cores) {
-    if (core.z < 0) continue;
+    if (!inRange(core)) continue;
     ctx.fillStyle = "rgba(138,255,209,0.9)";
     ctx.beginPath();
     ctx.arc(toX(core.x), toY(core.z), 2, 0, Math.PI * 2);
@@ -1662,11 +1796,16 @@ function drawLaneRadar() {
     ctx.stroke();
   }
 
+  // Ship arrow points along the current heading.
+  const dirX = Math.sin(state.player.yaw);
+  const dirZ = Math.cos(state.player.yaw);
+  const cx = toX(state.player.x);
+  const cy = toY(state.player.z);
   ctx.fillStyle = "rgba(226,252,255,0.95)";
   ctx.beginPath();
-  ctx.moveTo(toX(state.player.x), toY(0) - 5);
-  ctx.lineTo(toX(state.player.x) + 4, toY(0) + 3);
-  ctx.lineTo(toX(state.player.x) - 4, toY(0) + 3);
+  ctx.moveTo(cx + dirX * 6, cy - dirZ * 6);
+  ctx.lineTo(cx - dirX * 4 + dirZ * 4, cy + dirZ * 4 + dirX * 4);
+  ctx.lineTo(cx - dirX * 4 - dirZ * 4, cy + dirZ * 4 - dirX * 4);
   ctx.closePath();
   ctx.fill();
   ctx.restore();
@@ -1871,7 +2010,8 @@ if (new URLSearchParams(window.location.search).has("test")) {
     }),
     getScene: () => ({
       asteroids: state.asteroids.map((a) => ({ x: a.x, y: a.y, z: a.z, radius: a.radius })),
-      player: { x: state.player.x, y: state.player.y, z: state.player.z },
+      player: { x: state.player.x, y: state.player.y, z: state.player.z, yaw: state.player.yaw, pitch: state.player.pitch },
+      camera: { x: state.camera.x, y: state.camera.y, z: state.camera.z, yaw: state.camera.yaw, pitch: state.camera.pitch },
       health: state.health,
       score: state.score
     })

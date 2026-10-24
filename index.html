@@ -113,7 +113,11 @@
 
           <div class="playfield">
             <canvas id="game" width="960" height="600" aria-label="游戏画面"></canvas>
+            <div class="crosshair" id="crosshair" aria-hidden="true"></div>
             <div class="scanlines" aria-hidden="true"></div>
+            <div class="look-pad" data-look-pad aria-label="拖动转视角">
+              <span class="look-pad-hint" id="touch-look-label">拖动转视角</span>
+            </div>
             <div class="orientation-hint" id="orientation-hint" data-orientation-hint>横屏游玩视野更宽</div>
             <div class="touch-controls" id="touch-controls-wrap" aria-label="触控操作">
               <div class="gesture-pad" data-gesture-pad aria-label="拖动移动">

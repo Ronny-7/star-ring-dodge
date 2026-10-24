@@ -8,20 +8,63 @@
   const NEAR_PLANE = 1;
   const MAX_HORIZONTAL_FOV = 78;
 
-  function createCamera({ player, width, height, fovDegrees, cameraDistance, cameraHeight, cameraPitch }) {
+  function makeFocal(width, height, fovDegrees) {
     // Constrain both axes: a tall portrait canvas would otherwise squeeze the
-    // horizontal view into a sliver, since focal derived from height alone
-    // grows with the aspect ratio.
-    const focalFromHeight = height / 2 / Math.tan((fovDegrees * Math.PI) / 180 / 2);
-    const focalFromWidth = width / 2 / Math.tan((MAX_HORIZONTAL_FOV * Math.PI) / 180 / 2);
+    // horizontal view into a sliver.
+    const fromHeight = height / 2 / Math.tan((fovDegrees * Math.PI) / 180 / 2);
+    const fromWidth = width / 2 / Math.tan((MAX_HORIZONTAL_FOV * Math.PI) / 180 / 2);
+    return Math.min(fromHeight, fromWidth);
+  }
+
+  // Basis from yaw (around world y) and pitch (nose up/down).
+  // Forward/free-flight means the camera can look anywhere, so the old
+  // fixed "look down +z" assumption no longer holds.
+  function makeBasis(yaw, pitch) {
+    const cp = Math.cos(pitch);
+    const sp = Math.sin(pitch);
+    const cy = Math.cos(yaw);
+    const sy = Math.sin(yaw);
     return {
-      x: player.x,
-      y: player.y + cameraHeight,
-      z: player.z - cameraDistance,
-      pitch: cameraPitch,
-      focal: Math.min(focalFromHeight, focalFromWidth),
+      forward: { x: sy * cp, y: sp, z: cy * cp },
+      right: { x: cy, y: 0, z: -sy },
+      // up = right × forward
+      up: { x: -sy * sp, y: cp, z: -cy * sp }
+    };
+  }
+
+  function createCamera({ x, y, z, yaw, pitch, width, height, fovDegrees }) {
+    const basis = makeBasis(yaw || 0, pitch || 0);
+    return {
+      x,
+      y,
+      z,
+      yaw: yaw || 0,
+      pitch: pitch || 0,
+      forward: basis.forward,
+      right: basis.right,
+      up: basis.up,
+      focal: makeFocal(width, height, fovDegrees),
       centerX: width / 2,
       centerY: height / 2
+    };
+  }
+
+  // Places the camera behind and above the ship, looking where the ship looks.
+  function createChaseCamera({ ship, yaw, pitch, distance, height, width, heightPx, fovDegrees, lookAhead }) {
+    const basis = makeBasis(yaw, pitch);
+    const back = distance + (lookAhead || 0);
+    return {
+      x: ship.x - basis.forward.x * back,
+      y: ship.y - basis.forward.y * back + height,
+      z: ship.z - basis.forward.z * back,
+      yaw,
+      pitch,
+      forward: basis.forward,
+      right: basis.right,
+      up: basis.up,
+      focal: makeFocal(width, heightPx, fovDegrees),
+      centerX: width / 2,
+      centerY: heightPx / 2
     };
   }
 
@@ -29,21 +72,19 @@
     const rx = point.x - camera.x;
     const ry = point.y - camera.y;
     const rz = point.z - camera.z;
-    const sinPitch = Math.sin(camera.pitch);
-    const cosPitch = Math.cos(camera.pitch);
+    const { forward, right, up } = camera;
 
-    // Camera looks along +z, tilted down by `pitch`.
-    const depth = rz * cosPitch - ry * sinPitch;
+    const depth = rx * forward.x + ry * forward.y + rz * forward.z;
     if (depth <= NEAR_PLANE) {
       return { x: 0, y: 0, scale: 0, depth, visible: false };
     }
 
-    const right = rx;
-    const up = ry * cosPitch + rz * sinPitch;
+    const side = rx * right.x + ry * right.y + rz * right.z;
+    const lift = rx * up.x + ry * up.y + rz * up.z;
     const scale = camera.focal / depth;
     return {
-      x: camera.centerX + right * scale,
-      y: camera.centerY - up * scale,
+      x: camera.centerX + side * scale,
+      y: camera.centerY - lift * scale,
       scale,
       depth,
       visible: true
@@ -56,5 +97,13 @@
     return Math.max(0, 1 - (depth - fogStart) / Math.max(1, fogRange));
   }
 
-  return { NEAR_PLANE, createCamera, projectPoint, distanceFade };
+  return {
+    NEAR_PLANE,
+    MAX_HORIZONTAL_FOV,
+    makeBasis,
+    createCamera,
+    createChaseCamera,
+    projectPoint,
+    distanceFade
+  };
 });

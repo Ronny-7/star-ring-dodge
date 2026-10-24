@@ -56,40 +56,6 @@
     ctx.restore();
   }
 
-  function projectLaneRing(z, halfWidth, halfHeight, camera) {
-    const corners = [
-      { x: -halfWidth, y: halfHeight, z },
-      { x: halfWidth, y: halfHeight, z },
-      { x: halfWidth, y: -halfHeight, z },
-      { x: -halfWidth, y: -halfHeight, z }
-    ].map((corner) => projectPoint(corner, camera));
-    return corners.every((corner) => corner.visible) ? corners : null;
-  }
-
-  function drawLane(ctx, { camera, tuning, laneOffset, region, pulseTime }) {
-    const spacing = tuning.laneRingSpacing;
-    // Rings scroll toward the player, so the depth ruler itself reads as motion.
-    const scroll = ((laneOffset % spacing) + spacing) % spacing;
-    ctx.save();
-    ctx.lineWidth = 1.2;
-    for (let i = 0; i < 8; i += 1) {
-      const z = i * spacing - scroll + 40;
-      if (z < 20 || z > tuning.farDistance) continue;
-      const corners = projectLaneRing(z, tuning.laneHalfWidth, tuning.laneHalfHeight, camera);
-      if (!corners) continue;
-      const fade = distanceFade(z, tuning.fogStart, tuning.fogRange);
-      if (fade <= 0.02) continue;
-      const strength = fade * (0.22 + 0.16 * Math.sin(pulseTime * 2 + i));
-      ctx.strokeStyle = rgba(region.tint, strength);
-      ctx.beginPath();
-      ctx.moveTo(corners[0].x, corners[0].y);
-      for (let k = 1; k < corners.length; k += 1) ctx.lineTo(corners[k].x, corners[k].y);
-      ctx.closePath();
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
   function asteroidScreenRadius(asteroid, p) {
     return asteroid.radius * p.scale;
   }
@@ -246,7 +212,7 @@
     ctx.globalAlpha = 1;
   }
 
-  // Third-person rear view: nose points into the screen, so we see the tail.
+  // Third-person rear view: nose points along the ship's heading.
   function drawShip(ctx, { p, tuning, color, pulseTime, thrust, roll, pitch, invulnerable, shape }) {
     const unit = tuning.shipScale * p.scale;
     const wingSpan = shape ? shape.wingSpan : 1.45;
@@ -378,13 +344,6 @@
       fogStrength: 1
     });
     drawStars(ctx, { stars: state.stars3d, camera, tuning });
-    drawLane(ctx, {
-      camera,
-      tuning,
-      laneOffset: state.laneOffset,
-      region,
-      pulseTime: state.pulseTime
-    });
 
     const buckets = [
       { items: state.asteroids, draw: "asteroid" },
@@ -420,7 +379,7 @@
       drawWarpGate(ctx, { gate, camera, tuning, pulseTime: state.pulseTime, lang });
     }
 
-    const shipPoint = projectPoint({ x: state.player.x, y: state.player.y, z: 0 }, camera);
+    const shipPoint = projectPoint({ x: state.player.x, y: state.player.y, z: state.player.z }, camera);
     if (shipPoint.visible) {
       drawShip(ctx, {
         p: shipPoint,
