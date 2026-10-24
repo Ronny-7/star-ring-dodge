@@ -629,6 +629,15 @@ button:focus-visible,
   border: 1px dashed rgba(148, 201, 255, 0.24);
 }
 
+.hud-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .crosshair {
   position: absolute;
   top: 50%;

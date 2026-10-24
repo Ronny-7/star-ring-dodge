@@ -15,7 +15,7 @@
       update(dt);
       const active = state.running && !state.paused && !state.gameOver;
       if (active || timestamp - lastIdleFrame >= tuning.idleFrameInterval) {
-        draw();
+        draw(dt);
         lastIdleFrame = timestamp;
       }
       windowObject.requestAnimationFrame(frame);

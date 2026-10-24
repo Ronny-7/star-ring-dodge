@@ -1,10 +1,11 @@
 const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const hudCanvas = document.getElementById("hud");
+const ctx = hudCanvas.getContext("2d");
 const { bestKey, profileKey, tuning, uiText, regions, achievements, profileUi, i18n } = window.starRingConfig;
 const audioController = window.starRingAudio.createAudioController({ windowObject: window, navigatorObject: navigator });
 const storageController = window.starRingStorage;
 const projection = window.starRingProjection;
-const render3d = window.starRingRender3d;
+let world3d = null;
 
 const startMusic = () => audioController.startMusic();
 const stopMusic = () => audioController.stopMusic();
@@ -217,20 +218,27 @@ function resizeCanvas() {
   const nextDpr = Math.min(window.devicePixelRatio || 1, getTuningValue("dprCap", 2));
   const physW = Math.round(width * nextDpr);
   const physH = Math.round(height * nextDpr);
-  if (canvas.width === physW && canvas.height === physH && dpr === nextDpr) return;
+  const changed = canvas.width !== physW || canvas.height !== physH || dpr !== nextDpr;
+  if (!changed) return;
 
   dpr = nextDpr;
   cw = width;
   ch = height;
-  canvas.width = physW;
-  canvas.height = physH;
+
+  // WebGL canvas backing size is owned by three; the HUD overlay we size here.
   canvas.style.width = width + "px";
   canvas.style.height = height + "px";
+  hudCanvas.width = physW;
+  hudCanvas.height = physH;
+  hudCanvas.style.width = width + "px";
+  hudCanvas.style.height = height + "px";
+
+  world3d?.resize(width, height);
   state.player.radius = getPlayerRadius();
 }
 
 function getGameplayScale() {
-  const shortSide = Math.min((canvas.width || 960) / dpr, (canvas.height || 600) / dpr);
+  const shortSide = Math.min(cw, ch);
   return Math.max(0.72, Math.min(1, shortSide / 560));
 }
 
@@ -409,7 +417,7 @@ const state = {
   asteroids: [],
   cores: [],
   powerUps: [],
-  stars3d: [],
+
   lasers: [],
   messages: [],
   particles: [],
@@ -506,7 +514,7 @@ function resetGame() {
   state.warpFlash.duration = 0;
   state.warpFlash.tint = regions[DEFAULT_REGION_ID].tint;
   state.warpFlash.secondaryTint = regions[DEFAULT_REGION_ID].secondaryTint;
-  state.stars3d = Array.from({ length: tuning.starCount }, () => makeStar(true));
+
   syncHud();
   hideOverlay();
 }
@@ -599,6 +607,7 @@ function selectSkin(name) {
 function selectColor(name) {
   activeColor = name;
   state.shipColor = COLORS[name] || COLORS.blue;
+  world3d?.setShipColor(state.shipColor.mid);
   document.querySelectorAll(".color-swatch").forEach((el) => {
     const active = el.dataset.color === name;
     el.classList.toggle("active", active);
@@ -663,23 +672,6 @@ function renderSkinPreviews() {
 }
 
 /* ---------- 3D 世界 ---------- */
-
-// Stars are fixed points in the room; the camera moving is what makes them move.
-function makeStar() {
-  return {
-    x: Math.random() * state.world.width,
-    y: Math.random() * state.world.depth,
-    z: Math.random() * state.world.height,
-    size: Math.random() * 1.6 + 0.5,
-    alpha: Math.random() * 0.55 + 0.2,
-    tint: Math.random() > 0.82 ? "150,190,255" : "222,238,255"
-  };
-}
-
-function updateStars() {
-  // Static field, but keep the count topped up if the world grew.
-  while (state.stars3d.length < tuning.starCount) state.stars3d.push(makeStar());
-}
 
 function makeAsteroidShape(radius) {
   const craterCount = 3 + Math.floor(Math.random() * 3);
@@ -943,6 +935,7 @@ function resolveRouteChoice(regionId) {
   state.routeChoice.gates = [];
   pruneAsteroidsAfterRoute();
   startWarpFlash(region);
+  world3d?.setRegionTint(region.tint);
   playSound("pickup");
   evaluateAchievements();
 }
@@ -1034,7 +1027,7 @@ function hasActiveMovement() {
 
 function update(dt) {
   state.pulseTime += dt;
-  updateStars();
+
   updateParticles(dt);
   updateRings(dt);
   updateMessages(dt);
@@ -1118,7 +1111,16 @@ function movePlayer(dt) {
   const targetVy = basis.forward.y * forwardSpeed * move.forward;
   const targetVz = basis.forward.z * forwardSpeed * move.forward + basis.right.z * strafeSpeed * move.strafe;
   const moving = move.forward !== 0 || move.strafe !== 0;
-  const blend = moving ? 1 - Math.exp(-acceleration * dt) : 1 - Math.exp(-deceleration * dt);
+
+  // With mass, the ship only brakes when the input opposes its momentum;
+  // releasing the keys leaves it coasting.
+  let blend;
+  if (moving) {
+    const opposing = targetVx * state.player.vx + targetVy * state.player.vy + targetVz * state.player.vz < 0;
+    blend = 1 - Math.exp(-(opposing ? deceleration : acceleration) * dt);
+  } else {
+    blend = 1 - Math.exp(-(deceleration * 0.25) * dt);
+  }
 
   state.player.vx += (targetVx - state.player.vx) * blend;
   state.player.vy += (targetVy - state.player.vy) * blend;
@@ -1656,64 +1658,29 @@ function endGame() {
 
 /* ---------- 渲染 ---------- */
 
-function makeCamera() {
-  return getActiveCamera();
-}
-
-function draw() {
+function draw(worldDt = 0.016) {
   const region = getCurrentRegion();
+
+  if (world3d) {
+    world3d.render(state, state.camera, worldDt);
+  }
+
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cw, ch);
-  ctx.save();
 
-  if (state.screenShakeTimer > 0 && state.screenShakeStrength > 0) {
-    const intensity = state.screenShakeStrength * Math.min(1, 0.45 + state.screenShakeTimer * 4);
-    ctx.translate((Math.random() - 0.5) * intensity, (Math.random() - 0.5) * intensity);
+  if (world3d) {
+    drawLaneRadar();
+    drawHudOverlay(region);
+    drawVignette();
+    drawWarpFlash();
+    drawCrosshair();
+    return;
   }
 
-  const camera = makeCamera();
-  render3d.renderScene(ctx, {
-    width: cw,
-    height: ch,
-    state,
-    tuning,
-    camera,
-    region,
-    lang: state.lang,
-    skin: activeSkin
-  });
-
-  drawMessages(camera);
-  drawVignette();
-  drawBoundaryFence(camera);
+  // Fallback: 2D HUD-only frame while the WebGL module is still loading.
   drawLaneRadar();
   drawHudOverlay(region);
-  drawWarpFlash();
   drawCrosshair();
-  ctx.restore();
-}
-
-// Faint edge lines mark the room bounds, so the soft boundary is legible.
-function drawBoundaryFence(camera) {
-  const corners = (y) => [
-    { x: 0, y, z: 0 },
-    { x: state.world.width, y, z: 0 },
-    { x: state.world.width, y, z: state.world.height },
-    { x: 0, y, z: state.world.height }
-  ];
-  ctx.save();
-  ctx.strokeStyle = rgba(getCurrentRegion().tint, getTuningValue("fenceAlpha", 0.16));
-  ctx.lineWidth = 1;
-  for (const y of [0, state.world.depth]) {
-    const points = corners(y).map((c) => projection.projectPoint(c, camera));
-    if (!points.every((p) => p.visible)) continue;
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
-    ctx.closePath();
-    ctx.stroke();
-  }
-  ctx.restore();
 }
 
 function drawCrosshair() {
@@ -1722,20 +1689,6 @@ function drawCrosshair() {
   el?.classList.toggle("is-active", active);
   const lookPad = document.querySelector("[data-look-pad]");
   lookPad?.classList.toggle("is-active", active && mobileViewportQuery.matches);
-}
-
-function drawMessages(camera) {
-  for (const message of state.messages) {
-    const p = projection.projectPoint({ x: message.x, y: message.y, z: message.z }, camera);
-    if (!p.visible) continue;
-    ctx.save();
-    ctx.globalAlpha = Math.min(1, message.life * 2);
-    ctx.font = `600 ${Math.max(11, 15 * p.scale)}px "Segoe UI", sans-serif`;
-    ctx.fillStyle = message.color;
-    ctx.textAlign = "center";
-    ctx.fillText(message.text, p.x, p.y);
-    ctx.restore();
-  }
 }
 
 // Top-down radar centred on the ship: horizontal = world x, vertical = world z.
@@ -1959,15 +1912,31 @@ renderSkinPreviews();
 applyLanguage();
 applyLanguageToDOM();
 showOverlay("start", ui.startTitle, ui.startText, ui.startButton);
-state.stars3d = Array.from({ length: tuning.starCount }, () => makeStar(true));
 draw();
-window.starRingRenderer.createRenderLoop({
-  windowObject: window,
-  state,
-  tuning,
-  update,
-  draw
-}).start();
+
+function startLoop() {
+  window.starRingRenderer.createRenderLoop({
+    windowObject: window,
+    state,
+    tuning,
+    update,
+    draw
+  }).start();
+}
+
+// three.js is an ES module; the world boots asynchronously and the HUD-only
+// fallback covers the gap.
+window.starRingWorldReady = import("./world3d.js")
+  .then((mod) => {
+    world3d = mod.createWorld({ world: state.world, tuning });
+    world3d.resize(cw, ch);
+    world3d.setShipColor(state.shipColor.mid);
+    startLoop();
+  })
+  .catch((error) => {
+    console.error("WebGL world failed to load, running HUD-only:", error);
+    startLoop();
+  });
 
 if (new URLSearchParams(window.location.search).has("test")) {
   window.starRingTestApi = {
@@ -1991,7 +1960,7 @@ if (new URLSearchParams(window.location.search).has("test")) {
     spawnAsteroid,
     handleCollisions,
     spawnAsteroidAt: (x, y, z, radius) => {
-      const asteroid = makeAsteroid(x, y, z, radius || 30, 0, 0, getCurrentRegion());
+      const asteroid = makeAsteroid(x, y, z, radius || 30, 0, 0, 0, getCurrentRegion());
       state.asteroids.push(asteroid);
       return asteroid;
     },

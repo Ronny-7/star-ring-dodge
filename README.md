@@ -6,12 +6,26 @@
 
 ## 3D 版说明
 
-v4.0 把游戏改成了真 3D：有限 3D 场地、自由飞行、透视投影与深度排序。玩法核心不变，但飞船能自由转向，陨石从四面八方而来。
+v4.0 把游戏改成了真 3D：有限 3D 场地、自由飞行、WebGL 实时渲染。玩法核心不变，但飞船能自由转向，陨石从四面八方而来。
 
-- 渲染仍是零依赖 canvas 2D，手写透视投影，不需要构建工具
+- 渲染用 three.js + WebGL：PBR 材质、实时阴影、ACES 色调映射
 - 2D 版（v3.8）原样保留在 `main` 分支
 - 3D 版使用独立的存档 key，与 2D 版的最高分和成就互不干扰
 - 当前是**纵切片**：移动、陨石、激光、碰撞、能量核、跃迁、结算已打通；精英陨石、星域特殊机制（涡流/星云）、皮肤差异等留到下一轮
+
+## 运行方式
+
+**3D 版需要本地服务器**（three.js 是 ES module，不能用 `file://` 打开）：
+
+```bash
+node tests/serve.js 8123
+```
+
+然后访问 <http://127.0.0.1:8123/index.html>。
+
+在线访问：https://ronny-7.github.io/star-ring-dodge/（`main` 分支的 2D 版）
+
+浏览器不支持 Web Audio API 时，游戏仍可运行，只是不会播放合成音效。
 
 ## 操作（3D）
 
@@ -29,17 +43,9 @@ v4.0 把游戏改成了真 3D：有限 3D 场地、自由飞行、透视投影�
 - **右半屏拖动**：转视角（偏航 + 俯仰）
 - **开火 / 暂停**：屏幕按钮
 
-## 运行方式
-
-在线访问：https://ronny-7.github.io/star-ring-dodge/
-
-直接用浏览器打开 `index.html` 即可运行，不需要安装依赖或启动构建工具。
-
-浏览器不支持 Web Audio API 时，游戏仍可运行，只是不会播放合成音效。
-
 ## 当前内容
 
-- 真 3D 有限场地：自由飞行、透视投影、按视深排序的画家算法
+- 真 3D 有限场地：自由飞行、WebGL 实时渲染、PBR 材质与实时阴影
 - 软边界：贴近场地边缘时推回，保留闪避压力
 - 陨石在场地内生成、四处游荡、撞墙反弹，随时间提速
 - 本地后处理：伪球体光照（高光径向偏移、终结线、轮廓光）与距离雾化
@@ -72,18 +78,19 @@ v4.0 把游戏改成了真 3D：有限 3D 场地、自由飞行、透视投影�
 index.html        页面结构
 styles.css        界面样式、响应式布局和移动端横屏样式
 config.js         游戏参数和界面文案（含所有可调数值与 3D 机位）
-projection.js     透视投影数学（纯函数，可单测）
-render3d.js       3D 场景绘制与深度排序
+projection.js     朝向基与追踪相机计算（纯函数，可单测）
+world3d.js        three.js/WebGL 场景、材质、光照与实体同步
 app.js            游戏状态、玩法逻辑、HUD 与结算
-input.js          键盘、触控和设置交互控制器
+input.js          键盘、鼠标视角、触控和设置交互控制器
 audio.js          Web Audio 音效、背景音乐和触觉反馈
 storage.js        最高分和累计档案存取
 renderer.js       Canvas 帧循环
+vendor/           three.js 运行时（含 LICENSE）
 GLOSSARY.md       领域术语表
 docs/adr/         关键取舍的决策记录
 tests/smoke.test.js       Node 原生冒烟测试（含 Edge 页面集成）
 tests/projection.test.js  投影数学单元测试
-tests/serve.js            本地静态服务器（浏览器实测用）
+tests/serve.js            本地静态服务器（3D 版必需）
 TODO.md           已规划但尚未实现的玩法方向
 ```
 
