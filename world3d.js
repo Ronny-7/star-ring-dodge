@@ -351,9 +351,9 @@ export function createWorld({ world, tuning }) {
       scene.fog.color.copy(color).multiplyScalar(0.06);
     },
     render(state, cameraState, dt) {
-      // Ship pose: the model faces +z, matching our yaw convention.
+      // Ship pose: model faces +z, yaw turns right (matches makeBasis).
       shipGroup.position.set(state.player.x, state.player.y, state.player.z);
-      shipGroup.rotation.set(-state.player.pitch, state.player.yaw, -state.player.roll, "YXZ");
+      shipGroup.rotation.set(-state.player.pitch, -state.player.yaw, -state.player.roll, "YXZ");
       if (shipGroup.userData.glow) {
         shipGroup.userData.glow.intensity = 60 + state.player.thrust * 140;
       }
@@ -395,8 +395,8 @@ function shipBasis(yaw, pitch) {
   const cy = Math.cos(yaw);
   const sy = Math.sin(yaw);
   return {
-    forward: { x: sy * cp, y: sp, z: cy * cp },
-    up: { x: -sy * sp, y: cp, z: -cy * sp }
+    forward: { x: -sy * cp, y: sp, z: cy * cp },
+    up: { x: sy * sp, y: cp, z: cy * sp }
   };
 }
 

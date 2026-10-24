@@ -16,19 +16,18 @@
     return Math.min(fromHeight, fromWidth);
   }
 
-  // Basis from yaw (around world y) and pitch (nose up/down).
-  // Forward/free-flight means the camera can look anywhere, so the old
-  // fixed "look down +z" assumption no longer holds.
+  // Basis from yaw (turning right is positive) and pitch (nose up positive).
+  // right = forward × up, matching three.js: with forward = +z and up = +y,
+  // screen-right is -x. Getting this backwards mirrors every strafe and turn.
   function makeBasis(yaw, pitch) {
     const cp = Math.cos(pitch);
     const sp = Math.sin(pitch);
     const cy = Math.cos(yaw);
     const sy = Math.sin(yaw);
     return {
-      forward: { x: sy * cp, y: sp, z: cy * cp },
-      right: { x: cy, y: 0, z: -sy },
-      // up = right × forward
-      up: { x: -sy * sp, y: cp, z: -cy * sp }
+      forward: { x: -sy * cp, y: sp, z: cy * cp },
+      right: { x: -cy, y: 0, z: -sy },
+      up: { x: sy * sp, y: cp, z: cy * sp }
     };
   }
 

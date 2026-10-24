@@ -260,16 +260,6 @@
 
       // Mouse look: prefer pointer lock; fall back to drag-to-look when the
       // browser refuses it (headless, embedded frames, denied permission).
-      canvasEl?.addEventListener("click", () => {
-        const state = getState?.() || {};
-        if (state.running && !state.paused && !state.gameOver && !pointerLocked) {
-          try {
-            canvasEl.requestPointerLock?.();
-          } catch {
-            // Drag-to-look below still works.
-          }
-        }
-      });
       inputDocument.addEventListener("pointerlockchange", () => {
         pointerLocked = inputDocument.pointerLockElement === canvasEl;
       });
@@ -287,13 +277,39 @@
           addLook(dx, dy, state.mouseSensitivity ?? 0.0024);
         }
       });
+      // Left mouse button fires; the right button (when pointer lock is
+      // unavailable) drags to look. Firing is the primary action, so it must
+      // never be swallowed by the look fallback.
       canvasEl?.addEventListener("mousedown", (event) => {
-        if (pointerLocked) return;
-        mouseDrag.active = true;
-        mouseDrag.lastX = event.clientX;
-        mouseDrag.lastY = event.clientY;
+        const state = getState?.() || {};
+        if (!state.running || state.paused || state.gameOver) return;
+
+        if (event.button === 0) {
+          event.preventDefault();
+          fireHeld = true;
+          fireLaser?.();
+          if (!pointerLocked) {
+            try {
+              canvasEl.requestPointerLock?.();
+            } catch {
+              // Right-drag still works.
+            }
+          }
+          return;
+        }
+
+        if (event.button === 2 && !pointerLocked) {
+          event.preventDefault();
+          mouseDrag.active = true;
+          mouseDrag.lastX = event.clientX;
+          mouseDrag.lastY = event.clientY;
+        }
       });
-      inputDocument.addEventListener("mouseup", () => { mouseDrag.active = false; });
+      canvasEl?.addEventListener("contextmenu", (event) => event.preventDefault());
+      inputDocument.addEventListener("mouseup", (event) => {
+        if (event.button === 0) fireHeld = false;
+        if (event.button === 2) mouseDrag.active = false;
+      });
 
       orientationButton?.addEventListener("click", requestLandscapeMode);
       settingsButton?.addEventListener("click", openSettings);

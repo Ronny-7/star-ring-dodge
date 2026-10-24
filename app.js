@@ -1982,7 +1982,9 @@ if (new URLSearchParams(window.location.search).has("test")) {
       player: { x: state.player.x, y: state.player.y, z: state.player.z, yaw: state.player.yaw, pitch: state.player.pitch },
       camera: { x: state.camera.x, y: state.camera.y, z: state.camera.z, yaw: state.camera.yaw, pitch: state.camera.pitch },
       health: state.health,
-      score: state.score
+      score: state.score,
+      lasers: state.lasers.length,
+      shotsFired: state.stats.shotsFired
     })
   };
 }

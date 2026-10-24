@@ -35,15 +35,16 @@ test("points behind the camera are culled", () => {
   assert.equal(inFront.visible, true);
 });
 
-test("horizontal offset moves screen x away from center, sign preserved", () => {
+test("world +x renders on screen left when facing +z", () => {
+  // three.js convention: looking down +z with up = +y puts world +x on the left.
   const camera = basisCamera();
   const center = projection.projectPoint({ x: 0, y: 0, z: 500 }, camera);
-  const right = projection.projectPoint({ x: 100, y: 0, z: 500 }, camera);
-  const left = projection.projectPoint({ x: -100, y: 0, z: 500 }, camera);
+  const posX = projection.projectPoint({ x: 100, y: 0, z: 500 }, camera);
+  const negX = projection.projectPoint({ x: -100, y: 0, z: 500 }, camera);
 
   assert.ok(Math.abs(center.x - camera.centerX) < 1e-6);
-  assert.ok(right.x > center.x);
-  assert.ok(left.x < center.x);
+  assert.ok(posX.x < center.x, "world +x sits left of centre");
+  assert.ok(negX.x > center.x, "world -x sits right of centre");
 });
 
 test("vertical offset moves screen y upward for positive y", () => {
@@ -69,17 +70,28 @@ test("distanceFade is 1 before fog start and 0 past the fog range", () => {
   assert.ok(mid > 0 && mid < 1);
 });
 
-test("yawing the camera changes what is in front", () => {
-  const facingZ = basisCamera(0, 0);
-  const facingX = basisCamera(Math.PI / 2, 0);
+test("right vector agrees with three.js handedness", () => {
+  // At yaw 0 the camera looks down +z. Screen-right must be -x, exactly as a
+  // three.js camera with up = +y produces. Getting this wrong mirrors every
+  // strafe and mouse turn.
+  const basis = projection.makeBasis(0, 0);
+  assert.ok(Math.abs(basis.forward.z - 1) < 1e-6, "forward is +z at yaw 0");
+  assert.ok(Math.abs(basis.right.z) < 1e-6, "right has no z component at yaw 0");
+  assert.ok(Math.abs(basis.forward.x) < 1e-6, "forward has no x component at yaw 0");
+  // forward × up = right, so right.x must be -1 with forward = (0,0,1), up = (0,1,0).
+  const cx = basis.forward.y * basis.up.z - basis.forward.z * basis.up.y;
+  assert.ok(Math.abs(cx - basis.right.x) < 1e-6, "right equals forward × up");
+});
 
-  // A point to the +x side is tangent to the default view but central after yaw.
-  const towardX = projection.projectPoint({ x: 500, y: 0, z: 0 }, facingZ);
-  const afterYaw = projection.projectPoint({ x: 500, y: 0, z: 0 }, facingX);
+test("turning right points the camera toward -x", () => {
+  // Positive yaw means "turn right", which from facing +z is toward -x.
+  const camera = basisCamera(Math.PI / 2, 0);
+  const towardNegX = projection.projectPoint({ x: -500, y: 0, z: 0 }, camera);
+  const towardPosX = projection.projectPoint({ x: 500, y: 0, z: 0 }, camera);
 
-  assert.equal(towardX.visible, false, "point at +90 degrees is outside a 62 degree frustum");
-  assert.ok(afterYaw.visible, "after yawing right the same point is in front");
-  assert.ok(Math.abs(afterYaw.x - facingX.centerX) < 1e-6);
+  assert.ok(towardNegX.visible, "after turning right the -x direction is in front");
+  assert.ok(Math.abs(towardNegX.x - camera.centerX) < 1e-6);
+  assert.equal(towardPosX.visible, false, "+x is behind after turning right");
 });
 
 test("pitching up brings high points into view", () => {
@@ -130,6 +142,7 @@ test("chase camera stays behind the ship as it turns", () => {
     fovDegrees: 62
   });
 
-  assert.ok(camera.x < -250, "facing +x means the camera trails on -x");
+  // Turning right (positive yaw) aims at -x, so the camera trails on +x.
+  assert.ok(camera.x > 250, "facing -x means the camera trails on +x");
   assert.ok(Math.abs(camera.z) < 1e-6);
 });
