@@ -1,6 +1,6 @@
 window.starRingConfig = {
-  bestKey: "star-ring-dodge-best",
-  profileKey: "star-ring-dodge-profile",
+  bestKey: "star-ring-dodge-best-3d",
+  profileKey: "star-ring-dodge-profile-3d",
 
   tuning: {
     playerRadius: 22,
@@ -78,7 +78,37 @@ window.starRingConfig = {
     visualVignetteTint: 0.16,
     minimapSize: 150,
     minimapMargin: 14,
-    minimapMobileClearance: 140
+    minimapMobileClearance: 140,
+
+    // 3D 纵切片
+    fovDegrees: 55,
+    dprCap: 2,
+    cameraDistance: 560,
+    cameraHeight: 320,
+    cameraPitch: 0.3,
+    cameraLag: 7,
+    laneHalfWidth: 340,
+    laneHalfHeight: 220,
+    farDistance: 1700,
+    behindCull: 120,
+    fogStart: 780,
+    fogRange: 1500,
+    shipScale: 34,
+    shipRollStrength: 0.55,
+    starDepthRange: 1900,
+    starApproachSpeed: 150,
+    laneRingSpacing: 280,
+    approachSpeedBase: 195,
+    approachSpeedStep: 0.075,
+    approachSpeedMax: 330,
+    asteroidDriftSpeed: 46,
+    laserRadius: 7,
+    playerRadius3d: 26,
+    asteroidRadiusMin3d: 24,
+    asteroidRadiusRange3d: 20,
+    shipSpeed3d: 300,
+    shipAccel3d: 14,
+    shipDecel3d: 20
   },
 
   regions: {
