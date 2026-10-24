@@ -10,7 +10,6 @@ const { promisify } = require("node:util");
 
 const audioModule = require("../audio.js");
 const rendererModule = require("../renderer.js");
-const sessionModule = require("../game-session.js");
 const storageModule = require("../storage.js");
 
 const execFileAsync = promisify(execFile);
@@ -74,49 +73,6 @@ test("browser loads index.html and exercises the real app integration", async (t
   }
 });
 
-test("game session covers start, pause, resume, warp, elite, language, and end", () => {
-  const session = sessionModule.createGameSession("drift");
-
-  session.start();
-  assert.deepEqual(session.snapshot(), {
-    running: true,
-    paused: false,
-    gameOver: false,
-    regionId: "drift",
-    regionJunctions: 0,
-    eliteSpawned: false,
-    language: "zh"
-  });
-
-  session.pause();
-  assert.equal(session.snapshot().paused, true);
-  session.resume();
-  assert.equal(session.snapshot().paused, false);
-  assert.equal(session.warp("belt"), true);
-  assert.equal(session.snapshot().regionId, "belt");
-  assert.equal(session.snapshot().regionJunctions, 1);
-  assert.equal(session.markEliteSpawned(), true);
-  assert.equal(session.snapshot().eliteSpawned, true);
-  assert.equal(session.setLanguage("en"), true);
-  assert.equal(session.snapshot().language, "en");
-  assert.equal(session.setLanguage("fr"), false);
-
-  session.end();
-  assert.equal(session.snapshot().gameOver, true);
-  assert.equal(session.warp("drift"), false);
-
-  session.start();
-  assert.deepEqual(session.snapshot(), {
-    running: true,
-    paused: false,
-    gameOver: false,
-    regionId: "drift",
-    regionJunctions: 0,
-    eliteSpawned: false,
-    language: "en"
-  });
-});
-
 test("storage preserves profile language, totals, and best score", () => {
   const values = new Map();
   const storage = {
@@ -133,6 +89,29 @@ test("storage preserves profile language, totals, and best score", () => {
   storageModule.writeBestScore(storage, "best", 1234);
   assert.equal(storageModule.readBestScore(storage, "best"), 1234);
   assert.equal(storageModule.readBestScore(storage, "missing"), 0);
+});
+
+test("recordRun accumulates totals and accuracy", () => {
+  const profile = storageModule.createDefaultProfile();
+  const stats = {
+    shotsFired: 4,
+    shotsHit: 2,
+    destroyedAsteroids: 3,
+    collectedCores: 1,
+    survivalTime: 42.7
+  };
+  storageModule.recordRun(profile, stats, 2);
+  assert.equal(profile.totals.runs, 1);
+  assert.equal(profile.totals.destroyedAsteroids, 3);
+  assert.equal(profile.totals.collectedCores, 1);
+  assert.equal(profile.totals.warps, 2);
+  assert.equal(profile.totals.longestSurvival, 42);
+  assert.equal(profile.totals.bestAccuracy, 50);
+
+  storageModule.recordRun(profile, { ...stats, shotsFired: 0, shotsHit: 0, survivalTime: 10 }, 0);
+  assert.equal(profile.totals.runs, 2);
+  assert.equal(profile.totals.longestSurvival, 42, "longer run wins");
+  assert.equal(profile.totals.bestAccuracy, 50, "worse accuracy does not lower the best");
 });
 
 test("disabling sfx also disables vibration", () => {

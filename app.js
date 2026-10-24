@@ -42,7 +42,6 @@ function applyLanguage() {
 function setLanguage(lang) {
   if (lang !== "zh" && lang !== "en") return;
   state.lang = lang;
-  gameSession.setLanguage(lang);
   applyLanguage();
   if (typeof profile !== "undefined" && profile) {
     profile.lang = lang;
@@ -513,13 +512,10 @@ const state = {
   }
 };
 
-const gameSession = window.starRingGameSession.createGameSession(DEFAULT_REGION_ID);
-gameSession.setLanguage(state.lang);
 let inputController = null;
 let gestureMovement = null;
 
 function resetGame() {
-  gameSession.start();
   inputController.clearAll();
   resizeCanvas();
   state.running = true;
@@ -664,7 +660,6 @@ function openSettings() {
   pausedBeforeSettings = state.paused;
   if (state.running && !state.paused && !state.gameOver) {
     state.paused = true;
-    gameSession.pause();
     inputController.clearAll();
   }
   window.requestAnimationFrame(() => settingsCloseButton?.focus());
@@ -678,7 +673,6 @@ function closeSettings() {
   settingsOverlay.setAttribute("aria-hidden", "true");
   settingsButton.setAttribute("aria-expanded", "false");
   if (state.running && state.paused && !state.gameOver && !pausedBeforeSettings) {
-    gameSession.resume();
     state.paused = false;
     state.lastTime = 0;
   }
@@ -1014,7 +1008,6 @@ function resolveRouteChoice(regionId, x = state.player.x, y = state.player.y) {
     return;
   }
 
-  gameSession.warp(regionId);
   state.regionId = regionId;
   initRegionMechanics(nextRegion);
   state.regionTimer = 0;
@@ -1131,7 +1124,6 @@ function spawnEliteAsteroid(region = getCurrentRegion()) {
   elite.pulseSeed = Math.random() * Math.PI * 2;
   elite.maxSpeed = (tuning.asteroidSpeedBase + tuning.asteroidSpeedRange) * state.speedScale * regionSpeed * getTuningValue("eliteMaxSpeedMultiplier", 0.8);
   state.asteroids.push(elite);
-  gameSession.markEliteSpawned();
 
   spawnRing(elite.x, elite.y, radius * 0.8, 240, rgba(region.tint, 0.82), 0.52, 3.2);
   spawnRing(elite.x, elite.y, radius * 1.15, 160, rgba(region.secondaryTint, 0.5), 0.6, 2);
@@ -1308,7 +1300,6 @@ function pauseGame() {
   if (!state.running || state.gameOver || state.paused) {
     return;
   }
-  gameSession.pause();
   inputController.clearAll();
   state.paused = true;
   showOverlay("pause", ui.pauseTitle, ui.pauseText, ui.pauseButton);
@@ -1318,7 +1309,6 @@ function resumeGame() {
   if (!state.paused || state.gameOver) {
     return;
   }
-  gameSession.resume();
   state.paused = false;
   state.lastTime = 0;
   hideOverlay();
@@ -1953,7 +1943,6 @@ function evaluateAchievements({ silent = false } = {}) {
 }
 
 function endGame() {
-  gameSession.end();
   state.running = false;
   state.paused = false;
   state.gameOver = true;
@@ -3240,8 +3229,7 @@ if (new URLSearchParams(window.location.search).has("test")) {
       regionJunctions: state.regionJunctions,
       eliteCount: state.asteroids.filter((asteroid) => asteroid.elite).length,
       language: state.lang,
-      title: document.title,
-      overlayHidden: overlay.classList.contains("hidden")
+      title: document.title
     }),
     startGame,
     pauseGame,

@@ -31,6 +31,7 @@
     const fireKeys = new Set(["j", "J"]);
     let fireHeld = false;
     const gestureMovement = { active: false, pointerId: null, startX: 0, startY: 0, dx: 0, dy: 0 };
+    let gesturePad = null;
 
     function getKeyboardMovement() {
       let dx = 0;
@@ -48,7 +49,6 @@
     }
 
     function updateGestureVisual() {
-      const gesturePad = inputDocument?.querySelector("[data-gesture-pad]");
       if (!gesturePad) return;
       const thumbRange = isCompactLandscapeMode() ? 30 : 36;
       gesturePad.style.setProperty("--gesture-x", `${gestureMovement.dx * thumbRange}px`);
@@ -144,7 +144,7 @@
     function bind() {
       if (!inputWindow || !inputDocument) return;
       const touchControls = inputDocument.querySelectorAll("[data-touch-action]");
-      const gesturePad = inputDocument.querySelector("[data-gesture-pad]");
+      gesturePad = inputDocument.querySelector("[data-gesture-pad]");
       const orientationButton = inputDocument.querySelector("[data-orientation-button]");
       const settingsButton = inputDocument.getElementById("settings-button");
       const settingsCloseButton = inputDocument.querySelector(".settings-close");
@@ -209,7 +209,6 @@
     }
 
     return {
-      keys,
       gestureMovement,
       bind,
       clearAll,

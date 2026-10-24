@@ -69,7 +69,6 @@ input.js     键盘、触控和设置交互控制器
 audio.js     Web Audio 音效、背景音乐和触觉反馈
 storage.js   最高分和累计档案存取
 renderer.js  Canvas 帧循环
-game-session.js  可测试的游戏会话状态迁移
 tests/smoke.test.js  Node 原生自动化冒烟测试
 TODO.md      已规划但尚未实现的玩法方向
 ```

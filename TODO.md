@@ -25,7 +25,7 @@
 
 已完成：**中英文语言切换**（v3.7）—— 设置弹窗新增语言分区，默认中文，覆盖全部 UI 并持久化；关键实现点：config.js 双语 uiText/profileUi + i18n 表、app.js L()/setLanguage()/applyLanguageToDOM() 与星域/成就双语帮助函数、index.html 语言切换按钮。
 
-已完成：**模块化与自动化冒烟测试**（v3.8）—— `storage.js`、`audio.js`、`input.js`、`renderer.js`、`game-session.js` 分别承接存档、音频、输入、渲染循环和游戏会话状态；`tests/smoke.test.js` 覆盖重开、暂停、跃迁、精英陨石标记、语言切换、存档、音效和渲染循环。
+已完成：**模块化与自动化冒烟测试**（v3.8）—— `storage.js`、`audio.js`、`input.js`、`renderer.js` 分别承接存档、音频、输入和渲染循环；`tests/smoke.test.js` 覆盖重开、暂停、跃迁、精英陨石标记、语言切换、存档、音效和渲染循环。
 
 ---
 
