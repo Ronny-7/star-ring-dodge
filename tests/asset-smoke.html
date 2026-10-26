@@ -96,6 +96,24 @@
           arena.fence === false
       );
 
+      check(
+        "procedural nebula, planet and dust layers are present",
+        arena.environment &&
+          arena.environment.nebula === true &&
+          arena.environment.planet === true &&
+          arena.environment.dustLayers === 2 &&
+          arena.environment.fence === false
+      );
+
+      api.resolveRouteChoice("forge");
+      const forgeTint = api.getWorldDebug().environment.tint;
+      api.startGame();
+      const driftTint = api.getWorldDebug().environment.tint;
+      check(
+        "region tint reaches the deep-space environment and resets on restart",
+        forgeTint === "255,166,98" && driftTint === "98,228,255"
+      );
+
       check("world debug exposes the fighter", typeof api.getWorldDebug === "function" && Boolean(api.getWorldDebug()?.fighter));
       const debug = api.getWorldDebug();
 

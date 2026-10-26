@@ -3,6 +3,7 @@
 import * as THREE from "three";
 import { createFighterModel, createStudioEnvironment } from "./fighter-model.js";
 import { createRockSet } from "./rock-models.js";
+import { createSpaceEnvironment } from "./space-environment.js";
 
 const sceneObjects = {
   rocks: new Map(),
@@ -27,6 +28,7 @@ let currentSkin = "default";
 let fighterEnvironment = null;
 let pickupGlowTexture = null;
 let rockSet = null;
+let spaceEnvironment = null;
 
 const MAX_ANISOTROPY_CACHE = new Map();
 
@@ -507,7 +509,8 @@ function getDebugReport() {
     fighter: null,
     rocks,
     world: worldSize ? { ...worldSize } : null,
-    fence: false
+    fence: false,
+    environment: spaceEnvironment?.getDebugReport() ?? null
   };
   const fighter = shipGroup && currentSkin === "default" ? shipGroup.userData : null;
   if (!fighter || !fighter.hullRoot) return base;
@@ -588,6 +591,13 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
   rockSet = createRockSet({ anisotropy: renderer.capabilities.getMaxAnisotropy() });
   pickupGlowTexture = makeGlowTexture();
 
+  spaceEnvironment = createSpaceEnvironment({
+    glowTexture: pickupGlowTexture,
+    center: { x: world.width / 2, y: world.height / 2, z: world.depth / 2 }
+  });
+  scene.add(spaceEnvironment.group);
+  spaceEnvironment.setTint("98,228,255");
+
   starField = buildStarField(2600);
   scene.add(starField);
 
@@ -623,6 +633,7 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       const color = new THREE.Color(`rgb(${rgb})`);
       rimLight.color.copy(color);
       scene.fog.color.copy(color).multiplyScalar(0.06);
+      spaceEnvironment?.setTint(rgb);
     },
     render(state, cameraState, dt) {
       // Ship pose: model faces +z, yaw turns right (matches makeBasis).
@@ -657,6 +668,7 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
         state.player.z + basis.forward.z * 520
       );
 
+      spaceEnvironment?.update(camera, state.player, dt);
       starField.position.copy(camera.position);
       sunLight.position.set(camera.position.x - 600, camera.position.y + 900, camera.position.z - 400);
       sunLight.target.position.set(state.player.x, state.player.y, state.player.z);
@@ -668,6 +680,9 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
     },
     dispose() {
       disposeObject(scene);
+      starField?.material?.map?.dispose();
+      spaceEnvironment?.dispose();
+      spaceEnvironment = null;
       for (const texture of shipGroup?.userData.ownTextures || []) texture.dispose();
       if (fighterEnvironment) {
         fighterEnvironment.dispose();
