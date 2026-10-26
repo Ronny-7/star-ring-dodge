@@ -412,9 +412,9 @@ const state = {
     pitch: 0
   },
   world: {
-    width: getTuningValue("worldWidth3d", 3600),
-    height: getTuningValue("worldHeight3d", 1800),
-    depth: getTuningValue("worldDepth3d", 2400)
+    width: getTuningValue("worldWidth3d", 60000),
+    height: getTuningValue("worldHeight3d", 60000),
+    depth: getTuningValue("worldDepth3d", 60000)
   },
   asteroids: [],
   cores: [],
@@ -476,6 +476,7 @@ function resetGame() {
   state.shieldCharges = 0;
   state.doubleShotTimer = 0;
   state.regionId = DEFAULT_REGION_ID;
+  world3d?.setRegionTint(regions[DEFAULT_REGION_ID].tint);
   state.regionTimer = 0;
   state.regionJunctions = 0;
   state.eliteTimer = 0;
@@ -874,11 +875,12 @@ function updateRegionFlow(dt) {
 
 function makeRouteGate(regionId, x, y, z) {
   const region = regions[regionId];
+  const margin = getTuningValue("routeGateMargin", 120);
   return {
     regionId,
-    x,
-    y,
-    z,
+    x: clamp(x, margin, state.world.width - margin),
+    y: clamp(y, margin, state.world.height - margin),
+    z: clamp(z, margin, state.world.depth - margin),
     age: 0,
     label: region ? region.label : regionId,
     tint: region ? region.tint : "98,228,255"
@@ -1271,6 +1273,13 @@ function moveAsteroids(dt) {
     asteroid.y = clamp(asteroid.y, pad, state.world.height - pad);
     asteroid.z = clamp(asteroid.z, pad, state.world.depth - pad);
 
+    const cullRadius = asteroid.elite
+      ? getTuningValue("eliteCullRadius3d", 3200)
+      : getTuningValue("asteroidCullRadius3d", 2600);
+    const dx = asteroid.x - state.player.x;
+    const dy = asteroid.y - state.player.y;
+    const dz = asteroid.z - state.player.z;
+    if (dx * dx + dy * dy + dz * dz > cullRadius * cullRadius) continue;
     state.asteroids[alive++] = asteroid;
   }
   state.asteroids.length = alive;
@@ -1294,6 +1303,20 @@ function moveLasers(dt) {
 function updatePickups(dt) {
   for (const core of state.cores) core.pulse += dt * 3;
   for (const powerUp of state.powerUps) powerUp.pulse += dt * 3.5;
+
+  const cullRadius = getTuningValue("pickupCullRadius3d", 2000);
+  state.cores = state.cores.filter((core) => {
+    const dx = core.x - state.player.x;
+    const dy = core.y - state.player.y;
+    const dz = core.z - state.player.z;
+    return dx * dx + dy * dy + dz * dz <= cullRadius * cullRadius;
+  });
+  state.powerUps = state.powerUps.filter((powerUp) => {
+    const dx = powerUp.x - state.player.x;
+    const dy = powerUp.y - state.player.y;
+    const dz = powerUp.z - state.player.z;
+    return dx * dx + dy * dy + dz * dz <= cullRadius * cullRadius;
+  });
 }
 
 function updateParticles(dt) {
@@ -1971,6 +1994,9 @@ if (new URLSearchParams(window.location.search).has("test")) {
       regionJunctions: state.regionJunctions,
       eliteCount: state.asteroids.filter((asteroid) => asteroid.elite).length,
       asteroidCount: state.asteroids.length,
+      coreCount: state.cores.length,
+      powerUpCount: state.powerUps.length,
+      gates: state.routeChoice.gates.map((gate) => ({ x: gate.x, y: gate.y, z: gate.z, regionId: gate.regionId })),
       maxAsteroids: getTuningValue("maxAsteroids", 30),
       world: { ...state.world },
       language: state.lang,
@@ -2005,6 +2031,17 @@ if (new URLSearchParams(window.location.search).has("test")) {
       const powerUp = { x, y, z, radius: getTuningValue("powerUpRadius3d", 18) * getGameplayScale(), pulse: Math.random() * Math.PI * 2, type };
       state.powerUps.push(powerUp);
       return powerUp;
+    },
+    setPlayerPosition: (x, y, z, yaw = state.player.yaw, pitch = state.player.pitch) => {
+      state.player.x = x;
+      state.player.y = y;
+      state.player.z = z;
+      state.player.vx = 0;
+      state.player.vy = 0;
+      state.player.vz = 0;
+      state.player.yaw = yaw;
+      state.player.pitch = pitch;
+      snapCameraToShip();
     },
     fireLaser,
     beginRouteChoice,

@@ -88,15 +88,18 @@ window.starRingConfig = {
     // 3D 开放世界
     fovDegrees: 62,
     dprCap: 2,
-    cameraDistance: 320,
-    cameraHeight: 90,
+    cameraDistance: 430,
+    cameraHeight: 130,
     cameraLag: 3,
     maxPitch: 1.15,
     mouseSensitivity: 0.0024,
     touchLookSensitivity: 0.006,
-    worldWidth3d: 3600,
-    worldHeight3d: 1800,
-    worldDepth3d: 2400,
+    worldWidth3d: 60000,
+    worldHeight3d: 60000,
+    worldDepth3d: 60000,
+    asteroidCullRadius3d: 2600,
+    eliteCullRadius3d: 3200,
+    pickupCullRadius3d: 2000,
     boundaryPadding: 60,
     farDistance: 2400,
     fogDensity3d: 0.00016,
@@ -113,8 +116,7 @@ window.starRingConfig = {
     asteroidRadiusRange3d: 34,
     asteroidSpeed3d: 70,
     asteroidSpeedRange3d: 55,
-    crosshairSize: 14,
-    fenceAlpha: 0.14
+    crosshairSize: 14
   },
 
   regions: {

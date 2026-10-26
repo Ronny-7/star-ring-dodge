@@ -11,15 +11,14 @@ const sceneObjects = {
   lasers: new Map(),
   gates: new THREE.Group(),
   ship: null,
-  stars: null,
-  fence: null
+  stars: null
 };
 
 let renderer = null;
 let scene = null;
 let camera = null;
 let starField = null;
-let roomFence = null;
+let worldSize = null;
 let shipGroup = null;
 let sunLight = null;
 let rimLight = null;
@@ -141,19 +140,6 @@ function buildStarField(count) {
     sizeAttenuation: true
   });
   return new THREE.Points(geometry, material);
-}
-
-function buildRoomFence(world, alpha = 0.14) {
-  const geometry = new THREE.BoxGeometry(world.width, world.height, world.depth);
-  const material = new THREE.MeshBasicMaterial({
-    color: 0x62e4ff,
-    wireframe: true,
-    transparent: true,
-    opacity: alpha
-  });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.set(world.width / 2, world.height / 2, world.depth / 2);
-  return mesh;
 }
 
 const WHITE = new THREE.Color(0xffffff);
@@ -517,8 +503,14 @@ function rockDebugReport() {
 
 function getDebugReport() {
   const rocks = rockDebugReport();
+  const base = {
+    fighter: null,
+    rocks,
+    world: worldSize ? { ...worldSize } : null,
+    fence: false
+  };
   const fighter = shipGroup && currentSkin === "default" ? shipGroup.userData : null;
-  if (!fighter || !fighter.hullRoot) return { fighter: null, rocks };
+  if (!fighter || !fighter.hullRoot) return base;
 
   shipGroup.updateWorldMatrix(true, true);
   const { parts, hullRoot, materials, flames, ownTextures, navLights } = fighter;
@@ -529,6 +521,7 @@ function getDebugReport() {
   });
 
   return {
+    ...base,
     fighter: {
       bounds: localBounds(hullRoot, shipGroup),
       parts: {
@@ -545,12 +538,12 @@ function getDebugReport() {
       flames: flamePositions,
       navLights: navLights || [],
       textureCount: (ownTextures || []).length
-    },
-    rocks
+    }
   };
 }
 
 export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff }) {
+  worldSize = { width: world.width, height: world.height, depth: world.depth };
   renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("game"), antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, tuning.dprCap || 2));
   renderer.shadowMap.enabled = true;
@@ -598,9 +591,6 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
   starField = buildStarField(2600);
   scene.add(starField);
 
-  roomFence = buildRoomFence(world, tuning.fenceAlpha || 0.14);
-  scene.add(roomFence);
-
   currentShipColor = color;
   currentSkin = skin;
   shipGroup = buildShip(color, skin);
@@ -632,7 +622,6 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
     setRegionTint(rgb) {
       const color = new THREE.Color(`rgb(${rgb})`);
       rimLight.color.copy(color);
-      roomFence.material.color.copy(color);
       scene.fog.color.copy(color).multiplyScalar(0.06);
     },
     render(state, cameraState, dt) {
@@ -655,8 +644,8 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
 
       // Chase camera: further back so the ship reads as a craft, not a splinter.
       const basis = shipBasis(cameraState.yaw, cameraState.pitch);
-      const back = 430;
-      const lift = 130;
+      const back = tuning.cameraDistance || 430;
+      const lift = tuning.cameraHeight || 130;
       camera.position.set(
         state.player.x - basis.forward.x * back + basis.up.x * lift,
         state.player.y - basis.forward.y * back + basis.up.y * lift,

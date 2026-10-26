@@ -87,6 +87,15 @@
       api.startGame();
       await nextFrames(win, 2);
 
+      const arena = api.getWorldDebug();
+      check(
+        "world is 60 km open space without a fence",
+        arena.world.width === 60000 &&
+          arena.world.height === 60000 &&
+          arena.world.depth === 60000 &&
+          arena.fence === false
+      );
+
       check("world debug exposes the fighter", typeof api.getWorldDebug === "function" && Boolean(api.getWorldDebug()?.fighter));
       const debug = api.getWorldDebug();
 
@@ -163,11 +172,12 @@
       await waitFor(() => api.getWorldDebug().rocks.active === 0);
 
       const formIds = forms.map((form) => form.id);
+      const playerAt = api.getScene().player;
       for (let i = 0; i < 30; i += 1) {
         api.spawnAsteroidAt(
-          120 + (i % 5) * 90,
-          120 + Math.floor(i / 5) * 90,
-          400,
+          playerAt.x + 120 + (i % 5) * 90,
+          playerAt.y + 120 + Math.floor(i / 5) * 90,
+          playerAt.z + 400,
           30,
           formIds[i % formIds.length]
         );
@@ -198,7 +208,7 @@
         const rocks = api.getWorldDebug().rocks;
         return rocks.active === 0 ? rocks : null;
       });
-      formIds.forEach((formId) => api.spawnAsteroidAt(600, 400, 800, 30, formId));
+      formIds.forEach((formId) => api.spawnAsteroidAt(playerAt.x + 600, playerAt.y + 400, playerAt.z + 800, 30, formId));
       await nextFrames(win, 2);
       const respawned = await waitFor(() => {
         const rocks = api.getWorldDebug().rocks;
@@ -221,6 +231,92 @@
           deltaFighter === null &&
           restoredFighter &&
           restoredFighter.textureCount === firstFighter.textureCount
+      );
+
+      api.startGame();
+      await nextFrames(win, 2);
+      const near = api.getScene().player;
+      api.clearAsteroids();
+      api.spawnAsteroidAt(near.x + 1000, near.y, near.z, 30);
+      api.spawnAsteroidAt(near.x + 2700, near.y, near.z, 30);
+      api.spawnCoreAt(near.x + 1000, near.y, near.z);
+      api.spawnCoreAt(near.x + 2100, near.y, near.z);
+      api.tick(1 / 60);
+      const recycled = api.getState();
+      check(
+        "distant rocks and pickups recycle while the near field stays",
+        recycled.asteroidCount === 1 && recycled.coreCount === 1
+      );
+      api.clearAsteroids();
+
+      const pad = 60 + 26;
+      const limit = 60000 - pad;
+      const faces = [
+        [60100, 30000, 30000],
+        [-100, 30000, 30000],
+        [30000, 60100, 30000],
+        [30000, -100, 30000],
+        [30000, 30000, 60100],
+        [30000, 30000, -100]
+      ];
+      let boundaryHeld = true;
+      for (const [x, y, z] of faces) {
+        api.setPlayerPosition(x, y, z);
+        for (let frame = 0; frame < 60; frame += 1) {
+          api.clearAsteroids();
+          api.tick(1 / 60);
+        }
+        const q = api.getScene().player;
+        boundaryHeld =
+          boundaryHeld &&
+          q.x >= pad - 0.01 && q.x <= limit + 0.01 &&
+          q.y >= pad - 0.01 && q.y <= limit + 0.01 &&
+          q.z >= pad - 0.01 && q.z <= limit + 0.01;
+      }
+      check("soft boundary holds on all six faces", boundaryHeld);
+
+      const outward = [
+        [59900, 30000, 30000, -Math.PI / 2, 0],
+        [100, 30000, 30000, Math.PI / 2, 0],
+        [30000, 59900, 30000, 0, 1.1],
+        [30000, 100, 30000, 0, -1.1],
+        [30000, 30000, 59900, 0, 0],
+        [30000, 30000, 100, Math.PI, 0]
+      ];
+      let gatesInside = true;
+      for (const [x, y, z, yaw, pitch] of outward) {
+        api.setPlayerPosition(x, y, z, yaw, pitch);
+        api.beginRouteChoice();
+        for (const gate of api.getState().gates) {
+          gatesInside =
+            gatesInside &&
+            gate.x >= 120 && gate.x <= 59880 &&
+            gate.y >= 120 && gate.y <= 59880 &&
+            gate.z >= 120 && gate.z <= 59880;
+        }
+      }
+      check("warp gates stay inside the arena from every direction", gatesInside);
+
+      api.startGame();
+      await nextFrames(win, 2);
+      api.clearAsteroids();
+      const flightStart = api.getScene().player;
+      win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "w" }));
+      for (let i = 0; i < 3600; i += 1) {
+        api.clearAsteroids();
+        api.tick(1 / 60);
+      }
+      win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "w" }));
+      const flightEnd = api.getScene().player;
+      const travelled = Math.hypot(
+        flightEnd.x - flightStart.x,
+        flightEnd.y - flightStart.y,
+        flightEnd.z - flightStart.z
+      );
+      check(
+        "sixty seconds of forward flight stays inside the open arena",
+        travelled > 19000 && travelled < 20500 &&
+          flightEnd.z > 49000 && flightEnd.z < 50500
       );
     } catch (error) {
       result.error = error.message;

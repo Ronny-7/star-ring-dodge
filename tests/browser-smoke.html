@@ -25,7 +25,7 @@
       api.startGame();
       check("startGame starts the real app", api.getState().running === true && api.getState().gameOver === false);
       const world = api.getState().world;
-      check("world uses x/height/depth axes", world.width === 3600 && world.height === 1800 && world.depth === 2400);
+      check("world uses x/height/depth axes", world.width === 60000 && world.height === 60000 && world.depth === 60000);
       api.pauseGame();
       check("pauseGame pauses the real app", api.getState().paused === true);
       api.resumeGame();
