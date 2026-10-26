@@ -129,6 +129,18 @@
           redFighter.engineColor !== blueFighter.engineColor
       );
 
+      const navLights = api.getWorldDebug().fighter.navLights || [];
+      const portLight = navLights.find((light) => light.color === "#ff4d5e");
+      const starboardLight = navLights.find((light) => light.color === "#4dff9e");
+      check(
+        "navigation lights are red to port and green to starboard",
+        navLights.length === 2 &&
+          Boolean(portLight) &&
+          portLight.x > 0 &&
+          Boolean(starboardLight) &&
+          starboardLight.x < 0
+      );
+
       api.pauseGame();
       const forms = api.getWorldDebug().rocks.forms;
       check(
@@ -139,7 +151,9 @@
             form.triangles > 0 &&
             form.triangles <= 6000 &&
             Math.abs(form.maxRadius - 1) <= 0.01 &&
-            form.maxHalfExtent <= 1
+            form.maxHalfExtent <= 1 &&
+            form.vertexRadius <= 1.0001 &&
+            Math.abs(form.vertexRadius - 1) <= 0.01
           ) &&
           ratiosAreDistinct(forms)
       );
@@ -168,16 +182,13 @@
         populated.uniqueGeometryIds.length === 3 && populated.uniqueMaterialCount === 30
       );
 
-      const formById = new Map(forms.map((form) => [form.id, form]));
       check(
         "visual radius matches collision radius",
         populated.items.length === 30 &&
-          populated.items.every((item) => {
-            const form = formById.get(item.formId);
-            return form &&
-              Math.abs(item.visualRadius - item.radius * form.maxRadius) <= 0.01 &&
-              Math.abs(item.visualRadius - item.radius) <= 0.3;
-          })
+          populated.items.every((item) =>
+            Math.abs(item.scale - item.radius) <= 0.3 &&
+            Math.abs(item.visualRadius - item.scale * item.maxRadius) <= 0.01
+          )
       );
 
       const geometryIdsBefore = [...populated.uniqueGeometryIds].sort();

@@ -475,12 +475,18 @@ function rockDebugReport() {
   const forms = (rockSet?.forms || []).map((form) => {
     form.geometry.computeBoundingBox();
     const bounds = form.geometry.boundingBox.getSize(new THREE.Vector3());
+    const position = form.geometry.attributes.position;
+    let vertexRadius = 0;
+    for (let i = 0; i < position.count; i += 1) {
+      vertexRadius = Math.max(vertexRadius, Math.hypot(position.getX(i), position.getY(i), position.getZ(i)));
+    }
     return {
       id: form.id,
       triangles: (form.geometry.index ? form.geometry.index.count : form.geometry.attributes.position.count) / 3,
       bounds: roundVector(bounds),
       maxRadius: form.geometry.userData.maxRadius,
       maxHalfExtent: form.geometry.userData.maxHalfExtent,
+      vertexRadius: Number(vertexRadius.toFixed(4)),
       geometryUUID: form.geometry.uuid
     };
   });
@@ -494,7 +500,9 @@ function rockDebugReport() {
     items.push({
       radius: asteroid.radius,
       formId: mesh.userData.formId,
-      visualRadius: asteroid.radius * mesh.geometry.userData.maxRadius
+      scale: mesh.scale.x,
+      maxRadius: mesh.geometry.userData.maxRadius,
+      visualRadius: mesh.scale.x * mesh.geometry.userData.maxRadius
     });
   }
 
@@ -513,7 +521,7 @@ function getDebugReport() {
   if (!fighter || !fighter.hullRoot) return { fighter: null, rocks };
 
   shipGroup.updateWorldMatrix(true, true);
-  const { parts, hullRoot, materials, flames, ownTextures } = fighter;
+  const { parts, hullRoot, materials, flames, ownTextures, navLights } = fighter;
   const flamePositions = (flames || []).map((flame) => {
     const position = new THREE.Vector3();
     flame.getWorldPosition(position);
@@ -535,6 +543,7 @@ function getDebugReport() {
       hullColor: "#" + materials.hull.color.getHexString(),
       engineColor: "#" + materials.engine.color.getHexString(),
       flames: flamePositions,
+      navLights: navLights || [],
       textureCount: (ownTextures || []).length
     },
     rocks
@@ -628,8 +637,8 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
     },
     render(state, cameraState, dt) {
       // Ship pose: model faces +z, yaw turns right (matches makeBasis).
-      // A positive roll must dip the starboard (+x local) wing, so the model
-      // rotates the other way from the raw value.
+      // Positive roll (rotation.z) lifts the port (+x local) wing and dips the
+      // starboard (-x local) wing.
       shipGroup.position.set(state.player.x, state.player.y, state.player.z);
       shipGroup.rotation.set(-state.player.pitch, -state.player.yaw, state.player.roll, "YXZ");
       if (shipGroup.userData.glow) {

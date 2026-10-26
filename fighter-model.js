@@ -364,6 +364,7 @@ export function createFighterModel({ environment, color }) {
   }
 
   const wingOutline = [[1.53, -6.0], [2.72, -2.7], [13.5, 8.2], [14.55, 10.0], [12.9, 10.65], [10.2, 10.05], [5.0, 5.85], [2.5, 0.2]];
+  const navigationLights = [];
   for (const side of [-1, 1]) {
     const prefix = fighterIndices(side);
     const mirrored = wingOutline.map(([x, z]) => [side * x, z]);
@@ -405,10 +406,12 @@ export function createFighterModel({ environment, color }) {
     add(native, new THREE.TorusGeometry(0.82, 0.095, 8, 24), edge, [side * 1.42, -0.56, 13.34], `${prefix}-nozzle-rim`);
     const core = add(native, new THREE.CircleGeometry(0.32, 24), engine, [side * 1.42, -0.56, 13.37], `${prefix}-engine-core`);
     part(`${prefix}Engine`, core);
-    // Aft-facing navigation lights: red to port, green to starboard once the
-    // hull is rotated to face +Z (native -x becomes the game's +x wing).
-    const navigationMaterial = side < 0 ? navGreen : navRed;
-    add(native, new THREE.SphereGeometry(0.12, 10, 8), navigationMaterial, [side * 14.03, 0.07, 9.95], `${prefix}-navigation-light`);
+    // The hull is yawed 180° to face +Z, so native -x becomes world +x. World
+    // +x is the pilot's port side: red to port, green to starboard.
+    const navigationMaterial = side < 0 ? navRed : navGreen;
+    navigationLights.push(
+      add(native, new THREE.SphereGeometry(0.12, 10, 8), navigationMaterial, [side * 14.03, 0.07, 9.95], `${prefix}-navigation-light`)
+    );
     for (let i = 0; i < 4; i++) {
       const seam = add(native, new THREE.CylinderGeometry(0.008, 0.008, 0.75, 6), dark, [side * (2.15 + i * 0.51), 0.17, 1.5 + i * 0.4], `${prefix}-panel-seam-${i}`);
       seam.rotation.z = side * 0.05;
@@ -439,8 +442,9 @@ export function createFighterModel({ environment, color }) {
   group.add(glow);
 
   const nativeParts = native.userData.parts;
-  // The hull was rotated 180° around Y: native +x ends up at game -x. Public
-  // right/left follow the game's +x starboard convention used by gameplay.
+  // The hull was rotated 180° around Y: native +x ends up at game -x. The
+  // public parts keys follow the test/world-x convention (rightWing = +x),
+  // while the navigation lights above follow pilot port/starboard.
   const parts = {
     leftWing: nativeParts.rightWing,
     rightWing: nativeParts.leftWing,
@@ -464,8 +468,19 @@ export function createFighterModel({ environment, color }) {
   }
   applyLivery(base);
 
+  group.updateWorldMatrix(true, true);
+  const navLights = navigationLights.map((light) => {
+    const position = light.getWorldPosition(new THREE.Vector3());
+    group.worldToLocal(position);
+    return {
+      color: "#" + light.material.color.getHexString(),
+      x: Number(position.x.toFixed(2))
+    };
+  });
+
   group.userData = {
     parts,
+    navLights,
     materials,
     flames,
     glow,
