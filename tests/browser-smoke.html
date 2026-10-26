@@ -24,6 +24,8 @@
 
       api.startGame();
       check("startGame starts the real app", api.getState().running === true && api.getState().gameOver === false);
+      const world = api.getState().world;
+      check("world uses x/height/depth axes", world.width === 3600 && world.height === 1800 && world.depth === 2400);
       api.pauseGame();
       check("pauseGame pauses the real app", api.getState().paused === true);
       api.resumeGame();
@@ -41,6 +43,13 @@
       const restarted = api.getState();
       check("restart resets region and warp count", restarted.regionId === "drift" && restarted.regionJunctions === 0);
       check("restart clears elite asteroids", restarted.eliteCount === 0);
+      for (let i = api.getState().asteroidCount; i < restarted.maxAsteroids; i += 1) {
+        api.spawnAsteroidAt(0, 0, 0, 12);
+      }
+      const capped = api.getState();
+      api.spawnAsteroid();
+      api.spawnEliteAsteroid();
+      check("asteroid spawn stops at the cap", capped.asteroidCount === capped.maxAsteroids && api.getState().asteroidCount === capped.maxAsteroids);
     } catch (error) {
       result.error = error.message;
     }

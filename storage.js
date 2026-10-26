@@ -9,6 +9,8 @@
     return {
       version: 1,
       lang: "zh",
+      skin: "default",
+      color: "blue",
       totals: {
         runs: 0,
         destroyedAsteroids: 0,
@@ -31,6 +33,8 @@
     return {
       version: 1,
       lang: raw.lang === "en" ? "en" : "zh",
+      skin: raw.skin === "delta" || raw.skin === "saucer" ? raw.skin : "default",
+      color: raw.color === "red" || raw.color === "green" ? raw.color : "blue",
       totals: {
         runs: num(totals.runs),
         destroyedAsteroids: num(totals.destroyedAsteroids),

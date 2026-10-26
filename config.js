@@ -15,6 +15,7 @@ window.starRingConfig = {
     laserCullPadding: 120,
     pickupSpawnLocalRadius: 460,
     routeGateMargin: 120,
+    maxAsteroids: 30,
     starCount: 90,
     laserSpeed: 720,
     laserLife: 0.9,
@@ -43,7 +44,7 @@ window.starRingConfig = {
     scoreAsteroid: 18,
     scoreElite: 140,
     scoreCore: 25,
-    safeSpawnDistance: 260,
+    safeSpawnDistance: 650,
     maxSpawnAttempts: 8,
     hitInvulnerability: 0.9,
     hitFlashDuration: 0.34,
@@ -59,6 +60,9 @@ window.starRingConfig = {
     warpFlashDuration: 0.58,
     impactRingLife: 0.34,
     powerUpSpawnInterval: 9,
+    coreRadius3d: 16,
+    powerUpRadius3d: 18,
+    pickupCollectPadding: 20,
     doubleShotDuration: 8,
     pickupSafeDistance: 120,
     pickupAsteroidDistance: 132,
@@ -78,6 +82,7 @@ window.starRingConfig = {
     visualVignetteTint: 0.16,
     minimapSize: 150,
     minimapMargin: 14,
+    minimapRange: 1300,
     minimapMobileClearance: 140,
 
     // 3D 开放世界
@@ -89,13 +94,12 @@ window.starRingConfig = {
     maxPitch: 1.15,
     mouseSensitivity: 0.0024,
     touchLookSensitivity: 0.006,
-    worldWidth3d: 2400,
-    worldHeight3d: 1600,
-    worldDepth3d: 900,
+    worldWidth3d: 3600,
+    worldHeight3d: 1800,
+    worldDepth3d: 2400,
     boundaryPadding: 60,
-    farDistance: 1700,
-    fogStart: 900,
-    fogRange: 900,
+    farDistance: 2400,
+    fogDensity3d: 0.00016,
     shipScale: 34,
     shipRollStrength: 0.5,
     shipSpeed3d: 330,
@@ -110,7 +114,7 @@ window.starRingConfig = {
     asteroidSpeed3d: 70,
     asteroidSpeedRange3d: 55,
     crosshairSize: 14,
-    fenceAlpha: 0.16
+    fenceAlpha: 0.14
   },
 
   regions: {

@@ -334,6 +334,8 @@ function hideOverlay() {
 
 let bestScore = storageController.readBestScore(localStorage, bestKey);
 let profile = storageController.loadProfile(localStorage, profileKey);
+if (profile.skin) activeSkin = profile.skin;
+if (profile.color) activeColor = profile.color;
 let runAchievementUnlocks = [];
 let overlayMode = "start";
 let lastGameOver = { score: 0, newBest: false };
@@ -375,7 +377,7 @@ const state = {
   achievementTimer: 0,
   eliteTimer: 0,
   routeChoice: { active: false, timer: 0, gates: [] },
-  shipColor: COLORS.blue,
+  shipColor: COLORS[activeColor] || COLORS.blue,
   stats: {
     survivalTime: 0,
     destroyedAsteroids: 0,
@@ -410,9 +412,9 @@ const state = {
     pitch: 0
   },
   world: {
-    width: getTuningValue("worldWidth3d", 2400),
-    height: getTuningValue("worldHeight3d", 1600),
-    depth: getTuningValue("worldDepth3d", 900)
+    width: getTuningValue("worldWidth3d", 3600),
+    height: getTuningValue("worldHeight3d", 1800),
+    depth: getTuningValue("worldDepth3d", 2400)
   },
   asteroids: [],
   cores: [],
@@ -492,8 +494,8 @@ function resetGame() {
   runAchievementUnlocks.length = 0;
   state.player.radius = getPlayerRadius();
   state.player.x = state.world.width / 2;
-  state.player.y = state.world.depth / 2;
-  state.player.z = state.world.height / 2;
+  state.player.y = state.world.height / 2;
+  state.player.z = state.world.depth / 2;
   state.player.vx = 0;
   state.player.vy = 0;
   state.player.vz = 0;
@@ -596,11 +598,14 @@ function closeSettings() {
 
 function selectSkin(name) {
   activeSkin = name;
+  world3d?.setShipVariant(name);
   document.querySelectorAll(".skin-card").forEach((el) => {
     const active = el.dataset.skin === name;
     el.classList.toggle("active", active);
     el.setAttribute("aria-pressed", String(active));
   });
+  profile.skin = name;
+  storageController.saveProfile(localStorage, profileKey, profile);
   renderSkinPreviews();
 }
 
@@ -613,6 +618,8 @@ function selectColor(name) {
     el.classList.toggle("active", active);
     el.setAttribute("aria-pressed", String(active));
   });
+  profile.color = name;
+  storageController.saveProfile(localStorage, profileKey, profile);
   renderSkinPreviews();
 }
 
@@ -718,12 +725,17 @@ function sampleAround(centerX, centerY, centerZ, minDistance, maxDistance) {
   const z = centerZ + Math.sin(theta) * sinPhi * distance;
   return {
     x: clamp(x, 40, state.world.width - 40),
-    y: clamp(y, 40, state.world.depth - 40),
-    z: clamp(z, 40, state.world.height - 40)
+    y: clamp(y, 40, state.world.height - 40),
+    z: clamp(z, 40, state.world.depth - 40)
   };
 }
 
+function canAddAsteroid() {
+  return state.asteroids.length < getTuningValue("maxAsteroids", 30);
+}
+
 function spawnAsteroid(region = getCurrentRegion()) {
+  if (!canAddAsteroid()) return null;
   const scale = getGameplayScale();
   const radius = (Math.random() * getTuningValue("asteroidRadiusRange3d", 34) + getTuningValue("asteroidRadiusMin3d", 30)) * scale;
   const spawn = sampleAround(
@@ -759,6 +771,7 @@ function countEliteAsteroids() {
 }
 
 function spawnEliteAsteroid(region = getCurrentRegion()) {
+  if (!canAddAsteroid()) return null;
   const scale = getGameplayScale();
   const radius = (tuning.asteroidRadiusMin + tuning.asteroidRadiusRange) * getTuningValue("eliteRadiusMultiplier", 2.05) * scale;
   const spawn = sampleAround(state.player.x, state.player.y, state.player.z, 520, 900);
@@ -784,7 +797,7 @@ function updateEliteFlow(dt, region) {
   if (Math.random() > getRegionEliteChance(region)) return;
 
   state.eliteTimer = 0;
-  spawnEliteAsteroid(region);
+  if (!spawnEliteAsteroid(region)) return;
   spawnMessage(L("eliteApproach"), 0, 0, "#ffb59e", 1.4);
 }
 
@@ -985,14 +998,14 @@ function findSafePickupPosition(radius) {
 }
 
 function spawnCore() {
-  const radius = 11 * getGameplayScale();
+  const radius = getTuningValue("coreRadius3d", 16) * getGameplayScale();
   const spawn = findSafePickupPosition(radius);
   state.cores.push({ x: spawn.x, y: spawn.y, z: spawn.z, radius, pulse: Math.random() * Math.PI * 2 });
 }
 
 function spawnPowerUp() {
   const type = Math.random() > 0.5 ? "shield" : "double";
-  const radius = 13 * getGameplayScale();
+  const radius = getTuningValue("powerUpRadius3d", 18) * getGameplayScale();
   const spawn = findSafePickupPosition(radius);
   state.powerUps.push({ x: spawn.x, y: spawn.y, z: spawn.z, radius, pulse: Math.random() * Math.PI * 2, type });
 }
@@ -1147,8 +1160,8 @@ function clampPlayerToWorld() {
   const pad = getTuningValue("boundaryPadding", 60) + state.player.radius;
   const axes = [
     ["x", 0, state.world.width],
-    ["y", 0, state.world.depth],
-    ["z", 0, state.world.height]
+    ["y", 0, state.world.height],
+    ["z", 0, state.world.depth]
   ];
   for (const [axis, min, max] of axes) {
     const lo = min + pad;
@@ -1252,11 +1265,11 @@ function moveAsteroids(dt) {
 
     // Bounce off the room walls so rocks stay inside the play space.
     if (asteroid.x < pad || asteroid.x > state.world.width - pad) asteroid.vx *= -0.85;
-    if (asteroid.y < pad || asteroid.y > state.world.depth - pad) asteroid.vy *= -0.85;
-    if (asteroid.z < pad || asteroid.z > state.world.height - pad) asteroid.vz *= -0.85;
+    if (asteroid.y < pad || asteroid.y > state.world.height - pad) asteroid.vy *= -0.85;
+    if (asteroid.z < pad || asteroid.z > state.world.depth - pad) asteroid.vz *= -0.85;
     asteroid.x = clamp(asteroid.x, pad, state.world.width - pad);
-    asteroid.y = clamp(asteroid.y, pad, state.world.depth - pad);
-    asteroid.z = clamp(asteroid.z, pad, state.world.height - pad);
+    asteroid.y = clamp(asteroid.y, pad, state.world.height - pad);
+    asteroid.z = clamp(asteroid.z, pad, state.world.depth - pad);
 
     state.asteroids[alive++] = asteroid;
   }
@@ -1271,8 +1284,8 @@ function moveLasers(dt) {
     laser.z += laser.vz * dt;
     laser.life -= dt;
     const inside = laser.x > -200 && laser.x < state.world.width + 200
-      && laser.y > -200 && laser.y < state.world.depth + 200
-      && laser.z > -200 && laser.z < state.world.height + 200;
+      && laser.y > -200 && laser.y < state.world.height + 200
+      && laser.z > -200 && laser.z < state.world.depth + 200;
     if (laser.life > 0 && inside) state.lasers[alive++] = laser;
   }
   state.lasers.length = alive;
@@ -1465,7 +1478,7 @@ function handleCollisions() {
 
   for (let i = state.cores.length - 1; i >= 0; i -= 1) {
     const core = state.cores[i];
-    if (!isWithinRadius3d(core.x, core.y, core.z, state.player.x, state.player.y, state.player.z, core.radius + state.player.radius + 6)) continue;
+    if (!isWithinRadius3d(core.x, core.y, core.z, state.player.x, state.player.y, state.player.z, core.radius + state.player.radius + getTuningValue("pickupCollectPadding", 20))) continue;
     state.cores.splice(i, 1);
     state.score += tuning.scoreCore;
     state.stats.collectedCores += 1;
@@ -1477,7 +1490,7 @@ function handleCollisions() {
 
   for (let i = state.powerUps.length - 1; i >= 0; i -= 1) {
     const powerUp = state.powerUps[i];
-    if (!isWithinRadius3d(powerUp.x, powerUp.y, powerUp.z, state.player.x, state.player.y, state.player.z, powerUp.radius + state.player.radius + 6)) continue;
+    if (!isWithinRadius3d(powerUp.x, powerUp.y, powerUp.z, state.player.x, state.player.y, state.player.z, powerUp.radius + state.player.radius + getTuningValue("pickupCollectPadding", 20))) continue;
     state.powerUps.splice(i, 1);
     if (powerUp.type === "shield") {
       state.shieldCharges = 1;
@@ -1700,7 +1713,7 @@ function drawLaneRadar() {
   const left = cw - size - margin;
   const top = margin + 46;
 
-  const viewRadius = 900;
+  const viewRadius = getTuningValue("minimapRange", 1300);
   const toX = (wx) => left + size / 2 + ((wx - state.player.x) / viewRadius) * (size / 2);
   const toY = (wz) => top + size / 2 - ((wz - state.player.z) / viewRadius) * (size / 2);
   const inRange = (obj) => Math.hypot(obj.x - state.player.x, obj.z - state.player.z) < viewRadius;
@@ -1740,6 +1753,14 @@ function drawLaneRadar() {
     ctx.fillStyle = "rgba(138,255,209,0.9)";
     ctx.beginPath();
     ctx.arc(toX(core.x), toY(core.z), 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  for (const powerUp of state.powerUps) {
+    if (!inRange(powerUp)) continue;
+    ctx.fillStyle = powerUp.type === "shield" ? "rgba(127,180,255,0.95)" : "rgba(255,176,102,0.95)";
+    ctx.beginPath();
+    ctx.arc(toX(powerUp.x), toY(powerUp.z), 2.4, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -1787,7 +1808,7 @@ function drawHudOverlay(region) {
   ctx.textAlign = "right";
   if (state.shieldCharges > 0) {
     ctx.fillStyle = "#8affd1";
-    ctx.fillText(L("shield"), ch > 0 ? cw - pad : 0, statusY);
+    ctx.fillText(L("shield"), cw - pad, statusY);
   }
   if (state.doubleShotTimer > 0) {
     ctx.fillStyle = "#ffb59e";
@@ -1930,9 +1951,8 @@ function startLoop() {
 // fallback covers the gap.
 window.starRingWorldReady = import("./world3d.js")
   .then((mod) => {
-    world3d = mod.createWorld({ world: state.world, tuning });
+    world3d = mod.createWorld({ world: state.world, tuning, skin: activeSkin, color: state.shipColor.mid });
     world3d.resize(cw, ch);
-    world3d.setShipColor(state.shipColor.mid);
     startLoop();
   })
   .catch((error) => {
@@ -1949,6 +1969,9 @@ if (new URLSearchParams(window.location.search).has("test")) {
       regionId: state.regionId,
       regionJunctions: state.regionJunctions,
       eliteCount: state.asteroids.filter((asteroid) => asteroid.elite).length,
+      asteroidCount: state.asteroids.length,
+      maxAsteroids: getTuningValue("maxAsteroids", 30),
+      world: { ...state.world },
       language: state.lang,
       title: document.title
     }),
@@ -1958,6 +1981,8 @@ if (new URLSearchParams(window.location.search).has("test")) {
     resolveRouteChoice,
     spawnEliteAsteroid,
     setLanguage,
+    selectSkin,
+    selectColor,
     endGame,
     spawnAsteroid,
     handleCollisions,
@@ -1965,6 +1990,16 @@ if (new URLSearchParams(window.location.search).has("test")) {
       const asteroid = makeAsteroid(x, y, z, radius || 30, 0, 0, 0, getCurrentRegion());
       state.asteroids.push(asteroid);
       return asteroid;
+    },
+    spawnCoreAt: (x, y, z) => {
+      const core = { x, y, z, radius: getTuningValue("coreRadius3d", 16) * getGameplayScale(), pulse: Math.random() * Math.PI * 2 };
+      state.cores.push(core);
+      return core;
+    },
+    spawnPowerUpAt: (x, y, z, type = "shield") => {
+      const powerUp = { x, y, z, radius: getTuningValue("powerUpRadius3d", 18) * getGameplayScale(), pulse: Math.random() * Math.PI * 2, type };
+      state.powerUps.push(powerUp);
+      return powerUp;
     },
     fireLaser,
     beginRouteChoice,

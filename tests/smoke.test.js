@@ -66,7 +66,7 @@ test("browser loads index.html and exercises the real app integration", async (t
     assert.notEqual(markerIndex, -1, "browser smoke page did not publish a result");
     const result = JSON.parse(browser.stdout.slice(markerIndex + marker.length).trim().split("</body>")[0]);
     assert.equal(result.error, null, result.error || "browser integration smoke test failed");
-    assert.equal(result.checks.length, 11);
+    assert.equal(result.checks.length, 13);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(resultDir, { recursive: true, force: true });
@@ -81,9 +81,13 @@ test("storage preserves profile language, totals, and best score", () => {
   };
   const profile = storageModule.createDefaultProfile();
   profile.lang = "en";
+  profile.skin = "delta";
+  profile.color = "red";
   profile.totals.runs = 2;
   storageModule.saveProfile(storage, "profile", profile);
   assert.equal(storageModule.loadProfile(storage, "profile").lang, "en");
+  assert.equal(storageModule.loadProfile(storage, "profile").skin, "delta");
+  assert.equal(storageModule.loadProfile(storage, "profile").color, "red");
   assert.equal(storageModule.loadProfile(storage, "profile").totals.runs, 2);
 
   storageModule.writeBestScore(storage, "best", 1234);

@@ -21,6 +21,10 @@ let roomFence = null;
 let shipGroup = null;
 let sunLight = null;
 let rimLight = null;
+let currentShipColor = 0x8fe6ff;
+let currentSkin = "default";
+let pickupGlowTexture = null;
+const rockTextures = [];
 
 const MAX_ANISOTROPY_CACHE = new Map();
 
@@ -45,7 +49,7 @@ function makeRockTexture(seed) {
   canvas.height = size;
   const g = canvas.getContext("2d");
 
-  g.fillStyle = "#8a8f9c";
+  g.fillStyle = "#5f6570";
   g.fillRect(0, 0, size, size);
 
   let s = seed >>> 0;
@@ -54,27 +58,43 @@ function makeRockTexture(seed) {
     return s / 4294967296;
   };
 
-  for (let i = 0; i < 900; i += 1) {
-    const shade = 90 + rand() * 110;
-    g.fillStyle = `rgba(${shade},${shade + 2},${shade + 8},${0.25 + rand() * 0.3})`;
+  for (let i = 0; i < 1200; i += 1) {
+    const shade = 55 + rand() * 115;
+    g.fillStyle = `rgba(${shade},${shade + 3},${shade + 10},${0.2 + rand() * 0.35})`;
     const r = 1 + rand() * 5;
     g.beginPath();
     g.arc(rand() * size, rand() * size, r, 0, Math.PI * 2);
     g.fill();
   }
 
-  for (let i = 0; i < 26; i += 1) {
+  for (let i = 0; i < 30; i += 1) {
     const cx = rand() * size;
     const cy = rand() * size;
     const r = 6 + rand() * 26;
     const crater = g.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
-    crater.addColorStop(0, "rgba(38,42,52,0.8)");
-    crater.addColorStop(0.7, "rgba(78,84,98,0.5)");
-    crater.addColorStop(1, "rgba(190,196,210,0.18)");
+    crater.addColorStop(0, "rgba(22,26,34,0.95)");
+    crater.addColorStop(0.7, "rgba(52,58,70,0.7)");
+    crater.addColorStop(1, "rgba(176,184,200,0.28)");
     g.fillStyle = crater;
     g.beginPath();
     g.arc(cx, cy, r, 0, Math.PI * 2);
     g.fill();
+  }
+
+  // A few long fractures so the silhouette reads as broken stone up close.
+  for (let i = 0; i < 14; i += 1) {
+    g.strokeStyle = `rgba(28,32,42,${0.25 + rand() * 0.3})`;
+    g.lineWidth = 1 + rand() * 1.6;
+    g.beginPath();
+    let x = rand() * size;
+    let y = rand() * size;
+    g.moveTo(x, y);
+    for (let step = 0; step < 4; step += 1) {
+      x += (rand() - 0.5) * 44;
+      y += (rand() - 0.5) * 44;
+      g.lineTo(x, y);
+    }
+    g.stroke();
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -99,6 +119,56 @@ function makeGlowTexture() {
   return new THREE.CanvasTexture(canvas);
 }
 
+function makeHullTexture() {
+  // Grayscale panel layout: the material colour supplies the livery, so one
+  // shared texture works for all three hulls and all three colours.
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const g = canvas.getContext("2d");
+  g.fillStyle = "#b9c2d4";
+  g.fillRect(0, 0, size, size);
+
+  g.strokeStyle = "rgba(14,20,32,0.62)";
+  g.lineWidth = 2;
+  for (let i = 0; i <= size; i += 32) {
+    g.beginPath();
+    g.moveTo(i, 0);
+    g.lineTo(i, size);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(0, i);
+    g.lineTo(size, i);
+    g.stroke();
+  }
+
+  let s = 9137;
+  const rand = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  for (let i = 0; i < 220; i += 1) {
+    g.fillStyle = `rgba(40,48,64,${0.08 + rand() * 0.18})`;
+    g.fillRect(rand() * size, rand() * size, 1 + rand() * 5, 1 + rand() * 3);
+  }
+  for (let i = 0; i < 7; i += 1) {
+    g.strokeStyle = "rgba(28,36,52,0.45)";
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(rand() * size, rand() * size);
+    g.lineTo(rand() * size, rand() * size);
+    g.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2, 2);
+  texture.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
+  return texture;
+}
+
 /* ---------- 场景搭建 ---------- */
 
 function buildStarField(count) {
@@ -108,7 +178,7 @@ function buildStarField(count) {
     // Stars sit on a large shell so they never parallax out of position.
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
-    const radius = 2400 + Math.random() * 900;
+    const radius = 3000 + Math.random() * 1600;
     positions[i * 3] = Math.sin(phi) * Math.cos(theta) * radius;
     positions[i * 3 + 1] = Math.cos(phi) * radius;
     positions[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * radius;
@@ -134,55 +204,123 @@ function buildStarField(count) {
   return new THREE.Points(geometry, material);
 }
 
-function buildRoomFence(world) {
-  const geometry = new THREE.BoxGeometry(world.width, world.depth, world.height);
+function buildRoomFence(world, alpha = 0.14) {
+  const geometry = new THREE.BoxGeometry(world.width, world.height, world.depth);
   const material = new THREE.MeshBasicMaterial({
     color: 0x62e4ff,
     wireframe: true,
     transparent: true,
-    opacity: 0.045
+    opacity: alpha
   });
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.set(world.width / 2, world.depth / 2, world.height / 2);
+  mesh.position.set(world.width / 2, world.height / 2, world.depth / 2);
   return mesh;
 }
 
-function buildShip(color) {
-  const group = new THREE.Group();
-  const base = new THREE.Color(color);
+const WHITE = new THREE.Color(0xffffff);
 
-  const hullMaterial = new THREE.MeshStandardMaterial({
-    color: base.clone().multiplyScalar(0.75),
+function makeShipMaterials(base, hullTexture) {
+  const hull = new THREE.MeshStandardMaterial({
+    map: hullTexture,
+    color: base.clone().multiplyScalar(0.46),
     metalness: 0.8,
-    roughness: 0.26,
-    emissive: base.clone().multiplyScalar(0.28)
+    roughness: 0.32,
+    emissive: base.clone().multiplyScalar(0.16)
   });
-  const panelMaterial = new THREE.MeshStandardMaterial({
-    color: base.clone().multiplyScalar(0.45),
-    metalness: 0.9,
-    roughness: 0.3,
-    emissive: base.clone().multiplyScalar(0.1)
+  const panel = new THREE.MeshStandardMaterial({
+    map: hullTexture,
+    color: base.clone().multiplyScalar(0.2),
+    metalness: 0.88,
+    roughness: 0.4,
+    emissive: base.clone().multiplyScalar(0.05)
   });
+  const accent = new THREE.MeshStandardMaterial({
+    color: base.clone().lerp(WHITE, 0.05),
+    emissive: base.clone(),
+    emissiveIntensity: 0.6,
+    metalness: 0.35,
+    roughness: 0.26
+  });
+  const engine = new THREE.MeshBasicMaterial({ color: base.clone().lerp(WHITE, 0.25) });
+  const glass = new THREE.MeshStandardMaterial({
+    color: 0x07111f,
+    metalness: 1,
+    roughness: 0.06,
+    emissive: base.clone().multiplyScalar(0.2)
+  });
+  return { hull, panel, accent, engine, glass };
+}
 
-  // Nose cone along +z.
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(11, 46, 20), hullMaterial);
+function tintShip(group, color) {
+  const base = new THREE.Color(color);
+  const m = group.userData.materials;
+  if (!m) return;
+  m.hull.color.copy(base).multiplyScalar(0.46);
+  m.hull.emissive.copy(base).multiplyScalar(0.16);
+  m.panel.color.copy(base).multiplyScalar(0.2);
+  m.panel.emissive.copy(base).multiplyScalar(0.05);
+  m.accent.color.copy(base).lerp(WHITE, 0.05);
+  m.accent.emissive.copy(base);
+  m.accent.emissiveIntensity = 0.6;
+  m.engine.color.copy(base).lerp(WHITE, 0.25);
+  m.glass.emissive.copy(base).multiplyScalar(0.2);
+  for (const flame of group.userData.flames) {
+    flame.material.color.copy(base).lerp(WHITE, 0.35);
+    flame.material.needsUpdate = true;
+  }
+  if (group.userData.glow) group.userData.glow.color.copy(base);
+}
+
+function addFlame(group, x, y, z, radius, length) {
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.55,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(radius, length, 10, 1, true), material);
+  flame.rotation.x = -Math.PI / 2;
+  flame.position.set(x, y, z - length / 2);
+  group.add(flame);
+  group.userData.flames.push(flame);
+  return flame;
+}
+
+function addShipGlow(group, x, y, z) {
+  const glow = new THREE.PointLight(group.userData.materials.engine.color.clone(), 120, 420, 2);
+  glow.position.set(x, y, z);
+  group.add(glow);
+  group.userData.glow = glow;
+}
+
+function addWingtip(group, x, y, z, color) {
+  const tip = new THREE.Mesh(
+    new THREE.SphereGeometry(3.2, 10, 10),
+    new THREE.MeshBasicMaterial({ color })
+  );
+  tip.position.set(x, y, z);
+  group.add(tip);
+}
+
+function buildFighter(group) {
+  const { hull, panel, accent, glass, engine } = group.userData.materials;
+
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(11, 46, 20), hull);
   nose.rotation.x = Math.PI / 2;
   nose.position.z = 34;
   nose.castShadow = true;
   group.add(nose);
 
-  // Main fuselage, tapered toward the tail.
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(11, 15, 54, 20), hullMaterial);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(11, 15, 54, 20), hull);
   body.rotation.x = Math.PI / 2;
   body.position.z = -6;
   body.castShadow = true;
   group.add(body);
 
-  // Swept wings: tapered boxes with a dihedral, not flat plates.
   for (const side of [-1, 1]) {
     const wingGeometry = new THREE.BoxGeometry(62, 3.2, 34);
     const position = wingGeometry.attributes.position;
-    // Taper the outer edge so the wing narrows toward the tip.
     for (let i = 0; i < position.count; i += 1) {
       const x = position.getX(i);
       if (x * side > 0) position.setZ(i, position.getZ(i) * 0.55);
@@ -190,76 +328,242 @@ function buildShip(color) {
     position.needsUpdate = true;
     wingGeometry.computeVertexNormals();
 
-    const wing = new THREE.Mesh(wingGeometry, panelMaterial);
+    const wing = new THREE.Mesh(wingGeometry, panel);
     wing.position.set(side * 36, -2, -4);
     wing.rotation.z = side * 0.2;
     wing.rotation.y = side * -0.22;
     wing.castShadow = true;
     group.add(wing);
 
-    // Wingtip running light.
-    const tip = new THREE.Mesh(
-      new THREE.SphereGeometry(3.4, 10, 10),
-      new THREE.MeshBasicMaterial({ color: side > 0 ? 0x8affd1 : 0xff8ea1 })
-    );
-    tip.position.set(side * 64, -2 + side * 0.2 * 0, -10);
-    group.add(tip);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(30, 0.8, 2.2), accent);
+    stripe.position.set(side * 38, 0.4, -2);
+    stripe.rotation.y = side * -0.22;
+    group.add(stripe);
+
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 15, 18), panel);
+    fin.position.set(side * 9, 9, -26);
+    fin.rotation.x = -0.2;
+    group.add(fin);
+
+    addWingtip(group, side * 64, -2, -10, side > 0 ? 0x8affd1 : 0xff8ea1);
   }
 
-  // Cockpit canopy.
-  const glass = new THREE.Mesh(
+  const canopy = new THREE.Mesh(
     new THREE.SphereGeometry(8.5, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({
-      color: 0x0a1626,
-      metalness: 1,
-      roughness: 0.05,
-      emissive: base.clone().multiplyScalar(0.2)
-    })
+    glass
   );
-  glass.position.set(0, 6.5, 16);
-  glass.scale.set(0.85, 0.8, 1.7);
-  group.add(glass);
+  canopy.position.set(0, 6.5, 16);
+  canopy.scale.set(0.85, 0.8, 1.7);
+  group.add(canopy);
 
-  // Twin engines with visible glow cores.
-  const engineCore = new THREE.MeshBasicMaterial({
-    color: base.clone().lerp(new THREE.Color(0xffffff), 0.55)
-  });
   for (const x of [-13, 13]) {
-    const housing = new THREE.Mesh(new THREE.CylinderGeometry(6, 7, 20, 14), panelMaterial);
+    const housing = new THREE.Mesh(new THREE.CylinderGeometry(6, 7, 20, 14), panel);
     housing.rotation.x = Math.PI / 2;
     housing.position.set(x, 0, -36);
     housing.castShadow = true;
     group.add(housing);
 
-    const core = new THREE.Mesh(new THREE.SphereGeometry(4.6, 12, 12), engineCore);
+    const core = new THREE.Mesh(new THREE.SphereGeometry(3.2, 12, 12), engine);
     core.position.set(x, 0, -45);
+    group.add(core);
+
+    const nozzle = new THREE.Mesh(new THREE.TorusGeometry(6.2, 1, 6, 18), accent);
+    nozzle.position.set(x, 0, -45);
+    group.add(nozzle);
+
+    addFlame(group, x, 0, -46, 7, 54);
+    addFlame(group, x, 0, -46, 3.2, 30);
+  }
+
+  addShipGlow(group, 0, 0, -40);
+}
+
+function buildDelta(group) {
+  const { hull, panel, accent, glass } = group.userData.materials;
+
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 48);
+  shape.lineTo(62, -28);
+  shape.lineTo(22, -38);
+  shape.lineTo(-22, -38);
+  shape.lineTo(-62, -28);
+  shape.closePath();
+  const wingGeometry = new THREE.ExtrudeGeometry(shape, {
+    depth: 14,
+    bevelEnabled: true,
+    bevelThickness: 2,
+    bevelSize: 2,
+    bevelSegments: 1,
+    steps: 1
+  });
+  wingGeometry.rotateX(Math.PI / 2);
+  wingGeometry.translate(0, 7, 0);
+
+  const wing = new THREE.Mesh(wingGeometry, hull);
+  wing.castShadow = true;
+  group.add(wing);
+
+  const spine = new THREE.Mesh(new THREE.BoxGeometry(9, 7, 48), panel);
+  spine.position.set(0, 6, -6);
+  spine.castShadow = true;
+  group.add(spine);
+
+  const canopy = new THREE.Mesh(
+    new THREE.SphereGeometry(8.5, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+    glass
+  );
+  canopy.position.set(0, 11, 6);
+  canopy.scale.set(0.9, 0.8, 2.1);
+  group.add(canopy);
+
+  for (const side of [-1, 1]) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 14, 16), panel);
+    fin.position.set(side * 11, 12, -26);
+    fin.rotation.z = side * 0.18;
+    group.add(fin);
+
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(26, 0.7, 2), accent);
+    stripe.position.set(side * 34, 1.2, -8);
+    stripe.rotation.y = side * 0.62;
+    group.add(stripe);
+
+    const engineHouse = new THREE.Mesh(new THREE.CylinderGeometry(6, 7, 22, 14), panel);
+    engineHouse.rotation.x = Math.PI / 2;
+    engineHouse.position.set(side * 13, 1, -32);
+    group.add(engineHouse);
+
+    addFlame(group, side * 13, 1, -43, 6, 44);
+    addFlame(group, side * 13, 1, -43, 2.8, 26);
+    addWingtip(group, side * 57, -1, -24, side > 0 ? 0x8affd1 : 0xff8ea1);
+  }
+
+  const engine = group.userData.materials.engine;
+  for (const side of [-1, 1]) {
+    const core = new THREE.Mesh(new THREE.SphereGeometry(3, 12, 12), engine);
+    core.position.set(side * 13, 1, -41);
     group.add(core);
   }
 
-  const glow = new THREE.PointLight(base, 110, 340, 2);
-  glow.position.set(0, 0, -40);
-  group.add(glow);
-  group.userData.glow = glow;
+  addShipGlow(group, 0, 2, -34);
+}
 
+function buildSaucer(group) {
+  const { hull, panel, accent, glass } = group.userData.materials;
+
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(64, 58, 10, 32), hull);
+  disc.castShadow = true;
+  group.add(disc);
+
+  const belly = new THREE.Mesh(
+    new THREE.SphereGeometry(40, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+    panel
+  );
+  belly.position.y = -4;
+  belly.scale.y = 0.55;
+  belly.castShadow = true;
+  group.add(belly);
+
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(28, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    glass
+  );
+  dome.position.y = 5;
+  dome.scale.y = 0.7;
+  group.add(dome);
+
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(68, 1.8, 8, 48), accent);
+  ring.rotation.x = Math.PI / 2;
+  group.add(ring);
+  group.userData.ring = ring;
+
+  for (let i = 0; i < 4; i += 1) {
+    const angle = (Math.PI * 2 * i) / 4 + Math.PI / 4;
+    const light = new THREE.Mesh(
+      new THREE.SphereGeometry(3, 10, 10),
+      new THREE.MeshBasicMaterial({ color: i % 2 ? 0x8affd1 : 0xff8ea1 })
+    );
+    light.position.set(Math.cos(angle) * 60, -1, Math.sin(angle) * 60);
+    group.add(light);
+  }
+
+  for (const side of [-1, 1]) {
+    const engineHouse = new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 16, 14), panel);
+    engineHouse.rotation.x = Math.PI / 2;
+    engineHouse.position.set(side * 22, -3, -34);
+    group.add(engineHouse);
+
+    addFlame(group, side * 22, -3, -42, 5.5, 34);
+    addFlame(group, side * 22, -3, -42, 2.4, 20);
+  }
+
+  const engine = group.userData.materials.engine;
+  const core = new THREE.Mesh(new THREE.SphereGeometry(7, 14, 14), engine);
+  core.position.set(0, -9, 0);
+  group.add(core);
+
+  const nozzle = new THREE.Mesh(new THREE.TorusGeometry(10, 1.2, 6, 24), accent);
+  nozzle.rotation.x = Math.PI / 2;
+  nozzle.position.y = -8;
+  group.add(nozzle);
+
+  addShipGlow(group, 0, -10, 0);
+}
+
+function buildShip(color, skin = "default") {
+  const base = new THREE.Color(color);
+  const hullTexture = makeHullTexture();
+  const materials = makeShipMaterials(base, hullTexture);
+  const group = new THREE.Group();
+  group.userData = {
+    materials,
+    flames: [],
+    ring: null,
+    glow: null,
+    ownTextures: [hullTexture]
+  };
+
+  if (skin === "saucer") buildSaucer(group);
+  else if (skin === "delta") buildDelta(group);
+  else buildFighter(group);
+
+  tintShip(group, base);
   return group;
+}
+
+function makeRockGeometry(seed) {
+  const geometry = new THREE.IcosahedronGeometry(1, 2);
+  const position = geometry.attributes.position;
+  for (let i = 0; i < position.count; i += 1) {
+    const x = position.getX(i);
+    const y = position.getY(i);
+    const z = position.getZ(i);
+    // Hash the shared vertex position so duplicated face vertices move together
+    // and the surface stays watertight.
+    const noise = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + seed * 17.13) * 43758.5453;
+    const jitter = (noise - Math.floor(noise)) * 0.28 - 0.14;
+    position.setXYZ(i, x * (1 + jitter), y * (1 + jitter), z * (1 + jitter));
+  }
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function syncRock(entry) {
   let mesh = sceneObjects.rocks.get(entry.asteroid);
   if (!mesh) {
-    const texture = makeRockTexture(Math.floor(Math.random() * 1e9));
+    const texture = rockTextures[Math.floor(Math.random() * rockTextures.length)];
     // Mineral tint is a hint, not the base colour: blend it toward neutral
     // rock so the field reads as stone instead of coloured marbles.
-    const tint = new THREE.Color(`rgb(${entry.asteroid.mineralTint})`).lerp(new THREE.Color(0xa8adba), 0.72);
+    const tint = new THREE.Color(`rgb(${entry.asteroid.mineralTint})`).lerp(new THREE.Color(0xa8adba), 0.78);
     const material = new THREE.MeshStandardMaterial({
       map: texture,
       bumpMap: texture,
-      bumpScale: 0.8,
+      bumpScale: 1.1,
       color: tint,
-      metalness: 0.12,
-      roughness: 0.88
+      metalness: 0.08,
+      roughness: 0.92,
+      flatShading: true
     });
-    mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), material);
+    mesh = new THREE.Mesh(makeRockGeometry(Math.random() * 1000), material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
@@ -269,13 +573,13 @@ function syncRock(entry) {
   const a = entry.asteroid;
   mesh.position.set(a.x, a.y, a.z);
   mesh.scale.setScalar(a.radius);
-  mesh.rotation.y = a.rotation;
+  mesh.rotation.set(a.rotation * 0.37, a.rotation, a.rotation * 0.61);
   mesh.material.emissiveIntensity = a.hitFlash > 0 ? a.hitFlash * 0.8 : (a.elite ? 0.18 : 0);
 
   return mesh;
 }
 
-export function createWorld({ world, tuning }) {
+export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff }) {
   renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("game"), antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, tuning.dprCap || 2));
   renderer.shadowMap.enabled = true;
@@ -284,7 +588,7 @@ export function createWorld({ world, tuning }) {
   renderer.toneMappingExposure = 1.55;
 
   scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x03060f, 0.00032);
+  scene.fog = new THREE.FogExp2(0x03060f, tuning.fogDensity3d || 0.00016);
 
   camera = new THREE.PerspectiveCamera(tuning.fovDegrees || 62, 1, 1, 6000);
 
@@ -313,15 +617,21 @@ export function createWorld({ world, tuning }) {
   fill.position.set(500, 400, 800);
   scene.add(fill);
 
-  scene.add(new THREE.AmbientLight(0x3a4a70, 2.4));
+  scene.add(new THREE.AmbientLight(0x3a4a70, 1.8));
+
+  rockTextures.length = 0;
+  for (let i = 0; i < 6; i += 1) rockTextures.push(makeRockTexture((i + 1) * 7919));
+  pickupGlowTexture = makeGlowTexture();
 
   starField = buildStarField(2600);
   scene.add(starField);
 
-  roomFence = buildRoomFence(world);
+  roomFence = buildRoomFence(world, tuning.fenceAlpha || 0.14);
   scene.add(roomFence);
 
-  shipGroup = buildShip(0x8fe6ff);
+  currentShipColor = color;
+  currentSkin = skin;
+  shipGroup = buildShip(color, skin);
   shipGroup.scale.setScalar(1.6);
   scene.add(shipGroup);
 
@@ -335,14 +645,18 @@ export function createWorld({ world, tuning }) {
       camera.updateProjectionMatrix();
     },
     setShipColor(color) {
-      const c = new THREE.Color(color);
-      shipGroup.traverse((child) => {
-        if (child.isMesh && child.material && child.material.emissive) {
-          child.material.emissive.copy(c).multiplyScalar(0.14);
-          if (child.material.color) child.material.color.copy(c).multiplyScalar(0.5);
-        }
-      });
-      if (shipGroup.userData.glow) shipGroup.userData.glow.color.copy(c);
+      currentShipColor = color;
+      if (shipGroup) tintShip(shipGroup, color);
+    },
+    setShipVariant(name) {
+      if (!shipGroup || name === currentSkin) return;
+      currentSkin = name;
+      scene.remove(shipGroup);
+      for (const texture of shipGroup.userData.ownTextures || []) texture.dispose();
+      disposeObject(shipGroup);
+      shipGroup = buildShip(currentShipColor, name);
+      shipGroup.scale.setScalar(1.6);
+      scene.add(shipGroup);
     },
     setRegionTint(rgb) {
       const color = new THREE.Color(`rgb(${rgb})`);
@@ -358,6 +672,14 @@ export function createWorld({ world, tuning }) {
       shipGroup.rotation.set(-state.player.pitch, -state.player.yaw, state.player.roll, "YXZ");
       if (shipGroup.userData.glow) {
         shipGroup.userData.glow.intensity = 60 + state.player.thrust * 140;
+      }
+      for (const flame of shipGroup.userData.flames) {
+        const pulse = 0.9 + Math.sin(state.pulseTime * 30) * 0.08;
+        flame.scale.y = (0.55 + state.player.thrust * 1.15) * pulse;
+        flame.material.opacity = 0.28 + state.player.thrust * 0.5;
+      }
+      if (shipGroup.userData.ring) {
+        shipGroup.userData.ring.rotation.z += dt * 1.4;
       }
 
       // Chase camera: further back so the ship reads as a craft, not a splinter.
@@ -386,6 +708,9 @@ export function createWorld({ world, tuning }) {
     },
     dispose() {
       disposeObject(scene);
+      for (const texture of rockTextures) texture.dispose();
+      rockTextures.length = 0;
+      if (pickupGlowTexture) pickupGlowTexture.dispose();
       renderer.dispose();
     }
   };
@@ -415,37 +740,121 @@ function syncDynamic(state) {
     sceneObjects.rocks.delete(asteroid);
   }
 
-  syncPickups(state.cores, sceneObjects.cores, 0x8affd1, 12);
-  syncPickups(state.powerUps, sceneObjects.powerUps, 0xffb59e, 14);
+  syncPickups(state.cores, sceneObjects.cores, "core");
+  syncPickups(state.powerUps, sceneObjects.powerUps, "powerUp");
   syncLasers(state.lasers);
   syncGates(state.routeChoice.gates);
 }
 
-function syncPickups(items, cache, color, size) {
+function pickupColor(kind, item) {
+  if (kind === "core") return 0x5cffc4;
+  return item.type === "shield" ? 0x5a8dff : 0xffa23a;
+}
+
+function buildPickup(item, kind) {
+  const color = pickupColor(kind, item);
+  const radius = item.radius || 14;
+  const group = new THREE.Group();
+
+  const bodyMaterial = new THREE.MeshStandardMaterial({
+    color,
+    emissive: new THREE.Color(color),
+    emissiveIntensity: 1.7,
+    metalness: 0.25,
+    roughness: 0.3
+  });
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.55,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: pickupGlowTexture,
+    color,
+    transparent: true,
+    opacity: 0.4,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  }));
+  glow.scale.setScalar(radius * 3.4);
+  group.add(glow);
+
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.4, 1.4, 190, 6, 1, true),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.06,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  group.add(beam);
+
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(radius * 1.5, 1.7, 8, 32), ringMaterial);
+  ring.rotation.x = Math.PI / 2;
+  group.add(ring);
+
+  let core;
+  if (kind === "core") {
+    core = new THREE.Mesh(new THREE.OctahedronGeometry(radius * 0.72, 0), bodyMaterial);
+    core.scale.set(0.75, 1.45, 0.75);
+  } else if (item.type === "shield") {
+    core = new THREE.Mesh(new THREE.IcosahedronGeometry(radius * 0.62, 1), bodyMaterial);
+    const hex = new THREE.Mesh(new THREE.TorusGeometry(radius * 1.05, 2.2, 6, 6), ringMaterial);
+    hex.rotation.x = Math.PI / 2;
+    group.add(hex);
+    group.userData.hex = hex;
+  } else {
+    core = new THREE.Group();
+    const crystal = new THREE.OctahedronGeometry(radius * 0.5, 0);
+    for (const side of [-1, 1]) {
+      const part = new THREE.Mesh(crystal, bodyMaterial);
+      part.position.x = side * radius * 0.55;
+      part.scale.set(0.72, 1.35, 0.72);
+      core.add(part);
+    }
+  }
+  if (core) group.add(core);
+
+  group.userData = {
+    ...group.userData,
+    glow,
+    ring,
+    core,
+    baseRadius: radius
+  };
+  return group;
+}
+
+function syncPickups(items, cache, kind) {
   const seen = new Set();
   for (const item of items) {
     seen.add(item);
-    let mesh = cache.get(item);
-    if (!mesh) {
-      const material = new THREE.MeshStandardMaterial({
-        color,
-        emissive: new THREE.Color(color),
-        emissiveIntensity: 2.2,
-        metalness: 0.2,
-        roughness: 0.3
-      });
-      mesh = new THREE.Mesh(new THREE.OctahedronGeometry(size, 0), material);
-      scene.add(mesh);
-      cache.set(item, mesh);
+    let group = cache.get(item);
+    if (!group) {
+      group = buildPickup(item, kind);
+      scene.add(group);
+      cache.set(item, group);
     }
-    mesh.position.set(item.x, item.y, item.z);
-    mesh.rotation.y = item.pulse;
-    mesh.rotation.x = item.pulse * 0.6;
+    const bob = Math.sin(item.pulse) * 4;
+    group.position.set(item.x, item.y + bob, item.z);
+    const { core, ring, glow, hex, baseRadius } = group.userData;
+    if (core) {
+      core.rotation.y = item.pulse;
+      core.rotation.x = item.pulse * 0.55;
+    }
+    ring.rotation.set(Math.PI / 2 + Math.sin(item.pulse * 0.7) * 0.3, 0, item.pulse * 0.9);
+    if (hex) hex.rotation.z = -item.pulse * 0.8;
+    glow.scale.setScalar(baseRadius * (3.4 + Math.sin(item.pulse * 1.2) * 0.3));
   }
-  for (const [item, mesh] of cache) {
+  for (const [item, group] of cache) {
     if (seen.has(item)) continue;
-    scene.remove(mesh);
-    disposeObject(mesh);
+    scene.remove(group);
+    disposeObject(group);
     cache.delete(item);
   }
 }
