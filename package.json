@@ -2,6 +2,6 @@
   "name": "star-ring-dodge",
   "private": true,
   "scripts": {
-    "test": "node --test tests/smoke.test.js tests/projection.test.js"
+    "test": "node --test tests/smoke.test.js tests/projection.test.js tests/assets.test.js"
   }
 }

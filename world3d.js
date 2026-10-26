@@ -1,6 +1,7 @@
 // WebGL renderer for the 3D room. Loaded as a module so three.js can be
 // imported; the rest of the game stays classic scripts on window.
 import * as THREE from "three";
+import { createFighterModel, createStudioEnvironment } from "./fighter-model.js";
 
 const sceneObjects = {
   rocks: new Map(),
@@ -23,6 +24,7 @@ let sunLight = null;
 let rimLight = null;
 let currentShipColor = 0x8fe6ff;
 let currentSkin = "default";
+let fighterEnvironment = null;
 let pickupGlowTexture = null;
 const rockTextures = [];
 
@@ -252,6 +254,10 @@ function makeShipMaterials(base, hullTexture) {
 }
 
 function tintShip(group, color) {
+  if (group.userData.applyLivery) {
+    group.userData.applyLivery(color);
+    return;
+  }
   const base = new THREE.Color(color);
   const m = group.userData.materials;
   if (!m) return;
@@ -301,81 +307,6 @@ function addWingtip(group, x, y, z, color) {
   );
   tip.position.set(x, y, z);
   group.add(tip);
-}
-
-function buildFighter(group) {
-  const { hull, panel, accent, glass, engine } = group.userData.materials;
-
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(11, 46, 20), hull);
-  nose.rotation.x = Math.PI / 2;
-  nose.position.z = 34;
-  nose.castShadow = true;
-  group.add(nose);
-
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(11, 15, 54, 20), hull);
-  body.rotation.x = Math.PI / 2;
-  body.position.z = -6;
-  body.castShadow = true;
-  group.add(body);
-
-  for (const side of [-1, 1]) {
-    const wingGeometry = new THREE.BoxGeometry(62, 3.2, 34);
-    const position = wingGeometry.attributes.position;
-    for (let i = 0; i < position.count; i += 1) {
-      const x = position.getX(i);
-      if (x * side > 0) position.setZ(i, position.getZ(i) * 0.55);
-    }
-    position.needsUpdate = true;
-    wingGeometry.computeVertexNormals();
-
-    const wing = new THREE.Mesh(wingGeometry, panel);
-    wing.position.set(side * 36, -2, -4);
-    wing.rotation.z = side * 0.2;
-    wing.rotation.y = side * -0.22;
-    wing.castShadow = true;
-    group.add(wing);
-
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(30, 0.8, 2.2), accent);
-    stripe.position.set(side * 38, 0.4, -2);
-    stripe.rotation.y = side * -0.22;
-    group.add(stripe);
-
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 15, 18), panel);
-    fin.position.set(side * 9, 9, -26);
-    fin.rotation.x = -0.2;
-    group.add(fin);
-
-    addWingtip(group, side * 64, -2, -10, side > 0 ? 0x8affd1 : 0xff8ea1);
-  }
-
-  const canopy = new THREE.Mesh(
-    new THREE.SphereGeometry(8.5, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2),
-    glass
-  );
-  canopy.position.set(0, 6.5, 16);
-  canopy.scale.set(0.85, 0.8, 1.7);
-  group.add(canopy);
-
-  for (const x of [-13, 13]) {
-    const housing = new THREE.Mesh(new THREE.CylinderGeometry(6, 7, 20, 14), panel);
-    housing.rotation.x = Math.PI / 2;
-    housing.position.set(x, 0, -36);
-    housing.castShadow = true;
-    group.add(housing);
-
-    const core = new THREE.Mesh(new THREE.SphereGeometry(3.2, 12, 12), engine);
-    core.position.set(x, 0, -45);
-    group.add(core);
-
-    const nozzle = new THREE.Mesh(new THREE.TorusGeometry(6.2, 1, 6, 18), accent);
-    nozzle.position.set(x, 0, -45);
-    group.add(nozzle);
-
-    addFlame(group, x, 0, -46, 7, 54);
-    addFlame(group, x, 0, -46, 3.2, 30);
-  }
-
-  addShipGlow(group, 0, 0, -40);
 }
 
 function buildDelta(group) {
@@ -510,6 +441,12 @@ function buildSaucer(group) {
 }
 
 function buildShip(color, skin = "default") {
+  if (skin !== "delta" && skin !== "saucer") {
+    const fighter = createFighterModel({ environment: fighterEnvironment, color });
+    fighter.scale.setScalar(1);
+    return fighter;
+  }
+
   const base = new THREE.Color(color);
   const hullTexture = makeHullTexture();
   const materials = makeShipMaterials(base, hullTexture);
@@ -523,10 +460,10 @@ function buildShip(color, skin = "default") {
   };
 
   if (skin === "saucer") buildSaucer(group);
-  else if (skin === "delta") buildDelta(group);
-  else buildFighter(group);
+  else buildDelta(group);
 
   tintShip(group, base);
+  group.scale.setScalar(1.6);
   return group;
 }
 
@@ -579,6 +516,69 @@ function syncRock(entry) {
   return mesh;
 }
 
+function roundVector(vector) {
+  return {
+    x: Number(vector.x.toFixed(2)),
+    y: Number(vector.y.toFixed(2)),
+    z: Number(vector.z.toFixed(2))
+  };
+}
+
+function localCenter(object, group) {
+  const center = new THREE.Box3().setFromObject(object).getCenter(new THREE.Vector3());
+  return roundVector(group.worldToLocal(center));
+}
+
+function localBounds(object, group) {
+  object.updateWorldMatrix(true, true);
+  group.updateWorldMatrix(true, true);
+  const toGroupLocal = new THREE.Matrix4().copy(group.matrixWorld).invert();
+  const box = new THREE.Box3();
+  object.traverse((child) => {
+    if (!child.geometry) return;
+    child.geometry.computeBoundingBox();
+    const childBox = child.geometry.boundingBox
+      .clone()
+      .applyMatrix4(new THREE.Matrix4().multiplyMatrices(toGroupLocal, child.matrixWorld));
+    box.union(childBox);
+  });
+  return roundVector(box.getSize(new THREE.Vector3()));
+}
+
+function getDebugReport() {
+  const rocks = { forms: [], active: 0, uniqueGeometryIds: [], uniqueMaterialCount: 0 };
+  const fighter = shipGroup && currentSkin === "default" ? shipGroup.userData : null;
+  if (!fighter || !fighter.hullRoot) return { fighter: null, rocks };
+
+  shipGroup.updateWorldMatrix(true, true);
+  const { parts, hullRoot, materials, flames, ownTextures } = fighter;
+  const flamePositions = (flames || []).map((flame) => {
+    const position = new THREE.Vector3();
+    flame.getWorldPosition(position);
+    return roundVector(shipGroup.worldToLocal(position));
+  });
+
+  return {
+    fighter: {
+      bounds: localBounds(hullRoot, shipGroup),
+      parts: {
+        leftWing: localCenter(parts.leftWing, shipGroup),
+        rightWing: localCenter(parts.rightWing, shipGroup),
+        leftTail: localCenter(parts.leftTail, shipGroup),
+        rightTail: localCenter(parts.rightTail, shipGroup),
+        cockpit: localCenter(parts.cockpit, shipGroup),
+        leftEngine: localCenter(parts.leftEngine, shipGroup),
+        rightEngine: localCenter(parts.rightEngine, shipGroup)
+      },
+      hullColor: "#" + materials.hull.color.getHexString(),
+      engineColor: "#" + materials.engine.color.getHexString(),
+      flames: flamePositions,
+      textureCount: (ownTextures || []).length
+    },
+    rocks
+  };
+}
+
 export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff }) {
   renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("game"), antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, tuning.dprCap || 2));
@@ -586,6 +586,8 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.55;
+
+  fighterEnvironment = createStudioEnvironment(renderer);
 
   scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x03060f, tuning.fogDensity3d || 0.00016);
@@ -632,7 +634,6 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
   currentShipColor = color;
   currentSkin = skin;
   shipGroup = buildShip(color, skin);
-  shipGroup.scale.setScalar(1.6);
   scene.add(shipGroup);
 
   scene.add(sceneObjects.gates);
@@ -655,9 +656,9 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       for (const texture of shipGroup.userData.ownTextures || []) texture.dispose();
       disposeObject(shipGroup);
       shipGroup = buildShip(currentShipColor, name);
-      shipGroup.scale.setScalar(1.6);
       scene.add(shipGroup);
     },
+    getDebugReport,
     setRegionTint(rgb) {
       const color = new THREE.Color(`rgb(${rgb})`);
       rimLight.color.copy(color);
@@ -708,6 +709,11 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
     },
     dispose() {
       disposeObject(scene);
+      for (const texture of shipGroup?.userData.ownTextures || []) texture.dispose();
+      if (fighterEnvironment) {
+        fighterEnvironment.dispose();
+        fighterEnvironment = null;
+      }
       for (const texture of rockTextures) texture.dispose();
       rockTextures.length = 0;
       if (pickupGlowTexture) pickupGlowTexture.dispose();

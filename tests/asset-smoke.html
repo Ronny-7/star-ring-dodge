@@ -1,0 +1,127 @@
+<!doctype html>
+<meta charset="utf-8">
+<body>Loading asset smoke test...</body>
+<script>
+  const result = { error: null, checks: [] };
+  const check = (name, condition) => {
+    if (!condition) throw new Error(name);
+    result.checks.push(name);
+  };
+
+  const finish = () => {
+    const text = "ASSET_SMOKE_RESULT:" + JSON.stringify(result);
+    document.body.textContent = text;
+    document.title = text;
+  };
+
+  const waitFor = (predicate, timeout = 10000) => new Promise((resolve, reject) => {
+    const start = performance.now();
+    const poll = () => {
+      const value = predicate();
+      if (value) {
+        resolve(value);
+        return;
+      }
+      if (performance.now() - start > timeout) {
+        reject(new Error("timed out waiting for the game world"));
+        return;
+      }
+      setTimeout(poll, 50);
+    };
+    poll();
+  });
+
+  const nextFrames = (win, count) => new Promise((resolve) => {
+    let remaining = count;
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    // Hidden/offscreen frames can throttle rAF; never hang the whole page.
+    const timer = setTimeout(done, 400 * count + 400);
+    const step = () => {
+      if (settled) return;
+      remaining -= 1;
+      if (remaining <= 0) done();
+      else win.requestAnimationFrame(step);
+    };
+    win.requestAnimationFrame(step);
+  });
+
+  const saturation = (hex) => {
+    const value = String(hex).replace("#", "");
+    const channels = [0, 2, 4].map((offset) => parseInt(value.slice(offset, offset + 2), 16) / 255);
+    const max = Math.max(...channels);
+    const min = Math.min(...channels);
+    return max === 0 ? 0 : (max - min) / max;
+  };
+
+  const frame = document.createElement("iframe");
+  frame.src = "../index.html?test=1";
+  frame.width = 1280;
+  frame.height = 900;
+  frame.style.cssText = "position:absolute;left:-16000px;top:0;border:0;";
+  frame.onerror = () => {
+    result.error = "failed to load index.html";
+    finish();
+  };
+  frame.onload = async () => {
+    try {
+      const win = frame.contentWindow;
+      const api = await waitFor(() => win.starRingTestApi || null);
+      const ready = await waitFor(() => win.starRingWorldReady || null);
+      await ready;
+      api.startGame();
+      await nextFrames(win, 2);
+
+      check("world debug exposes the fighter", typeof api.getWorldDebug === "function" && Boolean(api.getWorldDebug()?.fighter));
+      const debug = api.getWorldDebug();
+
+      const bounds = debug.fighter.bounds;
+      check(
+        "fighter local bounds match the target envelope",
+        bounds.z >= 170 && bounds.z <= 195 && bounds.x >= 150 && bounds.x <= 185 && bounds.y > 0 && bounds.y <= 50
+      );
+
+      const parts = debug.fighter.parts;
+      check(
+        "wings mirror and dorsal tails sit high and apart",
+        parts.rightWing.x > 0 &&
+          parts.leftWing.x < 0 &&
+          Math.abs(parts.rightWing.x + parts.leftWing.x) <= 1 &&
+          parts.leftTail.y > 0 &&
+          parts.rightTail.y > 0 &&
+          Math.abs(parts.leftTail.x - parts.rightTail.x) > 5
+      );
+
+      const flames = debug.fighter.flames || [];
+      check(
+        "cockpit forward, twin engines aft, flames behind",
+        parts.cockpit.z > 0 &&
+          parts.leftEngine.z < -50 &&
+          parts.rightEngine.z < -50 &&
+          flames.length === 4 &&
+          flames.every((flame) => flame.z < parts.leftEngine.z && flame.z < parts.rightEngine.z)
+      );
+
+      api.selectSkin("default");
+      api.selectColor("blue");
+      const blueFighter = api.getWorldDebug().fighter;
+      api.selectColor("red");
+      const redFighter = api.getWorldDebug().fighter;
+      check(
+        "livery tints engines only",
+        saturation(blueFighter.hullColor) < 0.1 &&
+          redFighter.hullColor === blueFighter.hullColor &&
+          redFighter.engineColor !== blueFighter.engineColor
+      );
+    } catch (error) {
+      result.error = error.message;
+    }
+    finish();
+  };
+  document.body.append(frame);
+</script>

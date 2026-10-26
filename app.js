@@ -1962,6 +1962,7 @@ window.starRingWorldReady = import("./world3d.js")
 
 if (new URLSearchParams(window.location.search).has("test")) {
   window.starRingTestApi = {
+    getWorldDebug: () => world3d?.getDebugReport?.() ?? null,
     getState: () => ({
       running: state.running,
       paused: state.paused,
