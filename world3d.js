@@ -2,6 +2,7 @@
 // imported; the rest of the game stays classic scripts on window.
 import * as THREE from "three";
 import { createFighterModel, createStudioEnvironment } from "./fighter-model.js";
+import { createRockSet } from "./rock-models.js";
 
 const sceneObjects = {
   rocks: new Map(),
@@ -26,7 +27,7 @@ let currentShipColor = 0x8fe6ff;
 let currentSkin = "default";
 let fighterEnvironment = null;
 let pickupGlowTexture = null;
-const rockTextures = [];
+let rockSet = null;
 
 const MAX_ANISOTROPY_CACHE = new Map();
 
@@ -41,70 +42,6 @@ function disposeObject(object) {
 }
 
 /* ---------- 程序化纹理 ---------- */
-
-function makeRockTexture(seed) {
-  // Baked craters and mineral speckle: real geometry shelves would cost too
-  // much for hundreds of rocks, so detail lives in the albedo map.
-  const size = 256;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const g = canvas.getContext("2d");
-
-  g.fillStyle = "#5f6570";
-  g.fillRect(0, 0, size, size);
-
-  let s = seed >>> 0;
-  const rand = () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-
-  for (let i = 0; i < 1200; i += 1) {
-    const shade = 55 + rand() * 115;
-    g.fillStyle = `rgba(${shade},${shade + 3},${shade + 10},${0.2 + rand() * 0.35})`;
-    const r = 1 + rand() * 5;
-    g.beginPath();
-    g.arc(rand() * size, rand() * size, r, 0, Math.PI * 2);
-    g.fill();
-  }
-
-  for (let i = 0; i < 30; i += 1) {
-    const cx = rand() * size;
-    const cy = rand() * size;
-    const r = 6 + rand() * 26;
-    const crater = g.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
-    crater.addColorStop(0, "rgba(22,26,34,0.95)");
-    crater.addColorStop(0.7, "rgba(52,58,70,0.7)");
-    crater.addColorStop(1, "rgba(176,184,200,0.28)");
-    g.fillStyle = crater;
-    g.beginPath();
-    g.arc(cx, cy, r, 0, Math.PI * 2);
-    g.fill();
-  }
-
-  // A few long fractures so the silhouette reads as broken stone up close.
-  for (let i = 0; i < 14; i += 1) {
-    g.strokeStyle = `rgba(28,32,42,${0.25 + rand() * 0.3})`;
-    g.lineWidth = 1 + rand() * 1.6;
-    g.beginPath();
-    let x = rand() * size;
-    let y = rand() * size;
-    g.moveTo(x, y);
-    for (let step = 0; step < 4; step += 1) {
-      x += (rand() - 0.5) * 44;
-      y += (rand() - 0.5) * 44;
-      g.lineTo(x, y);
-    }
-    g.stroke();
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
-  return texture;
-}
 
 function makeGlowTexture() {
   const size = 128;
@@ -467,40 +404,29 @@ function buildShip(color, skin = "default") {
   return group;
 }
 
-function makeRockGeometry(seed) {
-  const geometry = new THREE.IcosahedronGeometry(1, 2);
-  const position = geometry.attributes.position;
-  for (let i = 0; i < position.count; i += 1) {
-    const x = position.getX(i);
-    const y = position.getY(i);
-    const z = position.getZ(i);
-    // Hash the shared vertex position so duplicated face vertices move together
-    // and the surface stays watertight.
-    const noise = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + seed * 17.13) * 43758.5453;
-    const jitter = (noise - Math.floor(noise)) * 0.28 - 0.14;
-    position.setXYZ(i, x * (1 + jitter), y * (1 + jitter), z * (1 + jitter));
+function rockFormFor(asteroid) {
+  if (asteroid.form) {
+    const requested = rockSet.forms.find((form) => form.id === asteroid.form);
+    if (requested) return requested;
   }
-  geometry.computeVertexNormals();
-  return geometry;
+  // Position hash: the same spawn point always keeps the same silhouette.
+  const noise = Math.sin(asteroid.x * 12.9898 + asteroid.y * 78.233 + asteroid.z * 37.719) * 43758.5453;
+  return rockSet.forms[Math.floor((noise - Math.floor(noise)) * rockSet.forms.length) % rockSet.forms.length];
 }
 
 function syncRock(entry) {
   let mesh = sceneObjects.rocks.get(entry.asteroid);
   if (!mesh) {
-    const texture = rockTextures[Math.floor(Math.random() * rockTextures.length)];
-    // Mineral tint is a hint, not the base colour: blend it toward neutral
-    // rock so the field reads as stone instead of coloured marbles.
-    const tint = new THREE.Color(`rgb(${entry.asteroid.mineralTint})`).lerp(new THREE.Color(0xa8adba), 0.78);
-    const material = new THREE.MeshStandardMaterial({
-      map: texture,
-      bumpMap: texture,
-      bumpScale: 1.1,
-      color: tint,
-      metalness: 0.08,
-      roughness: 0.92,
-      flatShading: true
-    });
-    mesh = new THREE.Mesh(makeRockGeometry(Math.random() * 1000), material);
+    const form = rockFormFor(entry.asteroid);
+    // Mineral tint is a hint, not the base colour: most of the shared stone
+    // map stays visible, so the field does not read as coloured marbles.
+    const material = form.material.clone();
+    material.color.copy(new THREE.Color(`rgb(${entry.asteroid.mineralTint})`)).lerp(WHITE, 0.85);
+    material.emissive.setHex(0xff6a3d);
+    material.emissiveMap = form.bumpMap;
+    material.emissiveIntensity = 0;
+    mesh = new THREE.Mesh(form.geometry, material);
+    mesh.userData.formId = form.id;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
@@ -545,8 +471,44 @@ function localBounds(object, group) {
   return roundVector(box.getSize(new THREE.Vector3()));
 }
 
+function rockDebugReport() {
+  const forms = (rockSet?.forms || []).map((form) => {
+    form.geometry.computeBoundingBox();
+    const bounds = form.geometry.boundingBox.getSize(new THREE.Vector3());
+    return {
+      id: form.id,
+      triangles: (form.geometry.index ? form.geometry.index.count : form.geometry.attributes.position.count) / 3,
+      bounds: roundVector(bounds),
+      maxRadius: form.geometry.userData.maxRadius,
+      maxHalfExtent: form.geometry.userData.maxHalfExtent,
+      geometryUUID: form.geometry.uuid
+    };
+  });
+
+  const geometryIds = new Set();
+  const materialIds = new Set();
+  const items = [];
+  for (const [asteroid, mesh] of sceneObjects.rocks) {
+    geometryIds.add(mesh.geometry.uuid);
+    materialIds.add(mesh.material.uuid);
+    items.push({
+      radius: asteroid.radius,
+      formId: mesh.userData.formId,
+      visualRadius: asteroid.radius * mesh.geometry.userData.maxRadius
+    });
+  }
+
+  return {
+    forms,
+    active: sceneObjects.rocks.size,
+    uniqueGeometryIds: [...geometryIds],
+    uniqueMaterialCount: materialIds.size,
+    items
+  };
+}
+
 function getDebugReport() {
-  const rocks = { forms: [], active: 0, uniqueGeometryIds: [], uniqueMaterialCount: 0 };
+  const rocks = rockDebugReport();
   const fighter = shipGroup && currentSkin === "default" ? shipGroup.userData : null;
   if (!fighter || !fighter.hullRoot) return { fighter: null, rocks };
 
@@ -621,8 +583,7 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
 
   scene.add(new THREE.AmbientLight(0x3a4a70, 1.8));
 
-  rockTextures.length = 0;
-  for (let i = 0; i < 6; i += 1) rockTextures.push(makeRockTexture((i + 1) * 7919));
+  rockSet = createRockSet({ anisotropy: renderer.capabilities.getMaxAnisotropy() });
   pickupGlowTexture = makeGlowTexture();
 
   starField = buildStarField(2600);
@@ -714,8 +675,10 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
         fighterEnvironment.dispose();
         fighterEnvironment = null;
       }
-      for (const texture of rockTextures) texture.dispose();
-      rockTextures.length = 0;
+      if (rockSet) {
+        rockSet.dispose();
+        rockSet = null;
+      }
       if (pickupGlowTexture) pickupGlowTexture.dispose();
       renderer.dispose();
     }
@@ -742,7 +705,8 @@ function syncDynamic(state) {
   for (const [asteroid, mesh] of sceneObjects.rocks) {
     if (seenRocks.has(asteroid)) continue;
     scene.remove(mesh);
-    disposeObject(mesh);
+    // Geometry and maps are shared by the whole set; only the clone is ours.
+    mesh.material.dispose();
     sceneObjects.rocks.delete(asteroid);
   }
 

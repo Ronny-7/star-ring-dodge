@@ -1987,10 +1987,14 @@ if (new URLSearchParams(window.location.search).has("test")) {
     endGame,
     spawnAsteroid,
     handleCollisions,
-    spawnAsteroidAt: (x, y, z, radius) => {
+    spawnAsteroidAt: (x, y, z, radius, form) => {
       const asteroid = makeAsteroid(x, y, z, radius || 30, 0, 0, 0, getCurrentRegion());
+      if (form) asteroid.form = form;
       state.asteroids.push(asteroid);
       return asteroid;
+    },
+    clearAsteroids: () => {
+      state.asteroids = [];
     },
     spawnCoreAt: (x, y, z) => {
       const core = { x, y, z, radius: getTuningValue("coreRadius3d", 16) * getGameplayScale(), pulse: Math.random() * Math.PI * 2 };

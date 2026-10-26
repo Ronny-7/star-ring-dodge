@@ -59,6 +59,16 @@
     return max === 0 ? 0 : (max - min) / max;
   };
 
+  const longestAxisRatios = (forms) => forms.map((form) => {
+    const axes = [form.bounds.x, form.bounds.y, form.bounds.z];
+    return Math.max(...axes) / Math.min(...axes);
+  });
+
+  const ratiosAreDistinct = (forms) => {
+    const ratios = longestAxisRatios(forms).sort((a, b) => a - b);
+    return ratios.every((ratio, index) => index === 0 || ratio - ratios[index - 1] > 0.05);
+  };
+
   const frame = document.createElement("iframe");
   frame.src = "../index.html?test=1";
   frame.width = 1280;
@@ -117,6 +127,89 @@
         saturation(blueFighter.hullColor) < 0.1 &&
           redFighter.hullColor === blueFighter.hullColor &&
           redFighter.engineColor !== blueFighter.engineColor
+      );
+
+      api.pauseGame();
+      const forms = api.getWorldDebug().rocks.forms;
+      check(
+        "three rock forms are unique and normalized",
+        forms.length === 3 &&
+          new Set(forms.map((form) => form.id)).size === 3 &&
+          forms.every((form) =>
+            form.triangles > 0 &&
+            form.triangles <= 6000 &&
+            Math.abs(form.maxRadius - 1) <= 0.01 &&
+            form.maxHalfExtent <= 1
+          ) &&
+          ratiosAreDistinct(forms)
+      );
+
+      api.clearAsteroids();
+      await nextFrames(win, 2);
+      await waitFor(() => api.getWorldDebug().rocks.active === 0);
+
+      const formIds = forms.map((form) => form.id);
+      for (let i = 0; i < 30; i += 1) {
+        api.spawnAsteroidAt(
+          120 + (i % 5) * 90,
+          120 + Math.floor(i / 5) * 90,
+          400,
+          30,
+          formIds[i % formIds.length]
+        );
+      }
+      await nextFrames(win, 2);
+      const populated = await waitFor(() => {
+        const rocks = api.getWorldDebug().rocks;
+        return rocks.active === 30 ? rocks : null;
+      });
+      check(
+        "thirty asteroids share geometries but clone materials",
+        populated.uniqueGeometryIds.length === 3 && populated.uniqueMaterialCount === 30
+      );
+
+      const formById = new Map(forms.map((form) => [form.id, form]));
+      check(
+        "visual radius matches collision radius",
+        populated.items.length === 30 &&
+          populated.items.every((item) => {
+            const form = formById.get(item.formId);
+            return form &&
+              Math.abs(item.visualRadius - item.radius * form.maxRadius) <= 0.01 &&
+              Math.abs(item.visualRadius - item.radius) <= 0.3;
+          })
+      );
+
+      const geometryIdsBefore = [...populated.uniqueGeometryIds].sort();
+      api.clearAsteroids();
+      await nextFrames(win, 2);
+      const emptied = await waitFor(() => {
+        const rocks = api.getWorldDebug().rocks;
+        return rocks.active === 0 ? rocks : null;
+      });
+      formIds.forEach((formId) => api.spawnAsteroidAt(600, 400, 800, 30, formId));
+      await nextFrames(win, 2);
+      const respawned = await waitFor(() => {
+        const rocks = api.getWorldDebug().rocks;
+        return rocks.active === 3 ? rocks : null;
+      });
+      check(
+        "clearAsteroids empties the field without touching shared geometry",
+        emptied.uniqueMaterialCount === 0 &&
+          [...respawned.uniqueGeometryIds].sort().join(",") === geometryIdsBefore.join(",")
+      );
+
+      const firstFighter = api.getWorldDebug().fighter;
+      api.selectSkin("delta");
+      const deltaFighter = api.getWorldDebug().fighter;
+      api.selectSkin("default");
+      const restoredFighter = api.getWorldDebug().fighter;
+      check(
+        "skin switching restores the fighter textures",
+        firstFighter &&
+          deltaFighter === null &&
+          restoredFighter &&
+          restoredFighter.textureCount === firstFighter.textureCount
       );
     } catch (error) {
       result.error = error.message;
