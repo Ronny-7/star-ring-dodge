@@ -1964,7 +1964,7 @@ function startLoop() {
 
 // three.js is an ES module; the world boots asynchronously and the HUD-only
 // fallback covers the gap.
-window.starRingWorldReady = import("./world3d.js")
+window.starRingWorldReady = import("./world3d.js?v=4.1.1")
   .then((mod) => {
     world3d = mod.createWorld({ world: state.world, tuning, skin: activeSkin, color: state.shipColor.mid });
     world3d.resize(cw, ch);
