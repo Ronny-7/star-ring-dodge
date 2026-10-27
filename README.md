@@ -2,11 +2,11 @@
 
 纯前端 Canvas 太空生存射击小游戏。玩家驾驶飞船在流动星域中规避陨石流，回收能量核心，使用激光清除障碍，并通过跃迁门选择下一片区域。
 
-当前版本：v4.1.1（3D 版，`feat/realistic-space-assets` 分支）
+当前版本：v4.2.0（3D 版，`feat/realistic-space-assets` 分支）
 
 ## 3D 版说明
 
-v4.0 把游戏改成了真 3D：60 km 开放场地、自由飞行、WebGL 实时渲染。v4.1 扩大了场地与可视距离，限制了同屏陨石数量，并为三套皮肤做出了真正的 3D 机体。
+v4.0 把游戏改成了真 3D：60 km 开放场地、自由飞行、WebGL 实时渲染。v4.1 扩大了场地与可视距离，限制了同屏陨石数量，并为三套皮肤做出了真正的 3D 机体。v4.2 重做奖励轮廓（三种奖励按暗色轮廓识别）并新增模型展示页 `showcase.html`。
 
 - 渲染用 three.js + WebGL：PBR 材质、实时阴影、ACES 色调映射
 - 2D 版（v3.8）原样保留在 `main` 分支
@@ -22,7 +22,7 @@ v4.0 把游戏改成了真 3D：60 km 开放场地、自由飞行、WebGL 实时
 node tests/serve.js 8123
 ```
 
-然后访问 <http://127.0.0.1:8123/index.html>。
+然后访问 <http://127.0.0.1:8123/index.html>。模型展示页：<http://127.0.0.1:8123/showcase.html>。
 
 在线访问：https://ronny-7.github.io/star-ring-dodge/（`main` 分支的 2D 版）
 
