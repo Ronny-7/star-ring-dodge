@@ -57,6 +57,31 @@
     </section>
   </main>
   <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
-  <script type="module" src="showcase.js?v=4.2.0" onerror="document.querySelector('.stage-fallback').hidden = false"></script>
+  <script>
+    function showcaseLoadFailed(event) {
+      if (window.starRingShowcaseReady) return;
+      document.querySelector(".stage-fallback").hidden = false;
+      const error = event?.message || String(event?.error || "Failed to load showcase module or its dependencies.");
+      window.starRingShowcase = {
+        getDebugReport: () => ({
+          ready: false,
+          view: "all",
+          models: { ship: 0, rewards: 0, rocks: 0 },
+          pickupVariants: [],
+          rockForms: [],
+          canvas: { width: 0, height: 0 },
+          error
+        }),
+        selectView: () => false
+      };
+      window.starRingShowcaseReady = true;
+      window.removeEventListener("error", showcaseModuleError, true);
+    }
+    function showcaseModuleError(event) {
+      if (event.target?.id === "showcase-module" || event.filename) showcaseLoadFailed(event);
+    }
+    window.addEventListener("error", showcaseModuleError, true);
+  </script>
+  <script id="showcase-module" type="module" src="showcase.js?v=4.2.0" onerror="showcaseLoadFailed(event)"></script>
 </body>
 </html>

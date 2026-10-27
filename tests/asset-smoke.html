@@ -407,8 +407,22 @@
       showcaseFrame.height = 900;
       showcaseFrame.style.cssText = "position:absolute;left:-16000px;top:0;border:0;";
       const showcaseLoaded = new Promise((resolve, reject) => {
-        showcaseFrame.onload = () => resolve(showcaseFrame.contentWindow);
-        showcaseFrame.onerror = () => reject(new Error("failed to load showcase.html"));
+        const cleanup = () => {
+          clearTimeout(timer);
+          showcaseFrame.onload = null;
+          showcaseFrame.onerror = null;
+        };
+        const fail = (message) => {
+          cleanup();
+          showcaseFrame.remove();
+          reject(new Error(message));
+        };
+        const timer = setTimeout(() => fail("timed out loading showcase.html after 20000 ms"), 20000);
+        showcaseFrame.onload = () => {
+          cleanup();
+          resolve(showcaseFrame.contentWindow);
+        };
+        showcaseFrame.onerror = () => fail("failed to load showcase.html");
       });
       document.body.append(showcaseFrame);
       const showcaseWin = await showcaseLoaded;
