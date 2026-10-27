@@ -299,6 +299,36 @@
         "distant rocks and pickups recycle while the near field stays",
         recycled.asteroidCount === 1 && recycled.coreCount === 1
       );
+      api.spawnCoreAt(near.x + 1100, near.y, near.z);
+      api.spawnPowerUpAt(near.x + 1200, near.y, near.z, "shield");
+      api.spawnPowerUpAt(near.x + 1300, near.y, near.z, "double");
+      // Headless throttles rAF for the offscreen iframe; a resize schedules a
+      // draw through setTimeout, which still runs.
+      win.dispatchEvent(new win.Event("resize"));
+      await nextFrames(win, 2);
+      await new Promise((resolve) => win.setTimeout(resolve, 300));
+      const pickupReport = api.getWorldDebug().pickups;
+      const pickupByVariant = Object.fromEntries(
+        (pickupReport?.items || []).map((item) => [item.variant, item])
+      );
+      const corePickup = pickupByVariant.core;
+      const shieldPickup = pickupByVariant.shield;
+      const doublePickup = pickupByVariant.double;
+      check(
+        "reward silhouettes stay distinct without a glow sprite",
+        Boolean(corePickup && shieldPickup && doublePickup) &&
+          [corePickup, shieldPickup, doublePickup].every(
+            (pickup) => pickup.hasGlow === false && pickup.beamOpacity <= 0.08
+          ) &&
+          corePickup.size.y > corePickup.size.x * 1.4 &&
+          shieldPickup.size.x > shieldPickup.size.z * 2 &&
+          doublePickup.size.x > doublePickup.size.z * 1.2 &&
+          new Set(
+            [corePickup, shieldPickup, doublePickup].map(
+              (pickup) => `${pickup.size.x}x${pickup.size.y}x${pickup.size.z}`
+            )
+          ).size === 3
+      );
       api.clearAsteroids();
 
       const pad = 60 + 26;

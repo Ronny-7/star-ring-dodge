@@ -2,6 +2,7 @@
 // imported; the rest of the game stays classic scripts on window.
 import * as THREE from "three";
 import { createFighterModel, createStudioEnvironment } from "./fighter-model.js";
+import { createPickupModel } from "./pickup-models.js";
 import { createRockSet } from "./rock-models.js";
 import { createSpaceEnvironment } from "./space-environment.js";
 
@@ -503,11 +504,32 @@ function rockDebugReport() {
   };
 }
 
+function pickupDebugReport() {
+  const items = [];
+  const collect = (kind, cache) => {
+    for (const [item, group] of cache) {
+      const pickup = group.userData.pickup;
+      if (!pickup) continue;
+      items.push({
+        kind,
+        variant: pickup.variant,
+        size: pickup.size,
+        hasGlow: Boolean(group.userData.glow),
+        beamOpacity: pickup.beam?.material.opacity ?? 0
+      });
+    }
+  };
+  collect("core", sceneObjects.cores);
+  collect("powerUp", sceneObjects.powerUps);
+  return { active: items.length, items };
+}
+
 function getDebugReport() {
   const rocks = rockDebugReport();
   const base = {
     fighter: null,
     rocks,
+    pickups: pickupDebugReport(),
     world: worldSize ? { ...worldSize } : null,
     fence: false,
     environment: spaceEnvironment?.getDebugReport() ?? null
@@ -729,87 +751,23 @@ function syncDynamic(state) {
   syncGates(state.routeChoice.gates);
 }
 
-function pickupColor(kind, item) {
-  if (kind === "core") return 0x5cffc4;
-  return item.type === "shield" ? 0x5a8dff : 0xffa23a;
-}
-
 function buildPickup(item, kind) {
-  const color = pickupColor(kind, item);
   const radius = item.radius || 14;
-  const group = new THREE.Group();
-
-  const bodyMaterial = new THREE.MeshStandardMaterial({
-    color,
-    emissive: new THREE.Color(color),
-    emissiveIntensity: 1.7,
-    metalness: 0.25,
-    roughness: 0.3
-  });
-  const ringMaterial = new THREE.MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity: 0.55,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
-  });
-
-  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: pickupGlowTexture,
-    color,
-    transparent: true,
-    opacity: 0.4,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
-  }));
-  glow.scale.setScalar(radius * 3.4);
-  group.add(glow);
-
+  const group = createPickupModel({ kind, type: item.type, radius });
+  const { signalColor } = group.userData.pickup;
+  const width = Math.max(0.9, radius * 0.075);
   const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.4, 1.4, 190, 6, 1, true),
+    new THREE.CylinderGeometry(width, width, 190, 6, 1, true),
     new THREE.MeshBasicMaterial({
-      color,
+      color: signalColor,
       transparent: true,
-      opacity: 0.06,
+      opacity: 0.045,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     })
   );
   group.add(beam);
-
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(radius * 1.5, 1.7, 8, 32), ringMaterial);
-  ring.rotation.x = Math.PI / 2;
-  group.add(ring);
-
-  let core;
-  if (kind === "core") {
-    core = new THREE.Mesh(new THREE.OctahedronGeometry(radius * 0.72, 0), bodyMaterial);
-    core.scale.set(0.75, 1.45, 0.75);
-  } else if (item.type === "shield") {
-    core = new THREE.Mesh(new THREE.IcosahedronGeometry(radius * 0.62, 1), bodyMaterial);
-    const hex = new THREE.Mesh(new THREE.TorusGeometry(radius * 1.05, 2.2, 6, 6), ringMaterial);
-    hex.rotation.x = Math.PI / 2;
-    group.add(hex);
-    group.userData.hex = hex;
-  } else {
-    core = new THREE.Group();
-    const crystal = new THREE.OctahedronGeometry(radius * 0.5, 0);
-    for (const side of [-1, 1]) {
-      const part = new THREE.Mesh(crystal, bodyMaterial);
-      part.position.x = side * radius * 0.55;
-      part.scale.set(0.72, 1.35, 0.72);
-      core.add(part);
-    }
-  }
-  if (core) group.add(core);
-
-  group.userData = {
-    ...group.userData,
-    glow,
-    ring,
-    core,
-    baseRadius: radius
-  };
+  group.userData.pickup.beam = beam;
   return group;
 }
 
@@ -824,15 +782,15 @@ function syncPickups(items, cache, kind) {
       cache.set(item, group);
     }
     const bob = Math.sin(item.pulse) * 4;
+    const { body, variant } = group.userData.pickup;
     group.position.set(item.x, item.y + bob, item.z);
-    const { core, ring, glow, hex, baseRadius } = group.userData;
-    if (core) {
-      core.rotation.y = item.pulse;
-      core.rotation.x = item.pulse * 0.55;
+    if (variant === "shield") {
+      body.rotation.y =
+        Math.atan2(camera.position.x - item.x, camera.position.z - item.z) +
+        Math.sin(item.pulse * 0.7) * 0.16;
+    } else {
+      body.rotation.y = item.pulse * (variant === "core" ? 0.8 : 0.55);
     }
-    ring.rotation.set(Math.PI / 2 + Math.sin(item.pulse * 0.7) * 0.3, 0, item.pulse * 0.9);
-    if (hex) hex.rotation.z = -item.pulse * 0.8;
-    glow.scale.setScalar(baseRadius * (3.4 + Math.sin(item.pulse * 1.2) * 0.3));
   }
   for (const [item, group] of cache) {
     if (seen.has(item)) continue;
