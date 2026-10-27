@@ -1096,7 +1096,7 @@ function update(dt) {
   }
 
   movePlayer(dt);
-  updateCamera(dt);
+  snapCameraToShip();
   spawnThrusterTrail(dt);
   moveAsteroids(dt);
   moveLasers(dt);
@@ -1204,14 +1204,6 @@ function placeCameraAtShip() {
 function snapCameraToShip() {
   state.camera.yaw = state.player.yaw;
   state.camera.pitch = state.player.pitch;
-  placeCameraAtShip();
-}
-
-function updateCamera(dt) {
-  const lag = getTuningValue("cameraLag", 8);
-  const blend = 1 - Math.exp(-lag * dt);
-  state.camera.yaw += (state.player.yaw - state.camera.yaw) * blend;
-  state.camera.pitch += (state.player.pitch - state.camera.pitch) * blend;
   placeCameraAtShip();
 }
 

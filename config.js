@@ -90,7 +90,6 @@ window.starRingConfig = {
     dprCap: 2,
     cameraDistance: 430,
     cameraHeight: 130,
-    cameraLag: 3,
     maxPitch: 1.15,
     mouseSensitivity: 0.0024,
     touchLookSensitivity: 0.006,

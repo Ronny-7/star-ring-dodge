@@ -251,8 +251,28 @@
           restoredFighter.textureCount === firstFighter.textureCount
       );
 
+      // Mouse look must reach the chase camera in the same tick: any smoothing
+      // makes the view trail the mouse and keep turning after input stops.
       api.startGame();
       await nextFrames(win, 2);
+      const gameDocument = win.document;
+      const gameCanvas = gameDocument.getElementById("game");
+      Object.defineProperty(gameDocument, "pointerLockElement", { configurable: true, get: () => gameCanvas });
+      gameDocument.dispatchEvent(new win.Event("pointerlockchange"));
+      const lookMove = new win.MouseEvent("mousemove", { bubbles: true });
+      Object.defineProperty(lookMove, "movementX", { value: 120 });
+      Object.defineProperty(lookMove, "movementY", { value: 60 });
+      gameDocument.dispatchEvent(lookMove);
+      api.tick(1 / 60);
+      const lookScene = api.getScene();
+      check(
+        "camera follows mouse look without trailing",
+        Math.abs(lookScene.camera.yaw - lookScene.player.yaw) < 1e-9 &&
+          Math.abs(lookScene.camera.pitch - lookScene.player.pitch) < 1e-9
+      );
+      delete gameDocument.pointerLockElement;
+      gameDocument.dispatchEvent(new win.Event("pointerlockchange"));
+
       const near = api.getScene().player;
       api.clearAsteroids();
       api.spawnAsteroidAt(near.x + 1000, near.y, near.z, 30);
