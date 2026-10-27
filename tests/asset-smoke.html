@@ -306,7 +306,12 @@
       // draw through setTimeout, which still runs.
       win.dispatchEvent(new win.Event("resize"));
       await nextFrames(win, 2);
-      await new Promise((resolve) => win.setTimeout(resolve, 300));
+      await waitFor(() => {
+        const variants = new Set(
+          (api.getWorldDebug().pickups.items || []).map((item) => item.variant)
+        );
+        return ["core", "shield", "double"].every((variant) => variants.has(variant));
+      });
       const pickupReport = api.getWorldDebug().pickups;
       const pickupByVariant = Object.fromEntries(
         (pickupReport?.items || []).map((item) => [item.variant, item])

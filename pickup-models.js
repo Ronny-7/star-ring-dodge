@@ -116,9 +116,13 @@ function buildDouble(body, materials) {
         0
       ]);
     }
+    addMesh(body, new THREE.BoxGeometry(0.5, 3.5, 0.2), materials.signal, [side * 1.65, 0, 1]);
+    addMesh(body, new THREE.CylinderGeometry(0.85, 0.85, 0.12, 8), materials.signal, [
+      side * 1.65,
+      3,
+      0
+    ]);
   }
-  addMesh(body, new THREE.BoxGeometry(0.5, 3.5, 0.2), materials.signal, [0, 0, 1]);
-  addMesh(body, new THREE.CylinderGeometry(0.85, 0.85, 0.12, 8), materials.signal, [0, 3, 0]);
   for (const side of [-1, 1]) {
     addMesh(body, new THREE.BoxGeometry(3.4, 0.6, 1), materials.paint, [0, side * 1.1, 0]);
   }
