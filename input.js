@@ -32,6 +32,10 @@
     const fireKeys = new Set(["j", "J"]);
     let fireHeld = false;
     const gestureMovement = { active: false, pointerId: null, startX: 0, startY: 0, dx: 0, dy: 0 };
+    // Chromium pointer lock occasionally reports a bogus 300-600 px step
+    // (about half the window) for a single event; real mouse steps stay far
+    // below this even on fast flicks. Drop such an event instead of turning.
+    const MAX_MOUSE_STEP = 200;
     const lookDelta = { yaw: 0, pitch: 0 };
     const lookDrag = { active: false, pointerId: null, lastX: 0, lastY: 0 };
     const mouseDrag = { active: false, lastX: 0, lastY: 0 };
@@ -81,6 +85,11 @@
     function addLook(dx, dy, sensitivity) {
       lookDelta.yaw += dx * sensitivity;
       lookDelta.pitch += dy * sensitivity;
+    }
+
+    function filterMouseStep(value) {
+      const step = value || 0;
+      return Math.abs(step) > MAX_MOUSE_STEP ? 0 : step;
     }
 
     function updateGestureVisual() {
@@ -260,6 +269,13 @@
 
       // Mouse look: prefer pointer lock; fall back to drag-to-look when the
       // browser refuses it (headless, embedded frames, denied permission).
+      const retryPointerLock = () => {
+        try {
+          canvasEl.requestPointerLock?.()?.catch?.(() => {});
+        } catch {
+          // Right-drag still works.
+        }
+      };
       inputDocument.addEventListener("pointerlockchange", () => {
         pointerLocked = inputDocument.pointerLockElement === canvasEl;
       });
@@ -268,7 +284,7 @@
         if (!state.running || state.paused || state.gameOver) return;
 
         if (pointerLocked) {
-          addLook(event.movementX || 0, event.movementY || 0, state.mouseSensitivity ?? 0.0024);
+          addLook(filterMouseStep(event.movementX), filterMouseStep(event.movementY), state.mouseSensitivity ?? 0.0024);
         } else if (mouseDrag.active) {
           const dx = event.clientX - mouseDrag.lastX;
           const dy = event.clientY - mouseDrag.lastY;
@@ -290,9 +306,11 @@
           fireLaser?.();
           if (!pointerLocked) {
             try {
-              canvasEl.requestPointerLock?.();
+              // Raw input avoids Chromium's occasional huge movement deltas.
+              const request = canvasEl.requestPointerLock?.({ unadjustedMovement: true });
+              request?.catch?.(retryPointerLock);
             } catch {
-              // Right-drag still works.
+              retryPointerLock();
             }
           }
           return;

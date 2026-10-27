@@ -267,8 +267,22 @@
       const lookScene = api.getScene();
       check(
         "camera follows mouse look without trailing",
-        Math.abs(lookScene.camera.yaw - lookScene.player.yaw) < 1e-9 &&
+        Math.abs(lookScene.player.yaw) > 1e-6 &&
+          Math.abs(lookScene.camera.yaw - lookScene.player.yaw) < 1e-9 &&
           Math.abs(lookScene.camera.pitch - lookScene.player.pitch) < 1e-9
+      );
+      // Browser pointer lock sometimes reports a bogus half-window step; that
+      // must not rotate the view.
+      const spikeMove = new win.MouseEvent("mousemove", { bubbles: true });
+      Object.defineProperty(spikeMove, "movementX", { value: 600 });
+      Object.defineProperty(spikeMove, "movementY", { value: -600 });
+      gameDocument.dispatchEvent(spikeMove);
+      api.tick(1 / 60);
+      const spikeScene = api.getScene();
+      check(
+        "mouse look ignores pointer-lock movement spikes",
+        Math.abs(spikeScene.player.yaw - lookScene.player.yaw) < 1e-9 &&
+          Math.abs(spikeScene.player.pitch - lookScene.player.pitch) < 1e-9
       );
       delete gameDocument.pointerLockElement;
       gameDocument.dispatchEvent(new win.Event("pointerlockchange"));
