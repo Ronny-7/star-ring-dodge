@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>星环闪避 · 模型展示</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css?v=4.2.0">
+  <link rel="stylesheet" href="showcase.css?v=4.2.0">
+</head>
+<body>
+  <div class="page-bg" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-radial bg-radial-a"></div>
+    <div class="bg-radial bg-radial-b"></div>
+  </div>
+  <main class="showcase">
+    <header class="showcase-header">
+      <div class="showcase-brand"><a href="index.html">星环闪避</a> <span class="build-tag">v4.2.0</span></div>
+      <a href="index.html">← 返回游戏</a>
+    </header>
+    <section class="showcase-intro">
+      <p class="panel-label">RUNTIME ASSETS / 运行时资产</p>
+      <h1>三种轮廓。一眼分清。</h1>
+      <p>模型直接来自游戏工厂：同一艘战斗机、同一组奖励与陨石。</p>
+    </section>
+    <section class="showcase-stage" id="stage" aria-label="运行时模型展示">
+      <div class="stage-tabs" role="group" aria-label="展示视图">
+        <button type="button" data-view="all" aria-pressed="true">全部</button>
+        <button type="button" data-view="ship" aria-pressed="false">飞船</button>
+        <button type="button" data-view="rewards" aria-pressed="false">奖励</button>
+        <button type="button" data-view="rocks" aria-pressed="false">陨石</button>
+      </div>
+      <canvas id="showcase-canvas" aria-label="飞船、奖励和陨石的三维模型"></canvas>
+      <p class="stage-fallback" hidden>模型暂时无法显示，请检查网络或使用支持 WebGL 的浏览器。下方仍可查看资产说明。</p>
+    </section>
+    <section class="legend" aria-label="资产说明">
+      <article class="legend-card">
+        <p class="panel-label">SHIP / 飞船</p>
+        <h2>战斗机 · 截击型</h2>
+        <ul><li><span class="swatch" style="--c:#62e4ff"></span>Fighter / 默认蓝色涂装</li></ul>
+      </article>
+      <article class="legend-card">
+        <p class="panel-label">REWARDS / 奖励</p>
+        <h2>三种奖励轮廓</h2>
+        <ul>
+          <li><span class="swatch" style="--c:#63d9ad"></span>能量核心 Core · 绿色 / 能量模块</li>
+          <li><span class="swatch" style="--c:#649fee"></span>护盾 Shield · 蓝色 / 六边形装甲</li>
+          <li><span class="swatch" style="--c:#e9b161"></span>双发 Double · 琥珀色 / 双能量筒</li>
+        </ul>
+      </article>
+      <article class="legend-card">
+        <p class="panel-label">ROCKS / 陨石</p>
+        <h2>三种岩体形态</h2>
+        <ul><li>块状 / Angular</li><li>长轴 / Elongated</li><li>断裂 / Fractured</li></ul>
+      </article>
+    </section>
+  </main>
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
+  <script type="module" src="showcase.js?v=4.2.0" onerror="document.querySelector('.stage-fallback').hidden = false"></script>
+</body>
+</html>

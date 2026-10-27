@@ -17,6 +17,7 @@ const overlayStats = document.getElementById("overlay-stats");
 const overlayStatGrid = document.getElementById("overlay-stat-grid");
 const overlayRecord = document.getElementById("overlay-record");
 const startButton = document.getElementById("start-button");
+const showcaseLink = document.getElementById("showcase-link");
 const playfieldEl = canvas.parentElement;
 const orientationButton = document.querySelector("[data-orientation-button]");
 const settingsButton = document.getElementById("settings-button");
@@ -118,6 +119,7 @@ function applyLanguageToDOM() {
   set("skin-fighter", L("fighter"));
   set("skin-delta", L("delta"));
   set("skin-saucer", L("saucer"));
+  set("showcase-link", ui.showcaseLink);
   set("settings-color-title", L("shipColor"));
   set("settings-language-title", L("language"));
   syncToggleButton(musicBtn, audioController.isMusicEnabled());
@@ -322,6 +324,7 @@ function showOverlay(mode, title, text, buttonText) {
   overlayTitle.textContent = title;
   overlayText.textContent = text;
   startButton.textContent = buttonText;
+  if (showcaseLink) showcaseLink.hidden = mode !== "start";
   if (mode !== "gameover") hideOverlayStats();
   overlay.classList.remove("hidden");
 }

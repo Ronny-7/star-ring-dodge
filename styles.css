@@ -594,6 +594,19 @@ button:focus-visible,
   outline-offset: 3px;
 }
 
+.showcase-link {
+  display: block;
+  width: fit-content;
+  margin: 14px auto 0;
+  color: var(--muted-strong);
+  font-size: 0.85rem;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(136, 199, 255, 0.28);
+}
+.showcase-link:hover { color: var(--accent); border-color: var(--accent); }
+.showcase-link:focus-visible { outline: 2px solid var(--accent-3); outline-offset: 3px; }
+.showcase-link[hidden] { display: none; }
+
 .touch-controls {
   position: absolute;
   inset: auto 18px 18px;

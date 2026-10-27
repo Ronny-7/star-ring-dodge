@@ -400,6 +400,44 @@
         travelled > 19000 && travelled < 20500 &&
           flightEnd.z > 49000 && flightEnd.z < 50500
       );
+
+      const showcaseFrame = document.createElement("iframe");
+      showcaseFrame.src = "../showcase.html?test=1";
+      showcaseFrame.width = 1280;
+      showcaseFrame.height = 900;
+      showcaseFrame.style.cssText = "position:absolute;left:-16000px;top:0;border:0;";
+      const showcaseLoaded = new Promise((resolve, reject) => {
+        showcaseFrame.onload = () => resolve(showcaseFrame.contentWindow);
+        showcaseFrame.onerror = () => reject(new Error("failed to load showcase.html"));
+      });
+      document.body.append(showcaseFrame);
+      const showcaseWin = await showcaseLoaded;
+      const showcase = await waitFor(
+        () => (showcaseWin.starRingShowcaseReady ? showcaseWin.starRingShowcase : null),
+        20000
+      );
+      const showcaseHref = win.document.getElementById("showcase-link")?.getAttribute("href") || "";
+      const showcaseDoc = showcaseWin.document;
+      const wideReport = showcase.getDebugReport();
+      showcase.selectView("rewards");
+      showcaseFrame.width = 390;
+      showcaseFrame.height = 844;
+      await nextFrames(showcaseWin, 3);
+      const rewardsReport = showcase.getDebugReport();
+      check(
+        "showcase loads real models, links from the game, and fits a narrow viewport",
+        showcaseHref.startsWith("showcase.html") &&
+          Boolean(showcaseDoc.querySelector(".stage-fallback")) &&
+          wideReport.models.ship === 1 &&
+          wideReport.models.rewards === 3 &&
+          wideReport.models.rocks === 3 &&
+          wideReport.pickupVariants.join(",") === "core,shield,double" &&
+          wideReport.rockForms.length === 3 &&
+          rewardsReport.view === "rewards" &&
+          rewardsReport.canvas.width > 0 &&
+          rewardsReport.canvas.height > 0 &&
+          rewardsReport.canvas.width < wideReport.canvas.width
+      );
     } catch (error) {
       result.error = error.message;
     }

@@ -1,0 +1,29 @@
+.showcase { position: relative; z-index: 1; max-width: 1480px; margin: 0 auto; padding: 28px; }
+.showcase-header { display: flex; justify-content: space-between; gap: 20px; align-items: end; }
+.showcase a { color: var(--muted-strong); text-decoration: none; }
+.showcase a:hover { color: var(--accent); }
+.showcase a:focus-visible { outline: 2px solid var(--accent-3); outline-offset: 3px; }
+.showcase-brand { display: flex; gap: 14px; align-items: center; font-weight: 700; }
+.showcase-intro { margin: 36px 0 24px; }
+.showcase-intro h1 { margin: 12px 0; font-size: clamp(1.8rem, 3.5vw, 3rem); }
+.showcase-intro > p:last-child { color: var(--muted-strong); line-height: 1.6; }
+.showcase-stage { position: relative; height: clamp(420px, 66vh, 760px); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: radial-gradient(circle at 50% 38%, rgba(38, 68, 94, .55), rgba(4, 8, 15, .92) 68%); }
+#showcase-canvas { display: block; width: 100%; height: 100%; }
+.stage-tabs { position: absolute; z-index: 2; top: 16px; left: 16px; display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5, 10, 20, .72); }
+.stage-tabs button { min-width: 0; height: 34px; margin: 0; padding: 0 12px; background: transparent; color: var(--muted); box-shadow: none; }
+.stage-tabs button[aria-pressed="true"] { background: var(--accent); color: #07111d; }
+.stage-fallback { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 24px; color: var(--muted-strong); text-align: center; }
+.stage-fallback[hidden] { display: none; }
+.legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.legend-card { padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.legend-card h2 { margin: 4px 0 8px; font-size: 1.05rem; }
+.legend-card ul { margin: 0; padding: 0; list-style: none; }
+.legend-card li { display: flex; gap: 8px; align-items: center; padding: 4px 0; color: var(--muted-strong); font-size: .86rem; }
+.swatch { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); }
+@media (max-width: 760px) {
+  .showcase { padding: 18px; }
+  .showcase-header { align-items: start; flex-direction: column; }
+  .showcase-stage { height: 56vh; min-height: 360px; }
+  .legend { grid-template-columns: 1fr; }
+  .stage-tabs { right: 12px; left: 12px; top: 12px; overflow-x: auto; }
+}
