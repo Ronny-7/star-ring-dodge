@@ -33,6 +33,12 @@ let spaceEnvironment = null;
 let lastGates = [];
 const gateLabelCache = new Map();
 const fxPool = { debris: [], flashes: [], rings: [], sparks: [] };
+const fxKinds = ["debris", "flashes", "rings", "sparks"];
+const fxStats = { createdMaterials: 0, disposedMaterials: 0, createdGeometries: 0, disposedGeometries: 0, sharedGeometryDisposals: 0 };
+// Observe Three's actual dispose events, not removal from our live pools.
+const onFxMaterialDispose = () => { fxStats.disposedMaterials += 1; };
+const onFxGeometryDispose = () => { fxStats.disposedGeometries += 1; };
+const onSharedGeometryDispose = () => { fxStats.sharedGeometryDisposals += 1; };
 let fxState = null;
 let fxTuning = null;
 let fxSource = null;
@@ -90,6 +96,8 @@ function buildFx(kind, event) {
     const velocities = new Float32Array(positions.length);
     for (let i = 0; i < velocities.length; i += 3) velocity().multiplyScalar(2.5).toArray(velocities, i);
     const geometry = new THREE.BufferGeometry();
+    fxStats.createdGeometries += 1;
+    geometry.addEventListener("dispose", onFxGeometryDispose);
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     const sparks = new THREE.Points(geometry, new THREE.PointsMaterial({ color: event.elite ? 0xffbd65 : 0xb5efff, size: 4, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
     sparks.userData.velocities = velocities;
@@ -98,6 +106,8 @@ function buildFx(kind, event) {
     effect.objects.push(sparks);
   }
   for (const object of effect.objects) {
+    fxStats.createdMaterials += 1;
+    object.material.addEventListener("dispose", onFxMaterialDispose);
     object.userData.origin ||= origin;
     object.position.copy(object.userData.origin);
     scene.add(object);
@@ -110,10 +120,15 @@ function syncFx(state) {
     clearFx();
     fxSource = state.fx;
   }
-  for (const [kind, pool] of Object.entries(fxPool)) {
-    for (const event of state.fx[kind].splice(0)) {
-      if (pool.length >= fxTuning.fxMaxDebrisGroups) releaseFx(pool.shift());
-      pool.push(buildFx(kind, event));
+  for (const kind of fxKinds) {
+    const pool = fxPool[kind];
+    const queue = state.fx[kind];
+    if (queue.length) {
+      for (const event of queue) {
+        if (pool.length >= fxTuning.fxMaxDebrisGroups) releaseFx(pool.shift());
+        pool.push(buildFx(kind, event));
+      }
+      queue.length = 0;
     }
     for (let i = pool.length - 1; i >= 0; i -= 1) {
       const effect = pool[i];
@@ -651,6 +666,7 @@ function getDebugReport() {
       rings: fxPool.rings.length,
       flashes: fxPool.flashes.length,
       materials: Object.values(fxPool).flat().reduce((n, effect) => n + effect.objects.length, 0),
+      stats: { ...fxStats },
       lights
     },
     rocks,
@@ -739,6 +755,7 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
   scene.add(new THREE.AmbientLight(0x3a4a70, 1.8));
 
   rockSet = createRockSet({ anisotropy: renderer.capabilities.getMaxAnisotropy() });
+  for (const form of rockSet.forms) form.geometry.addEventListener("dispose", onSharedGeometryDispose);
   pickupGlowTexture = makeGlowTexture();
 
   spaceEnvironment = createSpaceEnvironment({

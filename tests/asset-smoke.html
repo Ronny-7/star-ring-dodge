@@ -432,26 +432,48 @@
       api.clearAsteroids();
       api.setPlayerPosition(30000, 30000, 30000, 0, 0);
       const before = api.getWorldDebug();
+      const reducedFx = Math.min(win.innerWidth, win.innerHeight) < 480 || win.navigator.maxTouchPoints > 0;
+      const shardsPerGroup = reducedFx ? 3 : 5;
+      const materialsPerGroup = shardsPerGroup + 3;
       const target = api.spawnAsteroidAt(30000, 30000, 30200, 30, "angular");
       target.hp = 0;
       api.destroyAsteroidAt(30000, 30000, 30200, 30, false);
+      api.tick(1 / 60);
       win.dispatchEvent(new win.Event("resize"));
-      await nextFrames(win, 2);
+      await new Promise((resolve) => win.setTimeout(resolve, 20));
       const burst = api.getWorldDebug().fx;
       check(
         "destroyed asteroids throw shards, a flash, a ring and sparks",
-        burst.debrisGroups === 1 && burst.shards > 0 && burst.shards <= 6 &&
+        burst.debrisGroups === 1 && burst.shards === shardsPerGroup &&
           burst.flashes > 0 && burst.sparks > 0 && burst.rings > 0 &&
-          burst.lights === before.lights
+          burst.lights === before.lights && burst.stats.sharedGeometryDisposals === 0
       );
-      for (let i = 0; i < 12; i += 1) api.destroyAsteroidAt(30400 + i * 20, 30000, 30200, 30, false);
+      for (let i = 0; i < 12; i += 1) {
+        api.destroyAsteroidAt(30400 + i * 20, 30000, 30200, 30, false);
+        // Sync each kill so this exercises eviction, not queued-event dropping.
+        api.getWorldDebug();
+      }
+      api.tick(1 / 60);
       win.dispatchEvent(new win.Event("resize"));
-      await nextFrames(win, 2);
+      await new Promise((resolve) => win.setTimeout(resolve, 20));
       const capped = api.getWorldDebug().fx;
-      check("debris groups are capped and cleaned up", capped.debrisGroups <= 8 && capped.shards <= 48 && capped.materials <= 72);
+      check("debris groups are capped and cleaned up",
+        capped.debrisGroups === 8 && capped.shards === 8 * shardsPerGroup &&
+          capped.stats.createdMaterials - before.fx.stats.createdMaterials === 13 * materialsPerGroup &&
+          capped.stats.disposedMaterials - burst.stats.disposedMaterials >= 5 * shardsPerGroup &&
+          capped.stats.disposedGeometries - burst.stats.disposedGeometries === 5 &&
+          capped.stats.sharedGeometryDisposals === 0);
       for (let i = 0; i < 90; i += 1) api.tick(1 / 60);
       const settled = api.getWorldDebug().fx;
-      check("effects expire and release their materials", settled.debrisGroups === 0 && settled.shards === 0 && settled.sparks === 0 && settled.rings === 0 && settled.flashes === 0 && settled.materials === 0);
+      check("effects expire and release their materials",
+        settled.debrisGroups === 0 && settled.shards === 0 && settled.sparks === 0 &&
+          settled.rings === 0 && settled.flashes === 0 && settled.materials === 0 &&
+          settled.stats.disposedMaterials > capped.stats.disposedMaterials &&
+          settled.stats.disposedMaterials - before.fx.stats.disposedMaterials === 13 * materialsPerGroup &&
+          settled.stats.disposedMaterials === settled.stats.createdMaterials &&
+          settled.stats.disposedGeometries - before.fx.stats.disposedGeometries === 13 &&
+          settled.stats.disposedGeometries === settled.stats.createdGeometries &&
+          settled.stats.sharedGeometryDisposals === 0);
 
       const pad = 60 + 26;
       const limit = 60000 - pad;
