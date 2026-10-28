@@ -84,12 +84,13 @@ function buildFx(kind, event) {
   } else if (kind === "flashes") {
     effect.life = 0.1;
     const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: pickupGlowTexture, color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
-    flash.scale.setScalar(event.radius * 4);
+    flash.scale.setScalar(event.radius * 1.1);
     effect.objects.push(flash);
   } else if (kind === "rings") {
     effect.life = 0.35;
+    const ringColor = event.elite ? 0xffbd65 : event.mineralTint ? new THREE.Color(`rgb(${event.mineralTint})`) : 0xffd8a8;
     effect.radius *= event.elite ? 1.4 : 1;
-    effect.objects.push(new THREE.Mesh(fxRingGeometry, new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
+    effect.objects.push(new THREE.Mesh(fxRingGeometry, new THREE.MeshBasicMaterial({ color: ringColor, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
   } else {
     effect.life = 0.25 + Math.random() * 0.15;
     const count = event.hit ? 3 + Math.floor(Math.random() * 3) : 20 * (event.elite ? 2 : 1);
@@ -142,14 +143,15 @@ function syncFx(state) {
       }
       const progress = Math.max(0, age / effect.life);
       for (const object of effect.objects) {
-        object.material.opacity = (kind === "flashes" ? 0.9 : 1) * (1 - progress);
+        const baseOpacity = kind === "rings" ? 0.65 : kind === "flashes" ? 0.9 : 1;
+        object.material.opacity = baseOpacity * (1 - progress);
         if (kind === "debris") {
           object.position.copy(object.userData.origin).addScaledVector(object.userData.velocity, age);
           const spin = object.userData.spin;
           object.rotation.set(spin.x * age, spin.y * age, spin.z * age);
         } else if (kind === "rings") {
           object.quaternion.copy(camera.quaternion);
-          object.scale.setScalar(effect.radius * (1 + 0.6 * progress));
+          object.scale.setScalar(effect.radius * (0.5 + 1.1 * progress));
         } else if (kind === "sparks") {
           const position = object.geometry.attributes.position;
           for (let j = 0; j < position.array.length; j += 1) position.array[j] = object.userData.velocities[j] * age;
@@ -712,7 +714,7 @@ function getDebugReport() {
 
 export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff }) {
   fxTuning = tuning;
-  fxRingGeometry = new THREE.TorusGeometry(1, 0.08, 8, 32);
+  fxRingGeometry = new THREE.TorusGeometry(1, 0.045, 8, 32);
   fxRingGeometry.addEventListener("dispose", onFxRingDispose);
   worldSize = { width: world.width, height: world.height, depth: world.depth };
   renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("game"), antialias: true });
