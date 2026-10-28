@@ -380,7 +380,7 @@ const state = {
   regionJunctions: 0,
   achievementTimer: 0,
   eliteTimer: 0,
-  routeChoice: { active: false, timer: 0, gates: [] },
+  routeChoice: { active: false, timer: 0, bannerTimer: 0, gates: [] },
   shipColor: COLORS[activeColor] || COLORS.blue,
   stats: {
     survivalTime: 0,
@@ -487,6 +487,7 @@ function resetGame() {
   state.eliteTimer = 0;
   state.routeChoice.active = false;
   state.routeChoice.timer = 0;
+  state.routeChoice.bannerTimer = 0;
   state.routeChoice.gates = [];
   state.stats.survivalTime = 0;
   state.stats.destroyedAsteroids = 0;
@@ -871,8 +872,15 @@ function spawnEliteFragments(elite, region) {
 function updateRegionFlow(dt) {
   if (state.routeChoice.active) {
     state.routeChoice.timer = Math.max(0, state.routeChoice.timer - dt);
-    for (const gate of state.routeChoice.gates) gate.age = (gate.age || 0) + dt;
+    state.routeChoice.bannerTimer = Math.max(0, state.routeChoice.bannerTimer - dt);
+    for (const gate of state.routeChoice.gates) {
+      gate.age = (gate.age || 0) + dt;
+      const named = regions[gate.regionId];
+      if (named) gate.label = regionDisplayName(named);
+    }
     if (state.routeChoice.timer <= 0) chooseFallbackRoute();
+    // The smoke test reads labels after tick, before the next paint.
+    world3d?.syncGates?.(state.routeChoice.gates);
     return;
   }
   state.regionTimer += dt;
@@ -888,7 +896,7 @@ function makeRouteGate(regionId, x, y, z) {
     y: clamp(y, margin, state.world.height - margin),
     z: clamp(z, margin, state.world.depth - margin),
     age: 0,
-    label: region ? region.label : regionId,
+    label: region ? regionDisplayName(region) : regionId,
     tint: region ? region.tint : "98,228,255"
   };
 }
@@ -908,6 +916,7 @@ function beginRouteChoice() {
 
   state.routeChoice.active = true;
   state.routeChoice.timer = tuning.routeChoiceDuration;
+  state.routeChoice.bannerTimer = 2.5;
   state.routeChoice.gates = [
     makeRouteGate(picks[0], baseX - right.x * 260, baseY + 40, baseZ - right.z * 260),
     makeRouteGate(picks[1], baseX + right.x * 260, baseY - 40, baseZ + right.z * 260)
@@ -1829,6 +1838,28 @@ function drawHudOverlay(region) {
     ctx.fillText(L("warpWindow", state.routeChoice.timer.toFixed(1)), pad, pad + 46);
   }
 
+  if (state.routeChoice.active && state.routeChoice.bannerTimer > 0) {
+    const timer = state.routeChoice.bannerTimer;
+    const narrow = cw < 640;
+    const y = narrow ? ch * 0.22 : Math.min(ch * 0.3, 200);
+    ctx.save();
+    ctx.globalAlpha = timer >= 0.5 ? 1 : timer / 0.5;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "rgba(255,236,214,0.96)";
+    ctx.shadowColor = "rgba(0,0,0,0.72)";
+    ctx.shadowBlur = 8;
+    const title = L("chooseGate");
+    const hint = L("chooseGateHint");
+    ctx.font = '700 14px "Segoe UI", sans-serif';
+    if (narrow) ctx.fillText(title, cw / 2, y, cw - 40);
+    else ctx.fillText(title, cw / 2, y);
+    ctx.font = '400 12px "Segoe UI", sans-serif';
+    if (narrow) ctx.fillText(hint, cw / 2, y + 20, cw - 40);
+    else ctx.fillText(hint, cw / 2, y + 20);
+    ctx.restore();
+  }
+
   const statusY = ch - pad - 8;
   ctx.textAlign = "right";
   if (state.shieldCharges > 0) {
@@ -2000,6 +2031,7 @@ if (new URLSearchParams(window.location.search).has("test")) {
       coreCount: state.cores.length,
       powerUpCount: state.powerUps.length,
       gates: state.routeChoice.gates.map((gate) => ({ x: gate.x, y: gate.y, z: gate.z, regionId: gate.regionId })),
+      bannerTimer: state.routeChoice.bannerTimer,
       maxAsteroids: getTuningValue("maxAsteroids", 30),
       world: { ...state.world },
       language: state.lang,

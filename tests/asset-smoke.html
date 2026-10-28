@@ -361,6 +361,21 @@
           reverseShift.player.boost === false &&
           close(reversePlain.player.z - 30000, reverseShift.player.z - 30000)
       );
+
+      api.startGame();
+      await nextFrames(win, 2);
+      api.beginRouteChoice();
+      api.tick(1 / 60);
+      const gateReport = api.getWorldDebug().gates;
+      const gateState = api.getState();
+      check(
+        "warp gates show what they are and where they lead",
+        gateReport.length === 2 &&
+          gateReport.every((gate) => gate.hasLabel === true && gate.label.length > 0) &&
+          new Set(gateReport.map((gate) => gate.regionId)).size === 2 &&
+          gateState.bannerTimer > 2.3 &&
+          gateState.bannerTimer <= 2.5
+      );
       // The flight leaves cores inside the pickup cull radius.
       api.startGame();
 

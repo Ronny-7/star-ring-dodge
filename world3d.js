@@ -30,6 +30,8 @@ let fighterEnvironment = null;
 let pickupGlowTexture = null;
 let rockSet = null;
 let spaceEnvironment = null;
+let lastGates = [];
+const gateLabelCache = new Map();
 
 const MAX_ANISOTROPY_CACHE = new Map();
 
@@ -532,7 +534,8 @@ function getDebugReport() {
     pickups: pickupDebugReport(),
     world: worldSize ? { ...worldSize } : null,
     fence: false,
-    environment: spaceEnvironment?.getDebugReport() ?? null
+    environment: spaceEnvironment?.getDebugReport() ?? null,
+    gates: lastGates
   };
   const fighter = shipGroup && currentSkin === "default" ? shipGroup.userData : null;
   if (!fighter || !fighter.hullRoot) return base;
@@ -651,6 +654,7 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       scene.add(shipGroup);
     },
     getDebugReport,
+    syncGates,
     setRegionTint(rgb) {
       const color = new THREE.Color(`rgb(${rgb})`);
       rimLight.color.copy(color);
@@ -701,6 +705,7 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       renderer.render(scene, camera);
     },
     dispose() {
+      disposeGateLabels();
       disposeObject(scene);
       starField?.material?.map?.dispose();
       spaceEnvironment?.dispose();
@@ -825,25 +830,99 @@ function syncLasers(lasers) {
   }
 }
 
+function gateLabelTexture(gate) {
+  const text = gate.label || "";
+  const cached = gateLabelCache.get(gate.regionId);
+  if (cached && cached.text === text && cached.tint === gate.tint) return cached.texture;
+  cached?.texture.dispose();
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 128;
+  const g = canvas.getContext("2d");
+  let size = 72;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = `600 ${size}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+  while (size > 32 && g.measureText(text).width > 960) {
+    size -= 4;
+    g.font = `600 ${size}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+  }
+  g.fillStyle = `rgb(${gate.tint})`;
+  g.shadowColor = "rgba(0,0,0,0.85)";
+  g.shadowBlur = 16;
+  g.fillText(text, 512, 64);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  gateLabelCache.set(gate.regionId, { texture, text, tint: gate.tint });
+  return texture;
+}
+
+function releaseUnusedGateLabels(gates) {
+  const keep = new Set(gates.map((gate) => gate.regionId));
+  for (const [id, entry] of gateLabelCache) {
+    if (keep.has(id)) continue;
+    entry.texture.dispose();
+    gateLabelCache.delete(id);
+  }
+}
+
+function disposeGateLabels() {
+  for (const entry of gateLabelCache.values()) entry.texture.dispose();
+  gateLabelCache.clear();
+  lastGates = [];
+}
+
+function disposeGateGroup(group) {
+  const ring = group.children[0];
+  ring.geometry.dispose();
+  ring.material.dispose();
+  group.children[1].material.dispose();
+  // shortcut: shared Sprite geometry is left alive, dispose it if three.js stops sharing it
+}
+
 function syncGates(gates) {
+  lastGates = gates.map((gate) => ({
+    regionId: gate.regionId,
+    label: gate.label,
+    hasLabel: Boolean(gate.label)
+  }));
   while (sceneObjects.gates.children.length > gates.length) {
     const child = sceneObjects.gates.children.pop();
-    disposeObject(child);
+    disposeGateGroup(child);
   }
   gates.forEach((gate, index) => {
-    let ring = sceneObjects.gates.children[index];
-    if (!ring) {
+    let group = sceneObjects.gates.children[index];
+    if (!group) {
+      group = new THREE.Group();
       const material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(`rgb(${gate.tint})`),
-        emissive: new THREE.Color(`rgb(${gate.tint})`),
         emissiveIntensity: 1.6,
         metalness: 0.4,
         roughness: 0.3
       });
-      ring = new THREE.Mesh(new THREE.TorusGeometry(52, 5, 12, 42), material);
-      sceneObjects.gates.add(ring);
+      group.add(new THREE.Mesh(new THREE.TorusGeometry(52, 5, 12, 42), material));
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        transparent: true,
+        depthWrite: false
+      }));
+      sprite.position.y = 90;
+      sprite.scale.set(240, 30, 1);
+      group.add(sprite);
+      sceneObjects.gates.add(group);
     }
-    ring.position.set(gate.x, gate.y, gate.z);
+    const ring = group.children[0];
+    const sprite = group.children[1];
+    ring.material.color.set(`rgb(${gate.tint})`);
+    ring.material.emissive.set(`rgb(${gate.tint})`);
+    const texture = gateLabelTexture(gate);
+    if (sprite.material.map !== texture) {
+      sprite.material.map = texture;
+      sprite.material.needsUpdate = true;
+    }
+    group.position.set(gate.x, gate.y, gate.z);
     ring.rotation.y = gate.age || 0;
   });
+  releaseUnusedGateLabels(gates);
 }
