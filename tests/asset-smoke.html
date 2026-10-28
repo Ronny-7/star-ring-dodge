@@ -519,6 +519,19 @@
             report.bounds.z > 0
         );
       }
+      api.selectSkin("saucer");
+      const saucerShip = api.getWorldDebug().fighter;
+      check(
+        "saucer skin is a round, flat exploration disc with separate half wings",
+        saucerShip.bounds.x / saucerShip.bounds.z > 0.9 &&
+          saucerShip.bounds.x / saucerShip.bounds.z < 1.1 &&
+          saucerShip.bounds.y / saucerShip.bounds.x < 0.32 &&
+          saucerShip.parts.leftEngine.x < 0 &&
+          saucerShip.parts.rightEngine.x > 0 &&
+          saucerShip.parts.leftWing.x < 0 &&
+          saucerShip.parts.rightWing.x > 0 &&
+          Math.abs(saucerShip.parts.leftWing.x + saucerShip.parts.rightWing.x) < 0.01
+      );
       api.selectSkin("default");
 
       const pad = 60 + 26;

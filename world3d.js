@@ -6,6 +6,7 @@ import { createPickupModel } from "./pickup-models.js";
 import { createRockSet } from "./rock-models.js";
 import { createSpaceEnvironment } from "./space-environment.js";
 import { createShipMaterials } from "./ship-materials.js";
+import { createSaucerModel } from "./saucer-model.js";
 
 const sceneObjects = {
   rocks: new Map(),
@@ -412,79 +413,17 @@ function buildDelta(group) {
   addShipGlow(group, 0, 2, -34);
 }
 
-function buildSaucer(group) {
-  const { hull, panel, accent, glass } = group.userData.materials;
-
-  const disc = new THREE.Mesh(new THREE.CylinderGeometry(64, 58, 10, 32), hull);
-  disc.castShadow = true;
-  group.add(disc);
-  // The legacy saucer's continuous disc stands in for both wing surfaces.
-  group.userData.parts.leftWing = disc;
-  group.userData.parts.rightWing = disc;
-
-  const belly = new THREE.Mesh(
-    new THREE.SphereGeometry(40, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
-    panel
-  );
-  belly.position.y = -4;
-  belly.scale.y = 0.55;
-  belly.castShadow = true;
-  group.add(belly);
-
-  const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(28, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-    glass
-  );
-  dome.position.y = 5;
-  dome.scale.y = 0.7;
-  group.add(dome);
-  group.userData.parts.cockpit = dome;
-
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(68, 1.8, 8, 48), accent);
-  ring.rotation.x = Math.PI / 2;
-  group.add(ring);
-  group.userData.ring = ring;
-
-  for (let i = 0; i < 4; i += 1) {
-    const angle = (Math.PI * 2 * i) / 4 + Math.PI / 4;
-    const light = new THREE.Mesh(
-      new THREE.SphereGeometry(3, 10, 10),
-      i < 2
-        ? (i === 0 ? group.userData.materials.navRed : group.userData.materials.navGreen)
-        : new THREE.MeshBasicMaterial({ color: i % 2 ? 0x8affd1 : 0xff8ea1 })
-    );
-    light.position.set(Math.cos(angle) * 60, -1, Math.sin(angle) * 60);
-    group.add(light);
-    if (i < 2) group.userData.navLights.push({ color: "#" + light.material.color.getHexString(), x: light.position.x });
-  }
-
-  for (const side of [-1, 1]) {
-    const engineHouse = new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 16, 14), panel);
-    engineHouse.rotation.x = Math.PI / 2;
-    engineHouse.position.set(side * 22, -3, -34);
-    group.add(engineHouse);
-    group.userData.parts[side < 0 ? "leftEngine" : "rightEngine"] = engineHouse;
-    // No tail surfaces exist yet: the rear nacelles also stand in for tails.
-    group.userData.parts[side < 0 ? "leftTail" : "rightTail"] = engineHouse;
-
-    addFlame(group, side * 22, -3, -42, 5.5, 34);
-    addFlame(group, side * 22, -3, -42, 2.4, 20);
-  }
-
-  const engine = group.userData.materials.engine;
-  const core = new THREE.Mesh(new THREE.SphereGeometry(7, 14, 14), engine);
-  core.position.set(0, -9, 0);
-  group.add(core);
-
-  const nozzle = new THREE.Mesh(new THREE.TorusGeometry(10, 1.2, 6, 24), accent);
-  nozzle.rotation.x = Math.PI / 2;
-  nozzle.position.y = -8;
-  group.add(nozzle);
-
-  addShipGlow(group, 0, -10, 0);
-}
-
 function buildShip(color, skin = "default") {
+  if (skin === "saucer") {
+    const saucer = createSaucerModel({ color, environment: fighterEnvironment, hullTexture: makeHullTexture() });
+    for (const side of [-1, 1]) {
+      const flame = addFlame(saucer, side * 25, -1, -61, 3, 15);
+      flame.rotation.y = -side * Math.PI / 8;
+      flame.position.x += side * Math.sin(Math.PI / 8) * 7.5;
+    }
+    saucer.scale.setScalar(1.6);
+    return saucer;
+  }
   if (skin !== "delta" && skin !== "saucer") {
     const fighter = createFighterModel({ environment: fighterEnvironment, color });
     fighter.scale.setScalar(1);
@@ -507,8 +446,7 @@ function buildShip(color, skin = "default") {
     applyLivery: (nextColor) => applyLegacyLivery(group, nextColor)
   };
 
-  if (skin === "saucer") buildSaucer(group);
-  else buildDelta(group);
+  buildDelta(group);
 
   const hullRoot = new THREE.Group();
   for (const child of [...group.children]) {

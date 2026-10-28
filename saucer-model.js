@@ -1,0 +1,102 @@
+import * as THREE from "three";
+import { createShipMaterials } from "./ship-materials.js";
+
+export function createSaucerModel({ color, environment, hullTexture }) {
+  const group = new THREE.Group();
+  const hullRoot = new THREE.Group();
+  group.add(hullRoot);
+  const materials = createShipMaterials({ color, environment, hullTexture });
+  const { hull, dark, edge, canopy, engine, navRed, navGreen } = materials;
+  hull.color.set(0x87919b);
+  hull.emissive.set(0x000000);
+  dark.color.set(0x202833);
+  dark.emissive.set(0x000000);
+  edge.color.set(0x52606b);
+  edge.emissiveIntensity = 0;
+  canopy.color.set(0x132733);
+  canopy.emissive.set(0x000000);
+  for (const material of [hull, dark, edge, canopy]) material.envMap = environment;
+
+  const parts = {};
+  const navLights = [];
+  const add = (parent, geometry, material, x = 0, y = 0, z = 0) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
+  const ring = (radius, thickness, y, material) => {
+    const mesh = add(hullRoot, new THREE.TorusGeometry(radius, thickness, 6, 80), material, 0, y);
+    mesh.rotation.x = Math.PI / 2;
+    return mesh;
+  };
+
+  // Reuse one tessellation, rotated by pi, for exactly mirrored half shells.
+  for (const side of [-1, 1]) {
+    const upper = new THREE.CylinderGeometry(34, 54, 8, 40, 1, false, 0, Math.PI);
+    upper.translate(-27, 0, 0);
+    const wing = add(hullRoot, upper, hull, side * 27, 6);
+    if (side < 0) wing.rotation.y = Math.PI;
+    parts[side < 0 ? "leftWing" : "rightWing"] = wing;
+    const lower = add(hullRoot, new THREE.CylinderGeometry(50, 30, 6, 40, 1, false, 0, Math.PI), dark, 0, -5);
+    if (side < 0) lower.rotation.y = Math.PI;
+  }
+  ring(28, 0.45, 10.3, dark);
+  ring(44, 0.5, 6.5, edge);
+  ring(51, 1.1, 0, dark);
+
+  for (let i = 0; i < 8; i += 1) {
+    const angle = Math.PI / 8 + i * Math.PI / 4;
+    const x = Math.sin(angle);
+    const z = Math.cos(angle);
+    const nacelle = add(hullRoot, new THREE.CylinderGeometry(5.8, 6.8, 17, 12, 1, true), hull, x * 58, -0.5, z * 58);
+    nacelle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(x, 0, z));
+    add(nacelle, new THREE.CylinderGeometry(4.8, 4.8, 15.8, 12), dark);
+    const lip = add(nacelle, new THREE.TorusGeometry(5.4, 0.8, 6, 12), edge, 0, 8.5);
+    lip.rotation.x = Math.PI / 2;
+    add(nacelle, new THREE.CylinderGeometry(3.8, 3.8, 0.5, 12), engine, 0, 7.8);
+    for (const offset of [-2.6, 0, 2.6]) {
+      add(nacelle, new THREE.BoxGeometry(0.7, 1, 8), dark, offset, 8.8);
+    }
+    if (i === 2) parts.rightEngine = nacelle;
+    if (i === 5) parts.leftEngine = nacelle;
+    if (i === 3) parts.rightTail = nacelle;
+    if (i === 4) parts.leftTail = nacelle;
+
+    // Narrow radial joints and inset inspection panels break up the armour face.
+    const joint = add(hullRoot, new THREE.BoxGeometry(0.45, 0.3, 17), dark, x * 43, 6.5, z * 43);
+    joint.rotation.set(0.38, angle, 0, "YXZ");
+    const panel = add(hullRoot, new THREE.BoxGeometry(7, 0.6, 5), dark, x * 27, 10.3, z * 27);
+    panel.rotation.y = angle;
+    for (const offset of [-2, 0, 2]) {
+      add(panel, new THREE.BoxGeometry(0.5, 0.3, 4), edge, offset, 0.4);
+    }
+  }
+
+  parts.cockpit = add(hullRoot, new THREE.SphereGeometry(19, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), canopy, 0, 10);
+  parts.cockpit.scale.y = 0.6;
+  ring(19.4, 1.1, 10, dark);
+  ring(19.5, 0.35, 11, engine);
+  for (let i = 0; i < 3; i += 1) {
+    const angle = i * Math.PI * 2 / 3;
+    const gear = add(hullRoot, new THREE.BoxGeometry(4, 3, 11), edge, Math.sin(angle) * 26, -9, Math.cos(angle) * 26);
+    gear.rotation.y = angle;
+  }
+  for (const side of [-1, 1]) {
+    const material = side > 0 ? navRed : navGreen;
+    add(hullRoot, new THREE.SphereGeometry(1.6, 12, 8), material, side * 54, 3, 7);
+    navLights.push({ color: "#" + material.color.getHexString(), x: side * 54 });
+  }
+
+  group.userData = {
+    hullRoot, parts, materials, navLights, flames: [], ownTextures: [hullTexture],
+    bounds: new THREE.Box3().setFromObject(hullRoot).getSize(new THREE.Vector3()),
+    applyLivery(nextColor) {
+      engine.color.set(nextColor).lerp(new THREE.Color(0xffffff), 0.25);
+    }
+  };
+  group.userData.applyLivery(color);
+  return group;
+}
