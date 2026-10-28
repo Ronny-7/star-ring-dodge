@@ -508,8 +508,8 @@
             distinctCenters(report.parts.cockpit, report.parts.leftEngine) &&
             distinctCenters(report.parts.cockpit, report.parts.rightEngine) &&
             distinctCenters(report.parts.leftTail, report.parts.rightTail) &&
-            // Tasks 6/7 assert delta/saucer wing separation after building real lateral surfaces.
-            (skin !== "default" || report.parts.leftWing.x * report.parts.rightWing.x < 0) &&
+            // Task 7 will assert saucer wing separation after building real lateral surfaces.
+            (skin === "saucer" || report.parts.leftWing.x * report.parts.rightWing.x < 0) &&
             report.navLights.length === 2 &&
             report.navLights.some((light) => light.color === "#ff4d5e" && light.x > 0) &&
             report.navLights.some((light) => light.color === "#4dff9e" && light.x < 0) &&
@@ -519,6 +519,16 @@
             report.bounds.z > 0
         );
       }
+      api.selectSkin("delta");
+      const deltaShip = api.getWorldDebug().fighter;
+      check(
+        "delta skin is a wide flying wing with separate wing meshes",
+        deltaShip.bounds.x / deltaShip.bounds.z > 1.4 &&
+          deltaShip.bounds.y / deltaShip.bounds.z < 0.34 &&
+          deltaShip.parts.leftWing.x < 0 &&
+          deltaShip.parts.rightWing.x > 0 &&
+          deltaShip.parts.cockpit.z > 0
+      );
       api.selectSkin("default");
 
       const pad = 60 + 26;

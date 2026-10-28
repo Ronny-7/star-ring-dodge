@@ -6,6 +6,7 @@ import { createPickupModel } from "./pickup-models.js";
 import { createRockSet } from "./rock-models.js";
 import { createSpaceEnvironment } from "./space-environment.js";
 import { createShipMaterials } from "./ship-materials.js";
+import { createDeltaModel } from "./delta-model.js";
 
 const sceneObjects = {
   rocks: new Map(),
@@ -337,81 +338,6 @@ function addWingtip(group, x, y, z) {
   group.userData.navLights.push({ color: "#" + material.color.getHexString(), x });
 }
 
-function buildDelta(group) {
-  const { hull, panel, accent, glass } = group.userData.materials;
-
-  const shape = new THREE.Shape();
-  shape.moveTo(0, 48);
-  shape.lineTo(62, -28);
-  shape.lineTo(22, -38);
-  shape.lineTo(-22, -38);
-  shape.lineTo(-62, -28);
-  shape.closePath();
-  const wingGeometry = new THREE.ExtrudeGeometry(shape, {
-    depth: 14,
-    bevelEnabled: true,
-    bevelThickness: 2,
-    bevelSize: 2,
-    bevelSegments: 1,
-    steps: 1
-  });
-  wingGeometry.rotateX(Math.PI / 2);
-  wingGeometry.translate(0, 7, 0);
-
-  const wing = new THREE.Mesh(wingGeometry, hull);
-  wing.castShadow = true;
-  group.add(wing);
-  // The legacy delta is one continuous wing mesh, shared by both wing keys.
-  group.userData.parts.leftWing = wing;
-  group.userData.parts.rightWing = wing;
-
-  const spine = new THREE.Mesh(new THREE.BoxGeometry(9, 7, 48), panel);
-  spine.position.set(0, 6, -6);
-  spine.castShadow = true;
-  group.add(spine);
-
-  const canopy = new THREE.Mesh(
-    new THREE.SphereGeometry(8.5, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2),
-    glass
-  );
-  canopy.position.set(0, 11, 6);
-  canopy.scale.set(0.9, 0.8, 2.1);
-  group.add(canopy);
-  group.userData.parts.cockpit = canopy;
-
-  for (const side of [-1, 1]) {
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 14, 16), panel);
-    fin.position.set(side * 11, 12, -26);
-    fin.rotation.z = side * 0.18;
-    group.add(fin);
-    group.userData.parts[side < 0 ? "leftTail" : "rightTail"] = fin;
-
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(26, 0.7, 2), accent);
-    stripe.position.set(side * 34, 1.2, -8);
-    stripe.rotation.y = side * 0.62;
-    group.add(stripe);
-
-    const engineHouse = new THREE.Mesh(new THREE.CylinderGeometry(6, 7, 22, 14), panel);
-    engineHouse.rotation.x = Math.PI / 2;
-    engineHouse.position.set(side * 13, 1, -32);
-    group.add(engineHouse);
-    group.userData.parts[side < 0 ? "leftEngine" : "rightEngine"] = engineHouse;
-
-    addFlame(group, side * 13, 1, -43, 6, 44);
-    addFlame(group, side * 13, 1, -43, 2.8, 26);
-    addWingtip(group, side * 57, -1, -24);
-  }
-
-  const engine = group.userData.materials.engine;
-  for (const side of [-1, 1]) {
-    const core = new THREE.Mesh(new THREE.SphereGeometry(3, 12, 12), engine);
-    core.position.set(side * 13, 1, -41);
-    group.add(core);
-  }
-
-  addShipGlow(group, 0, 2, -34);
-}
-
 function buildSaucer(group) {
   const { hull, panel, accent, glass } = group.userData.materials;
 
@@ -485,6 +411,9 @@ function buildSaucer(group) {
 }
 
 function buildShip(color, skin = "default") {
+  if (skin === "delta") {
+    return createDeltaModel({ color, environment: fighterEnvironment, hullTexture: makeHullTexture() }, addFlame);
+  }
   if (skin !== "delta" && skin !== "saucer") {
     const fighter = createFighterModel({ environment: fighterEnvironment, color });
     fighter.scale.setScalar(1);
@@ -508,7 +437,6 @@ function buildShip(color, skin = "default") {
   };
 
   if (skin === "saucer") buildSaucer(group);
-  else buildDelta(group);
 
   const hullRoot = new THREE.Group();
   for (const child of [...group.children]) {
