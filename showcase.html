@@ -22,7 +22,7 @@
     <section class="showcase-intro">
       <p class="panel-label">RUNTIME ASSETS / 运行时资产</p>
       <h1>三种轮廓。一眼分清。</h1>
-      <p>模型直接来自游戏工厂：同一艘战斗机、同一组奖励与陨石。</p>
+      <p>模型直接来自游戏工厂：三艘飞船、同一组奖励与陨石。</p>
     </section>
     <section class="showcase-stage" id="stage" aria-label="运行时模型展示">
       <div class="stage-tabs" role="group" aria-label="展示视图">
@@ -37,8 +37,12 @@
     <section class="legend" aria-label="资产说明">
       <article class="legend-card">
         <p class="panel-label">SHIP / 飞船</p>
-        <h2>战斗机 · 截击型</h2>
-        <ul><li><span class="swatch" style="--c:#62e4ff"></span>Fighter / 默认蓝色涂装</li></ul>
+        <h2>三种飞船轮廓</h2>
+        <ul>
+          <li><span class="swatch" style="--c:#62e4ff"></span>战斗机 / 截击型</li>
+          <li><span class="swatch" style="--c:#62e4ff"></span>三角翼 / 飞翼型</li>
+          <li><span class="swatch" style="--c:#62e4ff"></span>飞碟 / 勘探型</li>
+        </ul>
       </article>
       <article class="legend-card">
         <p class="panel-label">REWARDS / 奖励</p>
@@ -67,6 +71,8 @@
           ready: false,
           view: "all",
           models: { ship: 0, rewards: 0, rocks: 0 },
+          shipVariants: [],
+          shipBounds: [],
           pickupVariants: [],
           rockForms: [],
           canvas: { width: 0, height: 0 },
@@ -82,6 +88,6 @@
     }
     window.addEventListener("error", showcaseModuleError, true);
   </script>
-  <script id="showcase-module" type="module" src="showcase.js?v=4.3.0" onerror="showcaseLoadFailed(event)"></script>
+  <script id="showcase-module" type="module" src="showcase.js?v=4.3.0-ships" onerror="showcaseLoadFailed(event)"></script>
 </body>
 </html>

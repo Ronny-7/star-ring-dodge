@@ -655,7 +655,7 @@
         "showcase loads real models, links from the game, and fits a narrow viewport",
         showcaseHref.startsWith("showcase.html") &&
           Boolean(showcaseDoc.querySelector(".stage-fallback")) &&
-          wideReport.models.ship === 1 &&
+          wideReport.models.ship === 3 &&
           wideReport.models.rewards === 3 &&
           wideReport.models.rocks === 3 &&
           wideReport.pickupVariants.join(",") === "core,shield,double" &&
@@ -664,6 +664,12 @@
           rewardsReport.canvas.width > 0 &&
           rewardsReport.canvas.height > 0 &&
           rewardsReport.canvas.width < wideReport.canvas.width
+      );
+
+      check(
+        "showcase lines up three distinct ships",
+        wideReport.shipVariants.join(",") === "fighter,delta,saucer" &&
+          new Set(wideReport.shipBounds.map((b) => (b.x / b.z).toFixed(2))).size === 3
       );
 
       // Terminal check: no game API assertions may follow world disposal.
