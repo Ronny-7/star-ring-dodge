@@ -104,6 +104,9 @@ export function createSaucerModel({ color, environment, hullTexture }) {
     bounds: new THREE.Box3().setFromObject(hullRoot).getSize(new THREE.Vector3()),
     applyLivery(nextColor) {
       engine.color.set(nextColor).lerp(new THREE.Color(0xffffff), 0.25);
+      for (const flame of group.userData.flames) {
+        flame.material.color.set(nextColor).lerp(new THREE.Color(0xffffff), 0.35);
+      }
     }
   };
   group.userData.applyLivery(color);

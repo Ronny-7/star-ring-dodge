@@ -108,28 +108,36 @@ export function createDeltaModel({ color, environment, hullTexture }, flameBuild
     ], 0.1, 0.05), lowVis, [0, 3.15, 0], `${prefix}-low-vis-marking`);
     marking.scale.x = side;
 
-    // Exhaust bays are recessed trenches in the wing surface, not slabs on top:
-    // a thin dark infill sits below the hull skin, framed by a raised edge rail.
-    add(hullRoot, panelGeometry([
+    // Dark infill clears the uncut wing skin; four raised rails give it depth.
+    const bayOutline = [
       [6, 12], [18, 5], [21, -26], [5, -26]
-    ], 0.5, 0.12), duct, [0, 2.45, 0], `${prefix}-recessed-exhaust-bay`).scale.x = side;
-    add(hullRoot, panelGeometry([
-      [7.4, 10.5], [16.6, 4.4], [19.4, -25], [6.4, -25], [6.4, -23.8], [18.2, -23.8], [15.6, 4], [8.2, 9.4]
-    ], 0.9, 0.16), edge, [0, 2.9, 0], `${prefix}-exhaust-bay-rail`).scale.x = side;
+    ];
+    add(hullRoot, panelGeometry(bayOutline, 0.5, 0.12), duct,
+      [0, 3.55, 0], `${prefix}-recessed-exhaust-bay`).scale.x = side;
+    const bayInner = [[7.2, 10], [16.8, 4.3], [19.7, -24.7], [6.3, -24.7]];
+    const rails = new THREE.Group();
+    rails.name = `${prefix}-exhaust-bay-rail`;
+    rails.scale.x = side;
+    hullRoot.add(rails);
+    for (let i = 0; i < 4; i++) {
+      const next = (i + 1) % 4;
+      add(rails, panelGeometry([bayOutline[i], bayOutline[next], bayInner[next], bayInner[i]],
+        0.9, 0.16), edge, [0, 4.1, 0], `${prefix}-exhaust-bay-rail-${i}`);
+    }
     const rim = add(hullRoot, new THREE.TorusGeometry(3.7, 0.6, 8, 24), edge,
-      [side * 13, 3.6, -27], `${prefix}-nozzle-rim`);
+      [side * 13, 4.3, -27], `${prefix}-nozzle-rim`);
     rim.scale.y = 0.53;
     const recess = add(hullRoot, new THREE.CircleGeometry(3.5, 24), duct,
-      [side * 13, 3.6, -26.8], `${prefix}-nozzle-recess`);
+      [side * 13, 4.3, -26.8], `${prefix}-nozzle-recess`);
     recess.rotation.y = Math.PI;
     recess.scale.y = 0.53;
     const core = add(hullRoot, new THREE.CircleGeometry(2.4, 24), engine,
-      [side * 13, 3.6, -26.95], `${prefix}-engine-core`);
+      [side * 13, 4.3, -26.95], `${prefix}-engine-core`);
     core.rotation.y = Math.PI;
     core.scale.y = 0.42;
     parts[`${prefix}Engine`] = core;
     for (const [radius, length] of [[3.1, 29], [1.5, 18]]) {
-      const flame = flameBuilder(group, side * 13, 3.6, -27.6, radius, length);
+      const flame = flameBuilder(group, side * 13, 4.3, -27.6, radius, length);
       flame.scale.x = 1.2;
       flame.castShadow = true;
       flame.receiveShadow = true;

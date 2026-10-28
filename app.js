@@ -1113,7 +1113,7 @@ function movePlayer(dt) {
   const baseForwardSpeed = getTuningValue("shipSpeed3d", 330);
   const forwardSpeed = baseForwardSpeed * speedMultiplier;
   const strafeSpeed = getTuningValue("strafeSpeed3d", 260);
-  const acceleration = getTuningValue("shipAccel3d", 9) * accelMultiplier;
+  const acceleration = getTuningValue("shipAccel3d", 9);
   const deceleration = getTuningValue("shipDecel3d", 14);
   state.player.boost = boosting;
 
@@ -1125,9 +1125,16 @@ function movePlayer(dt) {
   // With mass, the ship only brakes when the input opposes its momentum;
   // releasing the keys leaves it coasting.
   let blend;
+  let forwardCorrection = 0;
   if (moving) {
     const opposing = targetVx * state.player.vx + targetVy * state.player.vy + targetVz * state.player.vz < 0;
     blend = 1 - Math.exp(-(opposing ? deceleration : acceleration) * dt);
+    if (boosting && !opposing) {
+      const blendBoosted = 1 - Math.exp(-acceleration * accelMultiplier * dt);
+      forwardCorrection = ((targetVx - state.player.vx) * basis.forward.x +
+        (targetVy - state.player.vy) * basis.forward.y +
+        (targetVz - state.player.vz) * basis.forward.z) * (blendBoosted - blend);
+    }
   } else {
     blend = 1 - Math.exp(-(deceleration * 0.25) * dt);
   }
@@ -1135,6 +1142,12 @@ function movePlayer(dt) {
   state.player.vx += (targetVx - state.player.vx) * blend;
   state.player.vy += (targetVy - state.player.vy) * blend;
   state.player.vz += (targetVz - state.player.vz) * blend;
+  // Extra boost response follows the nose, never the lateral correction.
+  if (boosting) {
+    state.player.vx += basis.forward.x * forwardCorrection;
+    state.player.vy += basis.forward.y * forwardCorrection;
+    state.player.vz += basis.forward.z * forwardCorrection;
+  }
 
   state.player.x += state.player.vx * dt;
   state.player.y += state.player.vy * dt;

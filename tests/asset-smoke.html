@@ -331,16 +331,16 @@
       }
       // Same start, same frames. A shared accel leak moves the Shift run ~4%
       // farther; a speed leak moves it ~65%. Both must stay inside 2%.
-      const coast = (key, shift) => {
-        api.setPlayerPosition(30000, 30000, 30000, 0, 0);
-        win.dispatchEvent(new win.KeyboardEvent("keydown", { key }));
+      const coast = (keys, shift, yaw = 0) => {
+        api.setPlayerPosition(30000, 30000, 30000, yaw, 0);
+        for (const key of keys) win.dispatchEvent(new win.KeyboardEvent("keydown", { key }));
         if (shift) win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Shift" }));
         for (let i = 0; i < 120; i += 1) {
           api.clearAsteroids();
           api.tick(1 / 60);
         }
         const scene = api.getScene();
-        win.dispatchEvent(new win.KeyboardEvent("keyup", { key }));
+        for (const key of keys) win.dispatchEvent(new win.KeyboardEvent("keyup", { key }));
         if (shift) win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "Shift" }));
         return scene;
       };
@@ -364,6 +364,17 @@
           reverseShift.player.boost === false &&
           close(reversePlain.player.z - 30000, reverseShift.player.z - 30000)
       );
+      for (const yaw of [0, 0.6]) {
+        const plain = coast("wd", false, yaw);
+        const shifted = coast("wd", true, yaw);
+        const lateral = ({ player }) => (player.x - 30000) * Math.cos(yaw) +
+          (player.z - 30000) * Math.sin(yaw);
+        check(
+          `diagonal boost keeps ordinary lateral acceleration at yaw ${yaw}`,
+          plain.player.boost === false && shifted.player.boost === true &&
+            close(lateral(plain), lateral(shifted))
+        );
+      }
 
       api.startGame();
       await nextFrames(win, 2);
@@ -544,6 +555,37 @@
       );
       api.selectSkin("default");
 
+      const THREE = await win.Function("return import('three')")();
+      const { createSaucerModel } = await win.Function("return import('/saucer-model.js')")();
+      const saucer = createSaucerModel({ color: 0xff0000 });
+      const lateFlame = new THREE.Mesh(new THREE.ConeGeometry(1, 2), new THREE.MeshBasicMaterial());
+      saucer.userData.flames.push(lateFlame);
+      saucer.userData.applyLivery(0x0000ff);
+      const blueFlame = lateFlame.material.color.clone();
+      saucer.userData.applyLivery(0xff0000);
+      check("saucer livery recolours flames attached after construction",
+        blueFlame.b > blueFlame.r && lateFlame.material.color.r > lateFlame.material.color.b);
+
+      const { createDeltaModel } = await win.Function("return import('/delta-model.js')")();
+      const delta = createDeltaModel({ color: 0xff0000 });
+      const ray = new THREE.Raycaster(new THREE.Vector3(13, 100, -10), new THREE.Vector3(0, -1, 0));
+      const bay = delta.getObjectByName("right-recessed-exhaust-bay");
+      const rail = delta.getObjectByName("right-exhaust-bay-rail");
+      check("delta exhaust bay is visible above the wing and below its rails",
+        ray.intersectObject(delta.userData.hullRoot, true)[0]?.object === bay &&
+          new THREE.Box3().setFromObject(rail).max.y > new THREE.Box3().setFromObject(bay).max.y &&
+          delta.userData.bounds.y / delta.userData.bounds.z < 0.34);
+      for (const model of [saucer, delta]) {
+        const materials = new Set(Object.values(model.userData.materials));
+        model.traverse((mesh) => {
+          mesh.geometry?.dispose();
+          if (mesh.material) materials.add(mesh.material);
+        });
+        for (const material of materials) material.dispose();
+      }
+      lateFlame.geometry.dispose();
+      lateFlame.material.dispose();
+
       const pad = 60 + 26;
       const limit = 60000 - pad;
       const faces = [
@@ -669,7 +711,8 @@
       check(
         "showcase lines up three distinct ships",
         wideReport.shipVariants.join(",") === "fighter,delta,saucer" &&
-          new Set(wideReport.shipBounds.map((b) => (b.x / b.z).toFixed(2))).size === 3
+          wideReport.shipBounds.every((a, i, bounds) => bounds.slice(i + 1).every(
+            (b) => Math.abs(a.x / a.z - b.x / b.z) > 0.05))
       );
 
       // Terminal check: no game API assertions may follow world disposal.
