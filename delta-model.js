@@ -108,25 +108,28 @@ export function createDeltaModel({ color, environment, hullTexture }, flameBuild
     ], 0.1, 0.05), lowVis, [0, 3.15, 0], `${prefix}-low-vis-marking`);
     marking.scale.x = side;
 
-    // Shallow trapezoidal ducts blend into the wing; no external engine pods.
-    const fairing = add(hullRoot, panelGeometry([
+    // Exhaust bays are recessed trenches in the wing surface, not slabs on top:
+    // a thin dark infill sits below the hull skin, framed by a raised edge rail.
+    add(hullRoot, panelGeometry([
       [6, 12], [18, 5], [21, -26], [5, -26]
-    ], 4, 1.1), dark, [0, 4, 0], `${prefix}-recessed-exhaust-bay`);
-    fairing.scale.x = side;
+    ], 0.5, 0.12), duct, [0, 2.45, 0], `${prefix}-recessed-exhaust-bay`).scale.x = side;
+    add(hullRoot, panelGeometry([
+      [7.4, 10.5], [16.6, 4.4], [19.4, -25], [6.4, -25], [6.4, -23.8], [18.2, -23.8], [15.6, 4], [8.2, 9.4]
+    ], 0.9, 0.16), edge, [0, 2.9, 0], `${prefix}-exhaust-bay-rail`).scale.x = side;
     const rim = add(hullRoot, new THREE.TorusGeometry(3.7, 0.6, 8, 24), edge,
-      [side * 13, 5.1, -27], `${prefix}-nozzle-rim`);
+      [side * 13, 3.6, -27], `${prefix}-nozzle-rim`);
     rim.scale.y = 0.53;
     const recess = add(hullRoot, new THREE.CircleGeometry(3.5, 24), duct,
-      [side * 13, 5.1, -26.8], `${prefix}-nozzle-recess`);
+      [side * 13, 3.6, -26.8], `${prefix}-nozzle-recess`);
     recess.rotation.y = Math.PI;
     recess.scale.y = 0.53;
     const core = add(hullRoot, new THREE.CircleGeometry(2.4, 24), engine,
-      [side * 13, 5.1, -26.95], `${prefix}-engine-core`);
+      [side * 13, 3.6, -26.95], `${prefix}-engine-core`);
     core.rotation.y = Math.PI;
     core.scale.y = 0.42;
     parts[`${prefix}Engine`] = core;
     for (const [radius, length] of [[3.1, 29], [1.5, 18]]) {
-      const flame = flameBuilder(group, side * 13, 5.1, -27.6, radius, length);
+      const flame = flameBuilder(group, side * 13, 3.6, -27.6, radius, length);
       flame.scale.x = 1.2;
       flame.castShadow = true;
       flame.receiveShadow = true;
@@ -138,21 +141,32 @@ export function createDeltaModel({ color, environment, hullTexture }, flameBuild
   }
   wingGeometry.dispose();
 
+  // Dorsal fairing: a low hull-coloured spine with dark intake recesses, so it
+  // reads as structure blended into the wing rather than a slab bolted on top.
   add(hullRoot, panelGeometry([
-    [0, 32], [8, 17], [10, -14], [6, -22], [-6, -22], [-10, -14], [-8, 17]
-  ], 5, 1.4), dark, [0, 4.5, 0], "dorsal-intake-weapons-bay");
+    [0, 34], [7.4, 20], [8.6, -8], [6.4, -21], [-6.4, -21], [-8.6, -8], [-7.4, 20]
+  ], 2.6, 1.05), hull, [0, 4.4, 0], "dorsal-fairing");
   add(hullRoot, panelGeometry([
-    [-5, 14], [5, 14], [6, 5], [-6, 5]
-  ], 0.25, 0.2), duct, [0, 8.5, 0], "dorsal-intake-recess");
-  for (let z = 6; z < 14; z += 2) {
-    add(hullRoot, panelGeometry([[-5, z], [5, z], [5, z + 0.35], [-5, z + 0.35]],
-      0.15, 0.05), edge, [0, 8.8, 0], "intake-louver");
+    [-5.2, 15], [5.2, 15], [5.8, 6], [-5.8, 6]
+  ], 0.5, 0.18), duct, [0, 6.3, 0], "dorsal-intake-recess");
+  add(hullRoot, panelGeometry([
+    [-5.4, 6], [5.4, 6], [5.0, 2.6], [-5.0, 2.6]
+  ], 0.35, 0.14), dark, [0, 6.15, 0], "dorsal-intake-throat");
+  for (const side of [-1, 1]) {
+    add(hullRoot, panelGeometry([
+      [3.4, 30], [7.2, 19], [7.8, -6], [6.2, -17], [5.6, -17], [7.0, -6], [6.4, 19], [3.0, 29]
+    ], 0.22, 0.08), edge, [0, 5.75, 0], `${side < 0 ? "left" : "right"}-fairing-shoulder`)
+      .scale.x = side;
+  }
+  for (let z = 7.5; z < 14.5; z += 1.9) {
+    add(hullRoot, panelGeometry([[-5.0, z], [5.0, z], [5.0, z + 0.3], [-5.0, z + 0.3]],
+      0.14, 0.04), edge, [0, 6.55, 0], "intake-louver");
   }
   parts.cockpit = add(hullRoot, new THREE.SphereGeometry(1, 32, 20), canopy,
-    [0, 5, 27], "blended-low-canopy");
-  parts.cockpit.scale.set(6.8, 2.15, 11.5);
+    [0, 6.1, 25], "blended-low-canopy");
+  parts.cockpit.scale.set(6.2, 1.9, 10.5);
   add(hullRoot, panelGeometry([[-1, 18], [1, 18], [1, 21], [-1, 21]],
-    0.1, 0.05), livery, [0, 7.1, 0], "low-vis-livery");
+    0.1, 0.05), livery, [0, 7.3, 0], "low-vis-livery");
 
   group.userData.applyLivery = (nextColor) => {
     const tint = new THREE.Color(nextColor);

@@ -46,19 +46,28 @@ export function createSaucerModel({ color, environment, hullTexture }) {
   ring(28, 0.45, 10.3, dark);
   ring(44, 0.5, 6.5, edge);
   ring(51, 1.1, 0, dark);
+  // Outer armour band: ties the eight nacelle collars into one continuous rim.
+  ring(55.5, 1.6, 1.2, hull);
+  ring(55.5, 0.3, 4.6, edge);
 
+  // Nacelles sit in the rim rather than on spokes: each is short, mostly buried
+  // in the hull, with a blister collar blending it into the disc face.
   for (let i = 0; i < 8; i += 1) {
     const angle = Math.PI / 8 + i * Math.PI / 4;
     const x = Math.sin(angle);
     const z = Math.cos(angle);
-    const nacelle = add(hullRoot, new THREE.CylinderGeometry(5.8, 6.8, 17, 12, 1, true), hull, x * 58, -0.5, z * 58);
+    const collar = add(hullRoot, new THREE.CylinderGeometry(8.6, 10.4, 5.5, 14, 1, false),
+      hull, x * 51, 0.6, z * 51);
+    collar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(x, 0, z));
+    const nacelle = add(hullRoot, new THREE.CylinderGeometry(5.4, 6.4, 12.5, 12, 1, true),
+      hull, x * 51.5, -0.5, z * 51.5);
     nacelle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(x, 0, z));
-    add(nacelle, new THREE.CylinderGeometry(4.8, 4.8, 15.8, 12), dark);
-    const lip = add(nacelle, new THREE.TorusGeometry(5.4, 0.8, 6, 12), edge, 0, 8.5);
+    add(nacelle, new THREE.CylinderGeometry(4.4, 4.4, 11.6, 12), dark);
+    const lip = add(nacelle, new THREE.TorusGeometry(5.0, 0.75, 6, 12), edge, 0, 6.2);
     lip.rotation.x = Math.PI / 2;
-    add(nacelle, new THREE.CylinderGeometry(3.8, 3.8, 0.5, 12), engine, 0, 7.8);
-    for (const offset of [-2.6, 0, 2.6]) {
-      add(nacelle, new THREE.BoxGeometry(0.7, 1, 8), dark, offset, 8.8);
+    add(nacelle, new THREE.CylinderGeometry(3.4, 3.4, 0.5, 12), engine, 0, 5.6);
+    for (const offset of [-2.2, 0, 2.2]) {
+      add(nacelle, new THREE.BoxGeometry(0.6, 0.8, 6), dark, offset, 6.4);
     }
     if (i === 2) parts.rightEngine = nacelle;
     if (i === 5) parts.leftEngine = nacelle;
