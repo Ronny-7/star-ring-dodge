@@ -107,6 +107,10 @@ window.starRingConfig = {
     shipSpeed3d: 330,
     shipAccel3d: 4,
     shipDecel3d: 6,
+    boostSpeedMultiplier: 1.65,
+    boostAccelMultiplier: 1.4,
+    touchBoostOn: 0.88,
+    touchBoostOff: 0.78,
     strafeSpeed3d: 260,
     laserSpeed3d: 1400,
     laserRadius3d: 14,
@@ -317,6 +321,7 @@ window.starRingConfig = {
       mission2Title: "回收", mission2Desc: "接触绿色能量核以获得高额分数补给，不同星域会改变资源节奏。",
       mission3Title: "火力", mission3Desc: "使用激光清除障碍，优先处理大型陨石，为跃迁选择留出空间。",
       controlsLabel: "操作", controlHint1: "方向键或 WASD 移动", controlHint2: "J 发射激光", controlHint3: "Space 开始或重开，P 或 Esc 暂停",
+      controlHintBoost: "Shift 加力（触屏：把左摇杆推到底）",
       tacticalView: "战术视图", touchDrag: "拖动移动", touchFire: "开火", touchPause: "暂停", newRecord: "新纪录已建立"
     },
     en: {
@@ -340,6 +345,7 @@ window.starRingConfig = {
       mission2Title: "Collect", mission2Desc: "Gather green energy cores for bonus score. Different sectors change resource pacing.",
       mission3Title: "Fire", mission3Desc: "Use your laser to clear obstacles. Prioritize large asteroids to make room for warp choices.",
       controlsLabel: "Controls", controlHint1: "Arrows or WASD to move", controlHint2: "J to fire laser", controlHint3: "Space to start or restart, P or Esc to pause",
+      controlHintBoost: "Shift to boost (touch: push the left stick to the edge)",
       tacticalView: "Tactical View", touchDrag: "Drag to move", touchFire: "Fire", touchPause: "Pause", newRecord: "New Record"
     }
   }

@@ -101,6 +101,7 @@ function applyLanguageToDOM() {
   set("control-hint-1", L("controlHint1"));
   set("control-hint-2", L("controlHint2"));
   set("control-hint-3", L("controlHint3"));
+  set("control-hint-4", L("controlHintBoost"));
   set("tactical-view-label", L("tacticalView"));
   set("orientation-hint", L("orientationHint"));
   set("touch-drag-label", L("touchDrag"));
@@ -404,7 +405,8 @@ const state = {
     pitch: 0,
     roll: 0,
     thrust: 0,
-    trailTimer: 0
+    trailTimer: 0,
+    boost: false
   },
   // Camera lags the ship so turns read as motion rather than a snap.
   camera: {
@@ -508,6 +510,7 @@ function resetGame() {
   state.player.roll = 0;
   state.player.thrust = 0;
   state.player.trailTimer = 0;
+  state.player.boost = false;
   snapCameraToShip();
   state.asteroids = [];
   state.cores = [];
@@ -1120,10 +1123,14 @@ function movePlayer(dt) {
 
   const move = inputController.getMoveInput();
   const basis = projection.makeBasis(state.player.yaw, state.player.pitch);
-  const forwardSpeed = getTuningValue("shipSpeed3d", 330);
+  const boosting = inputController.isBoosting() && move.forward > 0;
+  const speedMultiplier = boosting ? getTuningValue("boostSpeedMultiplier", 1.65) : 1;
+  const accelMultiplier = boosting ? getTuningValue("boostAccelMultiplier", 1.4) : 1;
+  const forwardSpeed = getTuningValue("shipSpeed3d", 330) * speedMultiplier;
   const strafeSpeed = getTuningValue("strafeSpeed3d", 260);
-  const acceleration = getTuningValue("shipAccel3d", 9);
+  const acceleration = getTuningValue("shipAccel3d", 9) * accelMultiplier;
   const deceleration = getTuningValue("shipDecel3d", 14);
+  state.player.boost = boosting;
 
   const targetVx = basis.forward.x * forwardSpeed * move.forward + basis.right.x * strafeSpeed * move.strafe;
   const targetVy = basis.forward.y * forwardSpeed * move.forward;
@@ -2053,7 +2060,7 @@ if (new URLSearchParams(window.location.search).has("test")) {
     }),
     getScene: () => ({
       asteroids: state.asteroids.map((a) => ({ x: a.x, y: a.y, z: a.z, radius: a.radius })),
-      player: { x: state.player.x, y: state.player.y, z: state.player.z, yaw: state.player.yaw, pitch: state.player.pitch },
+      player: { x: state.player.x, y: state.player.y, z: state.player.z, yaw: state.player.yaw, pitch: state.player.pitch, boost: state.player.boost === true },
       camera: { x: state.camera.x, y: state.camera.y, z: state.camera.z, yaw: state.camera.yaw, pitch: state.camera.pitch },
       health: state.health,
       score: state.score,

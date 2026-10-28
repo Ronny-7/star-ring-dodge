@@ -5,6 +5,13 @@
     root.starRingInput = factory();
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  // Hysteresis: engage only near the stick edge, release only well below it,
+  // so a stick hovering around the threshold does not flutter the boost.
+  function nextBoostState(previous, magnitude, on, off) {
+    if (previous) return magnitude > off;
+    return magnitude >= on;
+  }
+
   function createInputController({
     windowObject,
     documentObject,
@@ -31,7 +38,7 @@
     const keys = new Set();
     const fireKeys = new Set(["j", "J"]);
     let fireHeld = false;
-    const gestureMovement = { active: false, pointerId: null, startX: 0, startY: 0, dx: 0, dy: 0 };
+    const gestureMovement = { active: false, pointerId: null, startX: 0, startY: 0, dx: 0, dy: 0, boost: false };
     // Chromium pointer lock occasionally reports a bogus 300-600 px step
     // (about half the window) for a single event; real mouse steps stay far
     // below this even on fast flicks. Drop such an event instead of turning.
@@ -53,6 +60,14 @@
       if (keys.has("ArrowLeft")) strafe -= 1;
       if (keys.has("ArrowRight")) strafe += 1;
       return { forward, strafe };
+    }
+
+    function isBoostKeyDown() {
+      return keys.has("Shift") || keys.has("ShiftLeft") || keys.has("ShiftRight");
+    }
+
+    function isBoosting() {
+      return isBoostKeyDown() || gestureMovement.boost;
     }
 
     // Combined move input: keyboard plus the left-half touch drag.
@@ -105,6 +120,7 @@
       gestureMovement.pointerId = null;
       gestureMovement.dx = 0;
       gestureMovement.dy = 0;
+      gestureMovement.boost = false;
       updateGestureVisual();
     }
 
@@ -132,15 +148,20 @@
       const rawX = isForceLandscapeMode() ? screenY : screenX;
       const rawY = isForceLandscapeMode() ? -screenX : screenY;
       const distance = Math.hypot(rawX, rawY);
+      const tuning = getState?.()?.tuning || {};
+      const boostOn = tuning.touchBoostOn ?? 0.88;
+      const boostOff = tuning.touchBoostOff ?? 0.78;
       if (distance < deadZone) {
         gestureMovement.dx = 0;
         gestureMovement.dy = 0;
+        gestureMovement.boost = nextBoostState(gestureMovement.boost, 0, boostOn, boostOff);
         updateGestureVisual();
         return;
       }
       const scale = Math.min(1, distance / maxDistance);
       gestureMovement.dx = (rawX / distance) * scale;
       gestureMovement.dy = (rawY / distance) * scale;
+      gestureMovement.boost = nextBoostState(gestureMovement.boost, scale, boostOn, boostOff);
       updateGestureVisual();
     }
 
@@ -185,12 +206,18 @@
         fireLaser?.();
         return;
       }
-      if (!state.paused) keys.add(key);
+      if (!state.paused) {
+        keys.add(key);
+        // Browsers report Shift as event.key "Shift"; event.code also covers
+        // ShiftLeft / ShiftRight for synthetic and remapped input.
+        if (event.code) keys.add(event.code);
+      }
     }
 
     function handleKeyUp(event) {
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       keys.delete(key);
+      if (event.code) keys.delete(event.code);
       if (fireKeys.has(event.key)) fireHeld = false;
     }
 
@@ -360,6 +387,7 @@
       hasActiveMovement,
       consumeLook,
       isFireHeld: () => fireHeld,
+      isBoosting,
       handleKeyDown,
       handleKeyUp,
       pressTouchControl,
@@ -367,5 +395,5 @@
     };
   }
 
-  return { createInputController };
+  return { createInputController, nextBoostState };
 });

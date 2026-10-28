@@ -132,6 +132,15 @@ test("disabling sfx also disables vibration", () => {
   assert.deepEqual(vibrations, [10]);
 });
 
+test("touch boost engages high and releases low", () => {
+  const { nextBoostState } = require("../input.js");
+  assert.equal(nextBoostState(false, 0.7, 0.88, 0.78), false);
+  assert.equal(nextBoostState(false, 0.9, 0.88, 0.78), true);
+  assert.equal(nextBoostState(true, 0.85, 0.88, 0.78), true);
+  assert.equal(nextBoostState(true, 0.7, 0.88, 0.78), false);
+  assert.equal(nextBoostState(false, 0.85, 0.88, 0.78), false);
+});
+
 test("render loop updates and draws one frame", () => {
   const callbacks = [];
   const calls = [];

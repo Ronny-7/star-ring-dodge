@@ -287,6 +287,57 @@
       delete gameDocument.pointerLockElement;
       gameDocument.dispatchEvent(new win.Event("pointerlockchange"));
 
+      api.startGame();
+      api.clearAsteroids();
+      api.setPlayerPosition(30000, 30000, 30000, 0, 0);
+      win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "w" }));
+      for (let i = 0; i < 120; i += 1) {
+        api.clearAsteroids();
+        api.tick(1 / 60);
+      }
+      const cruise = api.getScene();
+      win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Shift" }));
+      for (let i = 0; i < 120; i += 1) {
+        api.clearAsteroids();
+        api.tick(1 / 60);
+      }
+      const boosted = api.getScene();
+      win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "Shift" }));
+      const boostDelta = boosted.player.z - cruise.player.z;
+      for (let i = 0; i < 120; i += 1) {
+        api.clearAsteroids();
+        api.tick(1 / 60);
+      }
+      const released = api.getScene();
+      const releaseDelta = released.player.z - boosted.player.z;
+      // 1150–1500 is unreachable: boost speed 544.5 for 2s is 1089, and the
+      // ramp up from cruise 330 covers ~1052. A window under that ceiling
+      // still rejects cruise (~660) and a 2x multiplier (~1261).
+      check(
+        "boost raises forward speed only while held",
+        cruise.player.boost === false &&
+          boosted.player.boost === true &&
+          boostDelta > 1000 &&
+          boostDelta < 1120 &&
+          releaseDelta > boostDelta * 0.55 &&
+          releaseDelta < boostDelta * 0.8
+      );
+
+      api.setPlayerPosition(30000, 30000, 30000, 0, 0);
+      win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "w" }));
+      win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "d" }));
+      win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Shift" }));
+      for (let i = 0; i < 120; i += 1) {
+        api.clearAsteroids();
+        api.tick(1 / 60);
+      }
+      const sideways = api.getScene();
+      check("boost does not speed up strafing", Math.abs(sideways.player.x - 30000) < 480);
+      win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "d" }));
+      win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "Shift" }));
+      // Eight seconds of flight leaves cores inside the pickup cull radius.
+      api.startGame();
+
       const near = api.getScene().player;
       api.clearAsteroids();
       api.spawnAsteroidAt(near.x + 1000, near.y, near.z, 30);
