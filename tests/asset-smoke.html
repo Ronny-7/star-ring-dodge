@@ -497,12 +497,19 @@
       for (const skin of ["default", "delta", "saucer"]) {
         api.selectSkin(skin);
         const report = api.getWorldDebug().fighter;
+        const distinctCenters = (a, b) => ["x", "y", "z"].some((axis) => a[axis] !== b[axis]);
         check(
           `skin ${skin} exposes the full ship contract`,
           Boolean(report) &&
             ["leftWing", "rightWing", "leftTail", "rightTail", "cockpit", "leftEngine", "rightEngine"].every(
               (key) => report.parts[key] && Number.isFinite(report.parts[key].x)
             ) &&
+            report.parts.leftEngine.x * report.parts.rightEngine.x < 0 &&
+            distinctCenters(report.parts.cockpit, report.parts.leftEngine) &&
+            distinctCenters(report.parts.cockpit, report.parts.rightEngine) &&
+            distinctCenters(report.parts.leftTail, report.parts.rightTail) &&
+            // Tasks 6/7 assert delta/saucer wing separation after building real lateral surfaces.
+            (skin !== "default" || report.parts.leftWing.x * report.parts.rightWing.x < 0) &&
             report.navLights.length === 2 &&
             report.navLights.some((light) => light.color === "#ff4d5e" && light.x > 0) &&
             report.navLights.some((light) => light.color === "#4dff9e" && light.x < 0) &&
