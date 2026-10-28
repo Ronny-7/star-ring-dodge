@@ -320,7 +320,10 @@
           boostDelta > 1000 &&
           boostDelta < 1120 &&
           releaseDelta > boostDelta * 0.55 &&
-          releaseDelta < boostDelta * 0.8
+          releaseDelta < boostDelta * 0.8 &&
+          // The exhaust cue must follow the boost, not stay pinned at cruise.
+          cruise.player.thrust <= 1.0 &&
+          boosted.player.thrust > 1.15
       );
 
       for (const key of ["w", "a", "s", "d", "Shift"]) {

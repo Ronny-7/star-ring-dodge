@@ -1110,7 +1110,8 @@ function movePlayer(dt) {
   const boosting = inputController.isBoosting() && move.forward > 0;
   const speedMultiplier = boosting ? getTuningValue("boostSpeedMultiplier", 1.65) : 1;
   const accelMultiplier = boosting ? getTuningValue("boostAccelMultiplier", 1.4) : 1;
-  const forwardSpeed = getTuningValue("shipSpeed3d", 330) * speedMultiplier;
+  const baseForwardSpeed = getTuningValue("shipSpeed3d", 330);
+  const forwardSpeed = baseForwardSpeed * speedMultiplier;
   const strafeSpeed = getTuningValue("strafeSpeed3d", 260);
   const acceleration = getTuningValue("shipAccel3d", 9) * accelMultiplier;
   const deceleration = getTuningValue("shipDecel3d", 14);
@@ -1140,7 +1141,9 @@ function movePlayer(dt) {
   state.player.z += state.player.vz * dt;
   clampPlayerToWorld();
 
-  const speedRatio = Math.min(1, Math.hypot(state.player.vx, state.player.vy, state.player.vz) / forwardSpeed);
+  // Boost lets the exhaust read as stronger: the ratio is measured against
+  // cruising speed, not the boosted target, so thrust reaches 1.35 while held.
+  const speedRatio = Math.min(1.35, Math.hypot(state.player.vx, state.player.vy, state.player.vz) / baseForwardSpeed);
   const thrustTarget = moving ? Math.max(0.4, speedRatio) : 0.3;
   state.player.thrust += (thrustTarget - state.player.thrust) * (1 - Math.exp(-10 * dt));
 
@@ -1930,7 +1933,7 @@ if (new URLSearchParams(window.location.search).has("test")) {
     }),
     getScene: () => ({
       asteroids: state.asteroids.map((a) => ({ x: a.x, y: a.y, z: a.z, radius: a.radius })),
-      player: { x: state.player.x, y: state.player.y, z: state.player.z, yaw: state.player.yaw, pitch: state.player.pitch, boost: state.player.boost === true },
+      player: { x: state.player.x, y: state.player.y, z: state.player.z, yaw: state.player.yaw, pitch: state.player.pitch, boost: state.player.boost === true, thrust: state.player.thrust },
       camera: { x: state.camera.x, y: state.camera.y, z: state.camera.z, yaw: state.camera.yaw, pitch: state.camera.pitch },
       health: state.health,
       score: state.score,

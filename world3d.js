@@ -818,8 +818,15 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       }
       for (const flame of shipGroup.userData.flames) {
         const pulse = 0.9 + Math.sin(state.pulseTime * 30) * 0.08;
-        flame.scale.y = (0.55 + state.player.thrust * 1.15) * pulse;
-        flame.material.opacity = 0.28 + state.player.thrust * 0.5;
+        // thrust runs 0.3 (idle) .. 1.0 (cruise) .. 1.35 (boost); normalise the
+        // top band so the plume widens and brightens unmistakably on boost.
+        const boostAmount = Math.max(0, Math.min(1, (state.player.thrust - 1) / 0.35));
+        flame.scale.set(
+          1 + boostAmount * 1.25,
+          (0.55 + state.player.thrust * 1.15) * pulse,
+          1 + boostAmount * 1.25
+        );
+        flame.material.opacity = Math.min(1, 0.28 + state.player.thrust * 0.5 + boostAmount * 0.22);
       }
       if (shipGroup.userData.ring) {
         shipGroup.userData.ring.rotation.z += dt * 1.4;
