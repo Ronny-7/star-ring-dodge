@@ -7,6 +7,7 @@ import { createRockSet } from "./rock-models.js";
 import { createSpaceEnvironment } from "./space-environment.js";
 import { createShipMaterials } from "./ship-materials.js";
 import { createDeltaModel } from "./delta-model.js";
+import { createSaucerModel } from "./saucer-model.js";
 
 const sceneObjects = {
   rocks: new Map(),
@@ -284,26 +285,6 @@ function tintShip(group, color) {
   group.userData.applyLivery(color);
 }
 
-function applyLegacyLivery(group, color) {
-  const base = new THREE.Color(color);
-  const m = group.userData.materials;
-  if (!m) return;
-  m.hull.color.copy(base).multiplyScalar(0.46);
-  m.hull.emissive.copy(base).multiplyScalar(0.16);
-  m.panel.color.copy(base).multiplyScalar(0.2);
-  m.panel.emissive.copy(base).multiplyScalar(0.05);
-  m.accent.color.copy(base).lerp(WHITE, 0.05);
-  m.accent.emissive.copy(base);
-  m.accent.emissiveIntensity = 0.6;
-  m.engine.color.copy(base).lerp(WHITE, 0.25);
-  m.glass.emissive.copy(base).multiplyScalar(0.2);
-  for (const flame of group.userData.flames) {
-    flame.material.color.copy(base).lerp(WHITE, 0.35);
-    flame.material.needsUpdate = true;
-  }
-  if (group.userData.glow) group.userData.glow.color.copy(base);
-}
-
 function addFlame(group, x, y, z, radius, length) {
   const material = new THREE.MeshBasicMaterial({
     color: 0xffffff,
@@ -320,134 +301,36 @@ function addFlame(group, x, y, z, radius, length) {
   return flame;
 }
 
-function addShipGlow(group, x, y, z) {
-  const glow = new THREE.PointLight(group.userData.materials.engine.color.clone(), 120, 420, 2);
-  glow.position.set(x, y, z);
-  group.add(glow);
-  group.userData.glow = glow;
-}
-
-function addWingtip(group, x, y, z) {
-  const material = x > 0 ? group.userData.materials.navRed : group.userData.materials.navGreen;
-  const tip = new THREE.Mesh(
-    new THREE.SphereGeometry(3.2, 10, 10),
-    material
-  );
-  tip.position.set(x, y, z);
-  group.add(tip);
-  group.userData.navLights.push({ color: "#" + material.color.getHexString(), x });
-}
-
-function buildSaucer(group) {
-  const { hull, panel, accent, glass } = group.userData.materials;
-
-  const disc = new THREE.Mesh(new THREE.CylinderGeometry(64, 58, 10, 32), hull);
-  disc.castShadow = true;
-  group.add(disc);
-  // The legacy saucer's continuous disc stands in for both wing surfaces.
-  group.userData.parts.leftWing = disc;
-  group.userData.parts.rightWing = disc;
-
-  const belly = new THREE.Mesh(
-    new THREE.SphereGeometry(40, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
-    panel
-  );
-  belly.position.y = -4;
-  belly.scale.y = 0.55;
-  belly.castShadow = true;
-  group.add(belly);
-
-  const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(28, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-    glass
-  );
-  dome.position.y = 5;
-  dome.scale.y = 0.7;
-  group.add(dome);
-  group.userData.parts.cockpit = dome;
-
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(68, 1.8, 8, 48), accent);
-  ring.rotation.x = Math.PI / 2;
-  group.add(ring);
-  group.userData.ring = ring;
-
-  for (let i = 0; i < 4; i += 1) {
-    const angle = (Math.PI * 2 * i) / 4 + Math.PI / 4;
-    const light = new THREE.Mesh(
-      new THREE.SphereGeometry(3, 10, 10),
-      i < 2
-        ? (i === 0 ? group.userData.materials.navRed : group.userData.materials.navGreen)
-        : new THREE.MeshBasicMaterial({ color: i % 2 ? 0x8affd1 : 0xff8ea1 })
-    );
-    light.position.set(Math.cos(angle) * 60, -1, Math.sin(angle) * 60);
-    group.add(light);
-    if (i < 2) group.userData.navLights.push({ color: "#" + light.material.color.getHexString(), x: light.position.x });
-  }
-
-  for (const side of [-1, 1]) {
-    const engineHouse = new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 16, 14), panel);
-    engineHouse.rotation.x = Math.PI / 2;
-    engineHouse.position.set(side * 22, -3, -34);
-    group.add(engineHouse);
-    group.userData.parts[side < 0 ? "leftEngine" : "rightEngine"] = engineHouse;
-    // No tail surfaces exist yet: the rear nacelles also stand in for tails.
-    group.userData.parts[side < 0 ? "leftTail" : "rightTail"] = engineHouse;
-
-    addFlame(group, side * 22, -3, -42, 5.5, 34);
-    addFlame(group, side * 22, -3, -42, 2.4, 20);
-  }
-
-  const engine = group.userData.materials.engine;
-  const core = new THREE.Mesh(new THREE.SphereGeometry(7, 14, 14), engine);
-  core.position.set(0, -9, 0);
-  group.add(core);
-
-  const nozzle = new THREE.Mesh(new THREE.TorusGeometry(10, 1.2, 6, 24), accent);
-  nozzle.rotation.x = Math.PI / 2;
-  nozzle.position.y = -8;
-  group.add(nozzle);
-
-  addShipGlow(group, 0, -10, 0);
-}
-
+// Each skin owns its geometry and its livery: the fighter and the two rebuilt
+// craft all return the same contract, so nothing here needs to know the shape.
 function buildShip(color, skin = "default") {
   if (skin === "delta") {
-    return createDeltaModel({ color, environment: fighterEnvironment, hullTexture: makeHullTexture() }, addFlame);
-  }
-  if (skin !== "delta" && skin !== "saucer") {
-    const fighter = createFighterModel({ environment: fighterEnvironment, color });
-    fighter.scale.setScalar(1);
-    fighter.userData.bounds = localBounds(fighter.userData.hullRoot, fighter);
-    return fighter;
+    return createDeltaModel({
+      color,
+      environment: fighterEnvironment,
+      hullTexture: makeHullTexture()
+    });
   }
 
-  const base = new THREE.Color(color);
-  const hullTexture = makeHullTexture();
-  const materials = createShipMaterials({ color: base, environment: fighterEnvironment, hullTexture });
-  const group = new THREE.Group();
-  group.userData = {
-    parts: {},
-    navLights: [],
-    materials,
-    flames: [],
-    ring: null,
-    glow: null,
-    ownTextures: [hullTexture],
-    applyLivery: (nextColor) => applyLegacyLivery(group, nextColor)
-  };
-
-  if (skin === "saucer") buildSaucer(group);
-
-  const hullRoot = new THREE.Group();
-  for (const child of [...group.children]) {
-    if (!group.userData.flames.includes(child) && child !== group.userData.glow) hullRoot.add(child);
+  if (skin === "saucer") {
+    const saucer = createSaucerModel({
+      color,
+      environment: fighterEnvironment,
+      hullTexture: makeHullTexture()
+    });
+    for (const side of [-1, 1]) {
+      const flame = addFlame(saucer, side * 25, -1, -61, 3, 15);
+      flame.rotation.y = -side * Math.PI / 8;
+      flame.position.x += side * Math.sin(Math.PI / 8) * 7.5;
+    }
+    saucer.scale.setScalar(1.6);
+    return saucer;
   }
-  group.add(hullRoot);
-  group.userData.hullRoot = hullRoot;
-  group.userData.bounds = localBounds(hullRoot, group);
-  tintShip(group, base);
-  group.scale.setScalar(1.6);
-  return group;
+
+  const fighter = createFighterModel({ environment: fighterEnvironment, color });
+  fighter.scale.setScalar(1);
+  fighter.userData.bounds = localBounds(fighter.userData.hullRoot, fighter);
+  return fighter;
 }
 
 function rockFormFor(asteroid) {
