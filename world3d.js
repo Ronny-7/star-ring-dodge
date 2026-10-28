@@ -32,6 +32,117 @@ let rockSet = null;
 let spaceEnvironment = null;
 let lastGates = [];
 const gateLabelCache = new Map();
+const fxPool = { debris: [], flashes: [], rings: [], sparks: [] };
+let fxState = null;
+let fxTuning = null;
+let fxSource = null;
+let fxRingGeometry = null;
+
+function releaseFx(effect) {
+  for (const mesh of effect.objects) {
+    scene.remove(mesh);
+    mesh.material.dispose();
+    if (mesh.isPoints) mesh.geometry.dispose();
+  }
+}
+
+function clearFx() {
+  for (const pool of Object.values(fxPool)) {
+    pool.forEach(releaseFx);
+    pool.length = 0;
+  }
+}
+
+function buildFx(kind, event) {
+  const reduced = Math.min(window.innerWidth, window.innerHeight) < 480 || navigator.maxTouchPoints > 0;
+  const effect = { born: event.born, objects: [], life: 0, radius: event.radius };
+  const origin = new THREE.Vector3(event.x, event.y, event.z);
+  const velocity = () => new THREE.Vector3().randomDirection().multiplyScalar(60 + Math.random() * 100);
+  const color = event.elite ? 0xffbd65 : 0xffffff;
+  if (kind === "debris") {
+    const form = rockFormFor(event);
+    const count = reduced ? fxTuning.fxShardCountMobile : event.elite ? 6 : fxTuning.fxShardCount;
+    effect.life = 0.45 + Math.random() * 0.25;
+    for (let i = 0; i < count; i += 1) {
+      const material = form.material.clone();
+      material.transparent = true;
+      material.color.set(`rgb(${event.mineralTint})`).lerp(WHITE, 0.85);
+      const shard = new THREE.Mesh(form.geometry, material);
+      shard.scale.setScalar(event.radius * (0.16 + Math.random() * 0.14));
+      shard.userData.velocity = velocity();
+      shard.userData.origin = origin.clone().addScaledVector(shard.userData.velocity.clone().normalize(), event.radius * 0.35);
+      shard.userData.spin = new THREE.Vector3().randomDirection().multiplyScalar(5 + Math.random() * 7);
+      effect.objects.push(shard);
+    }
+  } else if (kind === "flashes") {
+    effect.life = 0.1;
+    const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: pickupGlowTexture, color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+    flash.scale.setScalar(event.radius * 4);
+    effect.objects.push(flash);
+  } else if (kind === "rings") {
+    effect.life = 0.35;
+    effect.radius *= event.elite ? 1.4 : 1;
+    effect.objects.push(new THREE.Mesh(fxRingGeometry, new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
+  } else {
+    effect.life = 0.25 + Math.random() * 0.15;
+    const count = event.hit ? 3 + Math.floor(Math.random() * 3) : 20 * (event.elite ? 2 : 1);
+    const positions = new Float32Array((reduced ? Math.ceil(count / 2) : count) * 3);
+    const velocities = new Float32Array(positions.length);
+    for (let i = 0; i < velocities.length; i += 3) velocity().multiplyScalar(2.5).toArray(velocities, i);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const sparks = new THREE.Points(geometry, new THREE.PointsMaterial({ color: event.elite ? 0xffbd65 : 0xb5efff, size: 4, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    sparks.userData.velocities = velocities;
+    // Positions expand after creation, so the initial zero-size bound is stale.
+    sparks.frustumCulled = false;
+    effect.objects.push(sparks);
+  }
+  for (const object of effect.objects) {
+    object.userData.origin ||= origin;
+    object.position.copy(object.userData.origin);
+    scene.add(object);
+  }
+  return effect;
+}
+
+function syncFx(state) {
+  if (fxSource !== state.fx) {
+    clearFx();
+    fxSource = state.fx;
+  }
+  for (const [kind, pool] of Object.entries(fxPool)) {
+    for (const event of state.fx[kind].splice(0)) {
+      if (pool.length >= fxTuning.fxMaxDebrisGroups) releaseFx(pool.shift());
+      pool.push(buildFx(kind, event));
+    }
+    for (let i = pool.length - 1; i >= 0; i -= 1) {
+      const effect = pool[i];
+      // Simulation time keeps manual ticks and rendering from double-aging FX.
+      const age = state.pulseTime - effect.born;
+      if (age >= effect.life) {
+        releaseFx(effect);
+        pool.splice(i, 1);
+        continue;
+      }
+      const progress = Math.max(0, age / effect.life);
+      for (const object of effect.objects) {
+        object.material.opacity = (kind === "flashes" ? 0.9 : 1) * (1 - progress);
+        if (kind === "debris") {
+          object.position.copy(object.userData.origin).addScaledVector(object.userData.velocity, age);
+          const spin = object.userData.spin;
+          object.rotation.set(spin.x * age, spin.y * age, spin.z * age);
+        } else if (kind === "rings") {
+          object.quaternion.copy(camera.quaternion);
+          object.scale.setScalar(effect.radius * (1 + 0.6 * progress));
+        } else if (kind === "sparks") {
+          const position = object.geometry.attributes.position;
+          for (let j = 0; j < position.array.length; j += 1) position.array[j] = object.userData.velocities[j] * age;
+          position.needsUpdate = true;
+        }
+      }
+    }
+  }
+}
 
 const MAX_ANISOTROPY_CACHE = new Map();
 
@@ -527,9 +638,21 @@ function pickupDebugReport() {
 }
 
 function getDebugReport() {
+  if (fxState) syncFx(fxState);
+  const lights = scene.children.filter((child) => child.isLight).length;
   const rocks = rockDebugReport();
   const base = {
     fighter: null,
+    lights,
+    fx: {
+      debrisGroups: fxPool.debris.length,
+      shards: fxPool.debris.reduce((n, effect) => n + effect.objects.length, 0),
+      sparks: fxPool.sparks.length,
+      rings: fxPool.rings.length,
+      flashes: fxPool.flashes.length,
+      materials: Object.values(fxPool).flat().reduce((n, effect) => n + effect.objects.length, 0),
+      lights
+    },
     rocks,
     pickups: pickupDebugReport(),
     world: worldSize ? { ...worldSize } : null,
@@ -571,6 +694,8 @@ function getDebugReport() {
 }
 
 export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff }) {
+  fxTuning = tuning;
+  fxRingGeometry = new THREE.TorusGeometry(1, 0.08, 8, 32);
   worldSize = { width: world.width, height: world.height, depth: world.depth };
   renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("game"), antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, tuning.dprCap || 2));
@@ -705,6 +830,10 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       renderer.render(scene, camera);
     },
     dispose() {
+      clearFx();
+      fxRingGeometry.dispose();
+      fxState = null;
+      fxSource = null;
       disposeGateLabels();
       disposeObject(scene);
       starField?.material?.map?.dispose();
@@ -737,6 +866,8 @@ function shipBasis(yaw, pitch) {
 }
 
 function syncDynamic(state) {
+  fxState = state;
+  syncFx(state);
   const seenRocks = new Set();
   for (const asteroid of state.asteroids) {
     seenRocks.add(asteroid);

@@ -428,6 +428,31 @@
       );
       api.clearAsteroids();
 
+      api.startGame();
+      api.clearAsteroids();
+      api.setPlayerPosition(30000, 30000, 30000, 0, 0);
+      const before = api.getWorldDebug();
+      const target = api.spawnAsteroidAt(30000, 30000, 30200, 30, "angular");
+      target.hp = 0;
+      api.destroyAsteroidAt(30000, 30000, 30200, 30, false);
+      win.dispatchEvent(new win.Event("resize"));
+      await nextFrames(win, 2);
+      const burst = api.getWorldDebug().fx;
+      check(
+        "destroyed asteroids throw shards, a flash, a ring and sparks",
+        burst.debrisGroups === 1 && burst.shards > 0 && burst.shards <= 6 &&
+          burst.flashes > 0 && burst.sparks > 0 && burst.rings > 0 &&
+          burst.lights === before.lights
+      );
+      for (let i = 0; i < 12; i += 1) api.destroyAsteroidAt(30400 + i * 20, 30000, 30200, 30, false);
+      win.dispatchEvent(new win.Event("resize"));
+      await nextFrames(win, 2);
+      const capped = api.getWorldDebug().fx;
+      check("debris groups are capped and cleaned up", capped.debrisGroups <= 8 && capped.shards <= 48 && capped.materials <= 72);
+      for (let i = 0; i < 90; i += 1) api.tick(1 / 60);
+      const settled = api.getWorldDebug().fx;
+      check("effects expire and release their materials", settled.debrisGroups === 0 && settled.shards === 0 && settled.sparks === 0 && settled.rings === 0 && settled.flashes === 0 && settled.materials === 0);
+
       const pad = 60 + 26;
       const limit = 60000 - pad;
       const faces = [

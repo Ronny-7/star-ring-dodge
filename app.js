@@ -182,15 +182,6 @@ function toggleSfx() {
   syncToggleButton(sfxBtn, enabled);
 }
 
-const particlePool = [];
-function acquireParticle(x, y, z, vx, vy, vz, life, size, color) {
-  const p = particlePool.pop() || {};
-  p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz;
-  p.life = life; p.size = size; p.color = color; p.drag = 0.988;
-  return p;
-}
-function releaseParticle(p) { particlePool.push(p); }
-
 const musicBtn = document.getElementById("settings-music-btn");
 const sfxBtn = document.getElementById("settings-sfx-btn");
 const scoreEl = document.getElementById("score");
@@ -405,7 +396,6 @@ const state = {
     pitch: 0,
     roll: 0,
     thrust: 0,
-    trailTimer: 0,
     boost: false
   },
   // Camera lags the ship so turns read as motion rather than a snap.
@@ -426,9 +416,7 @@ const state = {
   powerUps: [],
 
   lasers: [],
-  messages: [],
-  particles: [],
-  rings: [],
+  fx: { debris: [], flashes: [], rings: [], sparks: [] },
   warpFlash: { timer: 0, duration: 0, tint: "98,228,255", secondaryTint: "123,140,255" }
 };
 
@@ -510,16 +498,13 @@ function resetGame() {
   state.player.pitch = 0;
   state.player.roll = 0;
   state.player.thrust = 0;
-  state.player.trailTimer = 0;
   state.player.boost = false;
   snapCameraToShip();
   state.asteroids = [];
   state.cores = [];
   state.powerUps = [];
   state.lasers = [];
-  state.messages = [];
-  state.particles = [];
-  state.rings = [];
+  state.fx = { debris: [], flashes: [], rings: [], sparks: [] };
   state.warpFlash.timer = 0;
   state.warpFlash.duration = 0;
   state.warpFlash.tint = regions[DEFAULT_REGION_ID].tint;
@@ -806,7 +791,6 @@ function updateEliteFlow(dt, region) {
 
   state.eliteTimer = 0;
   if (!spawnEliteAsteroid(region)) return;
-  spawnMessage(L("eliteApproach"), 0, 0, "#ffb59e", 1.4);
 }
 
 function steerEliteAsteroid(elite, dt) {
@@ -1051,16 +1035,8 @@ function togglePause() {
 
 /* ---------- 主循环 ---------- */
 
-function hasActiveMovement() {
-  return inputController.hasActiveMovement();
-}
-
 function update(dt) {
   state.pulseTime += dt;
-
-  updateParticles(dt);
-  updateRings(dt);
-  updateMessages(dt);
 
   if (!state.running || state.paused) return;
 
@@ -1112,7 +1088,6 @@ function update(dt) {
 
   movePlayer(dt);
   snapCameraToShip();
-  spawnThrusterTrail(dt);
   moveAsteroids(dt);
   moveLasers(dt);
   updatePickups(dt);
@@ -1239,31 +1214,6 @@ function getActiveCamera() {
   });
 }
 
-function spawnThrusterTrail(dt) {
-  if (!hasActiveMovement()) {
-    state.player.trailTimer = 0;
-    return;
-  }
-  state.player.trailTimer += dt;
-  if (state.player.trailTimer < getTuningValue("thrusterTrailInterval", 0.035)) return;
-  state.player.trailTimer = 0;
-  const color = state.shipColor;
-  const basis = projection.makeBasis(state.player.yaw, state.player.pitch);
-  for (let i = 0; i < 2; i += 1) {
-    // Exhaust fires backwards out of the engine, along -forward.
-    state.particles.push(acquireParticle(
-      state.player.x - basis.forward.x * 20 + (Math.random() - 0.5) * 14,
-      state.player.y - basis.forward.y * 20,
-      state.player.z - basis.forward.z * 20 + (Math.random() - 0.5) * 14,
-      -basis.forward.x * (150 + Math.random() * 80) + (Math.random() - 0.5) * 30,
-      -basis.forward.y * (150 + Math.random() * 80) + (Math.random() - 0.5) * 30,
-      -basis.forward.z * (150 + Math.random() * 80) + (Math.random() - 0.5) * 30,
-      0.2 + Math.random() * 0.2,
-      2 + Math.random() * 2.4,
-      Math.random() > 0.5 ? color.hi : rgba(color.rgb, 0.8)
-    ));
-  }
-}
 
 function moveAsteroids(dt) {
   const pad = getTuningValue("boundaryPadding", 60);
@@ -1330,46 +1280,6 @@ function updatePickups(dt) {
   });
 }
 
-function updateParticles(dt) {
-  let alive = 0;
-  for (let i = 0; i < state.particles.length; i += 1) {
-    const p = state.particles[i];
-    p.life -= dt;
-    if (p.life > 0) {
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.z += p.vz * dt;
-      p.vx *= p.drag ?? 0.988;
-      p.vy *= p.drag ?? 0.988;
-      p.vz *= p.drag ?? 0.988;
-      state.particles[alive++] = p;
-    } else {
-      releaseParticle(p);
-    }
-  }
-  state.particles.length = alive;
-}
-
-function updateRings(dt) {
-  let alive = 0;
-  for (const ring of state.rings) {
-    ring.life -= dt;
-    ring.radius += ring.speed * dt;
-    if (ring.life > 0) state.rings[alive++] = ring;
-  }
-  state.rings.length = alive;
-}
-
-function updateMessages(dt) {
-  let alive = 0;
-  for (const message of state.messages) {
-    message.life -= dt;
-    message.y += message.vy * dt;
-    if (message.life > 0) state.messages[alive++] = message;
-  }
-  state.messages.length = alive;
-}
-
 /* ---------- 射击 ---------- */
 
 function fireLaser() {
@@ -1406,17 +1316,6 @@ function spawnLaser(x, y, z, basis, speed) {
     vz: basis.forward.z * speed,
     life: tuning.laserLife * 1.6
   });
-  for (let i = 0; i < 4; i += 1) {
-    state.particles.push(acquireParticle(
-      x, y, z,
-      basis.forward.x * (120 + Math.random() * 140) + (Math.random() - 0.5) * 60,
-      basis.forward.y * (120 + Math.random() * 140) + (Math.random() - 0.5) * 60,
-      basis.forward.z * (120 + Math.random() * 140) + (Math.random() - 0.5) * 60,
-      0.1 + Math.random() * 0.1,
-      1.6 + Math.random() * 2,
-      Math.random() > 0.5 ? "#77ebff" : "#b7f4ff"
-    ));
-  }
 }
 
 /* ---------- 碰撞 ---------- */
@@ -1429,7 +1328,6 @@ function handleCollisions() {
       const asteroid = state.asteroids[i];
       if (!isWithinRadius3d(asteroid.x, asteroid.y, asteroid.z, state.player.x, state.player.y, state.player.z, asteroid.radius + state.player.radius)) continue;
 
-      spawnBurst(asteroid.x, asteroid.y, asteroid.z, 18, ["#ff8ea1", "#ffc5cf", "#ffd7a1"]);
       if (asteroid.elite) {
         repelPlayerFromElite(asteroid);
       } else {
@@ -1441,8 +1339,6 @@ function handleCollisions() {
         state.invulnerabilityTimer = 0.3;
         state.flashTimer = 0;
         triggerScreenShake(0.2, 12);
-        spawnShieldImpactEffect(state.player.x, state.player.y, state.player.z);
-        spawnMessage(L("shieldMinus"), state.player.x, state.player.y, "#8affd1");
         playSound("hurt");
         break;
       }
@@ -1452,8 +1348,6 @@ function handleCollisions() {
       state.invulnerabilityTimer = tuning.hitInvulnerability;
       state.flashTimer = tuning.hitFlashDuration;
       triggerScreenShake(0.28, 18);
-      spawnHullImpactEffect(state.player.x, state.player.y, state.player.z);
-      spawnMessage(L("hullMinus"), state.player.x, state.player.y, "#ff8ea1");
       playSound("hurt");
       evaluateAchievements();
       if (state.health <= 0) {
@@ -1478,31 +1372,12 @@ function handleCollisions() {
       asteroid.hp -= 1;
       asteroid.hitFlash = 1;
       const isLarge = asteroid.radius > tuning.largeAsteroidThreshold;
-      spawnBurst(laser.x, laser.y, laser.z, isLarge ? 9 : 7, ["#74ecff", "#d2fbff", "#8c9bb7"]);
-      spawnImpactEffect(laser.x, laser.y, laser.z, isLarge);
       triggerScreenShake(0.08, isLarge ? 6 : 4);
 
       if (asteroid.hp <= 0) {
-        state.stats.destroyedAsteroids += 1;
-        state.asteroids.splice(j, 1);
-        if (asteroid.elite) {
-          const eliteScore = Math.round(getTuningValue("scoreElite", 140));
-          state.score += eliteScore;
-          state.stats.destroyedElites += 1;
-          spawnEliteFragments(asteroid, getCurrentRegion());
-          spawnBurst(asteroid.x, asteroid.y, asteroid.z, 34, ["#7fe8ff", "#dce7ff", "#ffd7a1", "#95a5bf"]);
-          spawnExplosionEffect(asteroid.x, asteroid.y, asteroid.z, asteroid.radius, true);
-          spawnMessage(L("eliteBreak", eliteScore), asteroid.x, asteroid.y, rgba(asteroid.mineralTint, 0.95));
-          triggerScreenShake(0.36, 20);
-        } else {
-          state.score += tuning.scoreAsteroid;
-          spawnBurst(asteroid.x, asteroid.y, asteroid.z, isLarge ? 24 : 16, ["#7fe8ff", "#dce7ff", "#95a5bf"]);
-          spawnExplosionEffect(asteroid.x, asteroid.y, asteroid.z, asteroid.radius, isLarge);
-          triggerScreenShake(isLarge ? 0.18 : 0.12, isLarge ? 12 : 7);
-        }
-        playSound("explode");
-        evaluateAchievements();
+        destroyAsteroid(asteroid, { elite: asteroid.elite });
       } else {
+        queueFx("sparks", { ...asteroid, x: laser.x, y: laser.y, z: laser.z, hit: true });
         playSound("hit");
       }
       break;
@@ -1516,8 +1391,6 @@ function handleCollisions() {
     state.cores.splice(i, 1);
     state.score += tuning.scoreCore;
     state.stats.collectedCores += 1;
-    spawnBurst(core.x, core.y, core.z, 12, ["#8affd1", "#f3fffd", "#62e4ff"]);
-    spawnMessage(L("corePlus"), core.x, core.y, "#8affd1");
     playSound("pickup");
     evaluateAchievements();
   }
@@ -1528,13 +1401,8 @@ function handleCollisions() {
     state.powerUps.splice(i, 1);
     if (powerUp.type === "shield") {
       state.shieldCharges = 1;
-      spawnBurst(powerUp.x, powerUp.y, powerUp.z, 16, ["#8affd1", "#d9fffb", "#62e4ff"]);
-      spawnShieldImpactEffect(state.player.x, state.player.y, state.player.z);
-      spawnMessage(L("shieldReady"), powerUp.x, powerUp.y, "#8affd1");
     } else {
       state.doubleShotTimer = tuning.doubleShotDuration;
-      spawnBurst(powerUp.x, powerUp.y, powerUp.z, 16, ["#ffd7a1", "#ffb59e", "#ff8ea1"]);
-      spawnMessage(L("doubleFire"), powerUp.x, powerUp.y, "#ffb59e");
     }
     triggerScreenShake(0.12, 8);
     playSound("pickup");
@@ -1543,66 +1411,31 @@ function handleCollisions() {
 
 /* ---------- 特效 ---------- */
 
-function spawnRing(x, y, z, radius, speed, color, life = getTuningValue("impactRingLife", 0.34), lineWidth = 2) {
-  state.rings.push({ x, y, z, radius, speed, color, life, maxLife: life, lineWidth });
+function queueFx(kind, asteroid) {
+  const queue = state.fx[kind];
+  queue.push({ ...asteroid, born: state.pulseTime });
+  if (queue.length > tuning.fxMaxDebrisGroups) queue.shift();
 }
 
-function spawnDirectionalBurst(x, y, z, count, colors, speedBase, speedRange) {
-  for (let i = 0; i < count; i += 1) {
-    const p = acquireParticle(
-      x, y, z,
-      (Math.random() - 0.5) * 2 * (speedBase + Math.random() * speedRange) * 0.5,
-      (Math.random() - 0.5) * 2 * (speedBase + Math.random() * speedRange) * 0.5,
-      (Math.random() - 0.5) * 2 * (speedBase + Math.random() * speedRange) * 0.5,
-      0.18 + Math.random() * 0.28,
-      1.2 + Math.random() * 3.2,
-      colors[Math.floor(Math.random() * colors.length)]
-    );
-    p.drag = 0.974;
-    state.particles.push(p);
+function destroyAsteroid(asteroid, { elite }) {
+  const isLarge = asteroid.radius > tuning.largeAsteroidThreshold;
+  state.stats.destroyedAsteroids += 1;
+  const index = state.asteroids.indexOf(asteroid);
+  if (index !== -1) state.asteroids.splice(index, 1);
+  const effect = { ...asteroid, elite };
+  for (const kind of ["debris", "flashes", "rings", "sparks"]) queueFx(kind, effect);
+  if (elite) {
+    const eliteScore = Math.round(getTuningValue("scoreElite", 140));
+    state.score += eliteScore;
+    state.stats.destroyedElites += 1;
+    spawnEliteFragments(asteroid, getCurrentRegion());
+    triggerScreenShake(0.36, 20);
+  } else {
+    state.score += tuning.scoreAsteroid;
+    triggerScreenShake(isLarge ? 0.18 : 0.12, isLarge ? 12 : 7);
   }
-}
-
-function spawnBurst(x, y, z, count, colors) {
-  for (let i = 0; i < count; i += 1) {
-    const s = 50 + Math.random() * 200;
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(2 * Math.random() - 1);
-    state.particles.push(acquireParticle(
-      x, y, z,
-      Math.sin(phi) * Math.cos(theta) * s,
-      Math.sin(phi) * Math.sin(theta) * s,
-      Math.cos(phi) * s,
-      0.22 + Math.random() * 0.45,
-      1.4 + Math.random() * 3.6,
-      colors[Math.floor(Math.random() * colors.length)]
-    ));
-  }
-}
-
-function spawnImpactEffect(x, y, z, isLarge) {
-  spawnRing(x, y, z, isLarge ? 10 : 7, isLarge ? 130 : 110, "rgba(116,236,255,0.88)", 0.24, isLarge ? 2.4 : 1.8);
-  spawnDirectionalBurst(x, y, z, isLarge ? 10 : 7, ["#74ecff", "#d2fbff", "#8c9bb7"], 90, 210);
-}
-
-function spawnExplosionEffect(x, y, z, radius, isLarge) {
-  spawnRing(x, y, z, radius * 0.55, isLarge ? 220 : 170, "rgba(127,232,255,0.82)", isLarge ? 0.44 : 0.36, isLarge ? 3.2 : 2.4);
-  spawnRing(x, y, z, radius * 0.25, isLarge ? 150 : 120, "rgba(255,215,161,0.62)", 0.28, 1.8);
-  spawnBurst(x, y, z, isLarge ? 22 : 14, ["#7fe8ff", "#dce7ff", "#ffd7a1", "#95a5bf"]);
-}
-
-function spawnShieldImpactEffect(x, y, z) {
-  spawnRing(x, y, z, state.player.radius + 10, 170, "rgba(138,255,209,0.9)", 0.34, 3.2);
-  spawnBurst(x, y, z, 14, ["#8affd1", "#d4fff4", "#62e4ff"]);
-}
-
-function spawnHullImpactEffect(x, y, z) {
-  spawnRing(x, y, z, state.player.radius + 6, 150, "rgba(255,111,135,0.86)", 0.34, 3);
-  spawnBurst(x, y, z, 16, ["#ff8ea1", "#ffd7a1", "#fff0d6"]);
-}
-
-function spawnMessage(text, x, y, color = "#f2f7ff", life = 0.9) {
-  state.messages.push({ text, x, y, z: 120, vy: -40, color, life });
+  playSound("explode");
+  evaluateAchievements();
 }
 
 /* ---------- 成就与结算 ---------- */
@@ -1626,7 +1459,7 @@ const metricGetters = {
   runs: () => profile.totals.runs + 1
 };
 
-function evaluateAchievements({ silent = false } = {}) {
+function evaluateAchievements() {
   let unlocked = false;
   for (const achievement of achievements) {
     if (profile.unlocked[achievement.id]) continue;
@@ -1635,15 +1468,6 @@ function evaluateAchievements({ silent = false } = {}) {
     profile.unlocked[achievement.id] = Date.now();
     runAchievementUnlocks.push(achievement.id);
     unlocked = true;
-    if (!silent) {
-      spawnMessage(
-        `${profileUi[state.lang].achievementPrefix}${achLabel(achievement)}`,
-        state.player.x,
-        state.player.y,
-        profileUi.achievementColor,
-        profileUi.toastLife
-      );
-    }
   }
   if (unlocked) storageController.saveProfile(localStorage, profileKey, profile);
 }
@@ -1667,7 +1491,7 @@ function endGame() {
   }
 
   syncHud();
-  evaluateAchievements({ silent: true });
+  evaluateAchievements();
   recordRunToProfile();
 
   const overlayStatList = [
@@ -2006,7 +1830,7 @@ function startLoop() {
 
 // three.js is an ES module; the world boots asynchronously and the HUD-only
 // fallback covers the gap.
-window.starRingWorldReady = import("./world3d.js?v=4.2.0")
+window.starRingWorldReady = import("./world3d.js?v=4.2.0-fx3")
   .then((mod) => {
     world3d = mod.createWorld({ world: state.world, tuning, skin: activeSkin, color: state.shipColor.mid });
     world3d.resize(cw, ch);
@@ -2048,6 +1872,12 @@ if (new URLSearchParams(window.location.search).has("test")) {
     endGame,
     spawnAsteroid,
     handleCollisions,
+    destroyAsteroidAt: (x, y, z, radius = 30, elite = false) => {
+      const asteroid = state.asteroids.find((a) => a.x === x && a.y === y && a.z === z)
+        || makeAsteroid(x, y, z, radius, 0, 0, 0, getCurrentRegion());
+      asteroid.elite = elite;
+      destroyAsteroid(asteroid, { elite });
+    },
     spawnAsteroidAt: (x, y, z, radius, form) => {
       const asteroid = makeAsteroid(x, y, z, radius || 30, 0, 0, 0, getCurrentRegion());
       if (form) asteroid.form = form;
