@@ -246,7 +246,7 @@
       check(
         "skin switching restores the fighter textures",
         firstFighter &&
-          deltaFighter === null &&
+          deltaFighter &&
           restoredFighter &&
           restoredFighter.textureCount === firstFighter.textureCount
       );
@@ -493,6 +493,26 @@
           afterReset.stats.disposedMaterials === afterReset.stats.createdMaterials &&
           afterReset.stats.disposedGeometries === afterReset.stats.createdGeometries &&
           afterReset.stats.sharedGeometryDisposals === 0);
+
+      for (const skin of ["default", "delta", "saucer"]) {
+        api.selectSkin(skin);
+        const report = api.getWorldDebug().fighter;
+        check(
+          `skin ${skin} exposes the full ship contract`,
+          Boolean(report) &&
+            ["leftWing", "rightWing", "leftTail", "rightTail", "cockpit", "leftEngine", "rightEngine"].every(
+              (key) => report.parts[key] && Number.isFinite(report.parts[key].x)
+            ) &&
+            report.navLights.length === 2 &&
+            report.navLights.some((light) => light.color === "#ff4d5e" && light.x > 0) &&
+            report.navLights.some((light) => light.color === "#4dff9e" && light.x < 0) &&
+            report.flameCount >= 2 &&
+            report.bounds.x > 0 &&
+            report.bounds.y > 0 &&
+            report.bounds.z > 0
+        );
+      }
+      api.selectSkin("default");
 
       const pad = 60 + 26;
       const limit = 60000 - pad;

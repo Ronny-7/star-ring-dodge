@@ -5,6 +5,7 @@ import { createFighterModel, createStudioEnvironment } from "./fighter-model.js"
 import { createPickupModel } from "./pickup-models.js";
 import { createRockSet } from "./rock-models.js";
 import { createSpaceEnvironment } from "./space-environment.js";
+import { createShipMaterials } from "./ship-materials.js";
 
 const sceneObjects = {
   rocks: new Map(),
@@ -278,43 +279,11 @@ function buildStarField(count) {
 
 const WHITE = new THREE.Color(0xffffff);
 
-function makeShipMaterials(base, hullTexture) {
-  const hull = new THREE.MeshStandardMaterial({
-    map: hullTexture,
-    color: base.clone().multiplyScalar(0.46),
-    metalness: 0.8,
-    roughness: 0.32,
-    emissive: base.clone().multiplyScalar(0.16)
-  });
-  const panel = new THREE.MeshStandardMaterial({
-    map: hullTexture,
-    color: base.clone().multiplyScalar(0.2),
-    metalness: 0.88,
-    roughness: 0.4,
-    emissive: base.clone().multiplyScalar(0.05)
-  });
-  const accent = new THREE.MeshStandardMaterial({
-    color: base.clone().lerp(WHITE, 0.05),
-    emissive: base.clone(),
-    emissiveIntensity: 0.6,
-    metalness: 0.35,
-    roughness: 0.26
-  });
-  const engine = new THREE.MeshBasicMaterial({ color: base.clone().lerp(WHITE, 0.25) });
-  const glass = new THREE.MeshStandardMaterial({
-    color: 0x07111f,
-    metalness: 1,
-    roughness: 0.06,
-    emissive: base.clone().multiplyScalar(0.2)
-  });
-  return { hull, panel, accent, engine, glass };
+function tintShip(group, color) {
+  group.userData.applyLivery(color);
 }
 
-function tintShip(group, color) {
-  if (group.userData.applyLivery) {
-    group.userData.applyLivery(color);
-    return;
-  }
+function applyLegacyLivery(group, color) {
   const base = new THREE.Color(color);
   const m = group.userData.materials;
   if (!m) return;
@@ -357,13 +326,15 @@ function addShipGlow(group, x, y, z) {
   group.userData.glow = glow;
 }
 
-function addWingtip(group, x, y, z, color) {
+function addWingtip(group, x, y, z) {
+  const material = x > 0 ? group.userData.materials.navRed : group.userData.materials.navGreen;
   const tip = new THREE.Mesh(
     new THREE.SphereGeometry(3.2, 10, 10),
-    new THREE.MeshBasicMaterial({ color })
+    material
   );
   tip.position.set(x, y, z);
   group.add(tip);
+  group.userData.navLights.push({ color: "#" + material.color.getHexString(), x });
 }
 
 function buildDelta(group) {
@@ -390,6 +361,9 @@ function buildDelta(group) {
   const wing = new THREE.Mesh(wingGeometry, hull);
   wing.castShadow = true;
   group.add(wing);
+  // The legacy delta is one continuous wing mesh, shared by both wing keys.
+  group.userData.parts.leftWing = wing;
+  group.userData.parts.rightWing = wing;
 
   const spine = new THREE.Mesh(new THREE.BoxGeometry(9, 7, 48), panel);
   spine.position.set(0, 6, -6);
@@ -403,12 +377,14 @@ function buildDelta(group) {
   canopy.position.set(0, 11, 6);
   canopy.scale.set(0.9, 0.8, 2.1);
   group.add(canopy);
+  group.userData.parts.cockpit = canopy;
 
   for (const side of [-1, 1]) {
     const fin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 14, 16), panel);
     fin.position.set(side * 11, 12, -26);
     fin.rotation.z = side * 0.18;
     group.add(fin);
+    group.userData.parts[side < 0 ? "leftTail" : "rightTail"] = fin;
 
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(26, 0.7, 2), accent);
     stripe.position.set(side * 34, 1.2, -8);
@@ -419,10 +395,11 @@ function buildDelta(group) {
     engineHouse.rotation.x = Math.PI / 2;
     engineHouse.position.set(side * 13, 1, -32);
     group.add(engineHouse);
+    group.userData.parts[side < 0 ? "leftEngine" : "rightEngine"] = engineHouse;
 
     addFlame(group, side * 13, 1, -43, 6, 44);
     addFlame(group, side * 13, 1, -43, 2.8, 26);
-    addWingtip(group, side * 57, -1, -24, side > 0 ? 0x8affd1 : 0xff8ea1);
+    addWingtip(group, side * 57, -1, -24);
   }
 
   const engine = group.userData.materials.engine;
@@ -441,6 +418,9 @@ function buildSaucer(group) {
   const disc = new THREE.Mesh(new THREE.CylinderGeometry(64, 58, 10, 32), hull);
   disc.castShadow = true;
   group.add(disc);
+  // The legacy saucer's continuous disc stands in for both wing surfaces.
+  group.userData.parts.leftWing = disc;
+  group.userData.parts.rightWing = disc;
 
   const belly = new THREE.Mesh(
     new THREE.SphereGeometry(40, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
@@ -458,6 +438,7 @@ function buildSaucer(group) {
   dome.position.y = 5;
   dome.scale.y = 0.7;
   group.add(dome);
+  group.userData.parts.cockpit = dome;
 
   const ring = new THREE.Mesh(new THREE.TorusGeometry(68, 1.8, 8, 48), accent);
   ring.rotation.x = Math.PI / 2;
@@ -468,10 +449,13 @@ function buildSaucer(group) {
     const angle = (Math.PI * 2 * i) / 4 + Math.PI / 4;
     const light = new THREE.Mesh(
       new THREE.SphereGeometry(3, 10, 10),
-      new THREE.MeshBasicMaterial({ color: i % 2 ? 0x8affd1 : 0xff8ea1 })
+      i < 2
+        ? (i === 0 ? group.userData.materials.navRed : group.userData.materials.navGreen)
+        : new THREE.MeshBasicMaterial({ color: i % 2 ? 0x8affd1 : 0xff8ea1 })
     );
     light.position.set(Math.cos(angle) * 60, -1, Math.sin(angle) * 60);
     group.add(light);
+    if (i < 2) group.userData.navLights.push({ color: "#" + light.material.color.getHexString(), x: light.position.x });
   }
 
   for (const side of [-1, 1]) {
@@ -479,6 +463,9 @@ function buildSaucer(group) {
     engineHouse.rotation.x = Math.PI / 2;
     engineHouse.position.set(side * 22, -3, -34);
     group.add(engineHouse);
+    group.userData.parts[side < 0 ? "leftEngine" : "rightEngine"] = engineHouse;
+    // No tail surfaces exist yet: the rear nacelles also stand in for tails.
+    group.userData.parts[side < 0 ? "leftTail" : "rightTail"] = engineHouse;
 
     addFlame(group, side * 22, -3, -42, 5.5, 34);
     addFlame(group, side * 22, -3, -42, 2.4, 20);
@@ -501,24 +488,35 @@ function buildShip(color, skin = "default") {
   if (skin !== "delta" && skin !== "saucer") {
     const fighter = createFighterModel({ environment: fighterEnvironment, color });
     fighter.scale.setScalar(1);
+    fighter.userData.bounds = localBounds(fighter.userData.hullRoot, fighter);
     return fighter;
   }
 
   const base = new THREE.Color(color);
   const hullTexture = makeHullTexture();
-  const materials = makeShipMaterials(base, hullTexture);
+  const materials = createShipMaterials({ color: base, environment: fighterEnvironment, hullTexture });
   const group = new THREE.Group();
   group.userData = {
+    parts: {},
+    navLights: [],
     materials,
     flames: [],
     ring: null,
     glow: null,
-    ownTextures: [hullTexture]
+    ownTextures: [hullTexture],
+    applyLivery: (nextColor) => applyLegacyLivery(group, nextColor)
   };
 
   if (skin === "saucer") buildSaucer(group);
   else buildDelta(group);
 
+  const hullRoot = new THREE.Group();
+  for (const child of [...group.children]) {
+    if (!group.userData.flames.includes(child) && child !== group.userData.glow) hullRoot.add(child);
+  }
+  group.add(hullRoot);
+  group.userData.hullRoot = hullRoot;
+  group.userData.bounds = localBounds(hullRoot, group);
   tintShip(group, base);
   group.scale.setScalar(1.6);
   return group;
@@ -679,7 +677,7 @@ function getDebugReport() {
     environment: spaceEnvironment?.getDebugReport() ?? null,
     gates: lastGates
   };
-  const fighter = shipGroup && currentSkin === "default" ? shipGroup.userData : null;
+  const fighter = shipGroup?.userData;
   if (!fighter || !fighter.hullRoot) return base;
 
   shipGroup.updateWorldMatrix(true, true);
@@ -706,6 +704,7 @@ function getDebugReport() {
       hullColor: "#" + materials.hull.color.getHexString(),
       engineColor: "#" + materials.engine.color.getHexString(),
       flames: flamePositions,
+      flameCount: flames.length,
       navLights: navLights || [],
       textureCount: (ownTextures || []).length
     }
