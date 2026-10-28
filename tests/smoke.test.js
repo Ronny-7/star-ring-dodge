@@ -141,6 +141,42 @@ test("touch boost engages high and releases low", () => {
   assert.equal(nextBoostState(false, 0.85, 0.88, 0.78), false);
 });
 
+test("pointer boost uses the tuning object, not a copied threshold", () => {
+  const { createInputController } = require("../input.js");
+  // 40px of a 48px stick is scale 0.833: below the real 0.88 edge, above 0.5.
+  const engage = (touchBoostOn) => {
+    const listeners = {};
+    const pad = {
+      style: { setProperty() {} },
+      classList: { toggle() {} },
+      setPointerCapture() {},
+      addEventListener(type, fn) { listeners[type] = fn; }
+    };
+    const input = createInputController({
+      windowObject: { addEventListener() {} },
+      documentObject: {
+        addEventListener() {},
+        getElementById() { return null; },
+        querySelector(selector) { return selector === "[data-gesture-pad]" ? pad : null; },
+        querySelectorAll() { return []; }
+      },
+      tuning: { touchBoostOn, touchBoostOff: touchBoostOn - 0.1 }
+    });
+    input.bind();
+    const point = (type, clientY) => listeners[type]({
+      pointerId: 1,
+      clientX: 0,
+      clientY,
+      preventDefault() {}
+    });
+    point("pointerdown", 0);
+    point("pointermove", -40);
+    return input.isBoosting();
+  };
+  assert.equal(engage(0.5), true);
+  assert.equal(engage(0.95), false);
+});
+
 test("render loop updates and draws one frame", () => {
   const callbacks = [];
   const calls = [];

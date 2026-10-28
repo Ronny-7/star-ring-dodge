@@ -31,7 +31,8 @@
     toggleSfx,
     selectSkin,
     selectColor,
-    getCanvas
+    getCanvas,
+    tuning = {}
   } = {}) {
     const inputWindow = windowObject || (typeof window !== "undefined" ? window : null);
     const inputDocument = documentObject || (typeof document !== "undefined" ? document : null);
@@ -148,9 +149,8 @@
       const rawX = isForceLandscapeMode() ? screenY : screenX;
       const rawY = isForceLandscapeMode() ? -screenX : screenY;
       const distance = Math.hypot(rawX, rawY);
-      const tuning = getState?.()?.tuning || {};
-      const boostOn = tuning.touchBoostOn ?? 0.88;
-      const boostOff = tuning.touchBoostOff ?? 0.78;
+      const boostOn = tuning.touchBoostOn;
+      const boostOff = tuning.touchBoostOff;
       if (distance < deadZone) {
         gestureMovement.dx = 0;
         gestureMovement.dy = 0;

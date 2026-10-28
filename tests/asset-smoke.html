@@ -323,19 +323,45 @@
           releaseDelta < boostDelta * 0.8
       );
 
-      api.setPlayerPosition(30000, 30000, 30000, 0, 0);
-      win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "w" }));
-      win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "d" }));
-      win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Shift" }));
-      for (let i = 0; i < 120; i += 1) {
-        api.clearAsteroids();
-        api.tick(1 / 60);
+      for (const key of ["w", "a", "s", "d", "Shift"]) {
+        win.dispatchEvent(new win.KeyboardEvent("keyup", { key }));
       }
-      const sideways = api.getScene();
-      check("boost does not speed up strafing", Math.abs(sideways.player.x - 30000) < 480);
-      win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "d" }));
-      win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "Shift" }));
-      // Eight seconds of flight leaves cores inside the pickup cull radius.
+      // Same start, same frames. A shared accel leak moves the Shift run ~4%
+      // farther; a speed leak moves it ~65%. Both must stay inside 2%.
+      const coast = (key, shift) => {
+        api.setPlayerPosition(30000, 30000, 30000, 0, 0);
+        win.dispatchEvent(new win.KeyboardEvent("keydown", { key }));
+        if (shift) win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Shift" }));
+        for (let i = 0; i < 120; i += 1) {
+          api.clearAsteroids();
+          api.tick(1 / 60);
+        }
+        const scene = api.getScene();
+        win.dispatchEvent(new win.KeyboardEvent("keyup", { key }));
+        if (shift) win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "Shift" }));
+        return scene;
+      };
+      const close = (plain, shifted) => {
+        const delta = Math.abs(plain - shifted);
+        return Math.abs(plain) > 100 && delta <= Math.abs(plain) * 0.02;
+      };
+      const strafePlain = coast("d", false);
+      const strafeShift = coast("d", true);
+      check(
+        "boost does not speed up strafing",
+        strafePlain.player.boost === false &&
+          strafeShift.player.boost === false &&
+          close(strafePlain.player.x - 30000, strafeShift.player.x - 30000)
+      );
+      const reversePlain = coast("s", false);
+      const reverseShift = coast("s", true);
+      check(
+        "boost does not speed up reverse",
+        reversePlain.player.boost === false &&
+          reverseShift.player.boost === false &&
+          close(reversePlain.player.z - 30000, reverseShift.player.z - 30000)
+      );
+      // The flight leaves cores inside the pickup cull radius.
       api.startGame();
 
       const near = api.getScene().player;

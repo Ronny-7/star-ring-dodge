@@ -12,14 +12,17 @@ createServer(async (request, response) => {
     const filePath = path.resolve(root, "." + decodeURIComponent(requestPath === "/" ? "/index.html" : requestPath));
     const relative = path.relative(root, filePath);
     if (relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
-      response.writeHead(403);
+      response.writeHead(403, { "Cache-Control": "no-store" });
       response.end();
       return;
     }
-    response.writeHead(200, { "Content-Type": types[path.extname(filePath)] || "application/octet-stream" });
+    response.writeHead(200, {
+      "Content-Type": types[path.extname(filePath)] || "application/octet-stream",
+      "Cache-Control": "no-store"
+    });
     response.end(await readFile(filePath));
   } catch {
-    response.writeHead(404);
+    response.writeHead(404, { "Cache-Control": "no-store" });
     response.end();
   }
 }).listen(port, "127.0.0.1", () => console.log(`serving ${root} on http://127.0.0.1:${port}`));

@@ -1920,6 +1920,7 @@ inputController = window.starRingInput.createInputController({
   windowObject: window,
   documentObject: document,
   getState: () => state,
+  tuning,
   fireLaser,
   startGame,
   togglePause,
