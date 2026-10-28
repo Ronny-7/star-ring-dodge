@@ -16,12 +16,19 @@ createServer(async (request, response) => {
       response.end();
       return;
     }
+    // Read before writing headers: a missing file must become a 404, not a
+    // second writeHead on a response that already started.
+    const body = await readFile(filePath);
     response.writeHead(200, {
       "Content-Type": types[path.extname(filePath)] || "application/octet-stream",
       "Cache-Control": "no-store"
     });
-    response.end(await readFile(filePath));
+    response.end(body);
   } catch {
+    if (response.headersSent) {
+      response.destroy();
+      return;
+    }
     response.writeHead(404, { "Cache-Control": "no-store" });
     response.end();
   }
