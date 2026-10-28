@@ -475,6 +475,22 @@
           settled.stats.disposedGeometries === settled.stats.createdGeometries &&
           settled.stats.sharedGeometryDisposals === 0);
 
+      api.destroyAsteroidAt(30000, 30000, 30200, 30, false);
+      api.tick(1 / 60);
+      const beforeReset = api.getWorldDebug().fx;
+      api.startGame();
+      api.tick(1 / 60);
+      const afterReset = api.getWorldDebug().fx;
+      check("reset releases live FX resources",
+        beforeReset.debrisGroups === 1 && beforeReset.materials === materialsPerGroup &&
+          afterReset.debrisGroups === 0 && afterReset.shards === 0 && afterReset.sparks === 0 &&
+          afterReset.rings === 0 && afterReset.flashes === 0 && afterReset.materials === 0 &&
+          afterReset.stats.disposedMaterials - beforeReset.stats.disposedMaterials === materialsPerGroup &&
+          afterReset.stats.disposedGeometries - beforeReset.stats.disposedGeometries === 1 &&
+          afterReset.stats.disposedMaterials === afterReset.stats.createdMaterials &&
+          afterReset.stats.disposedGeometries === afterReset.stats.createdGeometries &&
+          afterReset.stats.sharedGeometryDisposals === 0);
+
       const pad = 60 + 26;
       const limit = 60000 - pad;
       const faces = [
@@ -596,6 +612,24 @@
           rewardsReport.canvas.height > 0 &&
           rewardsReport.canvas.width < wideReport.canvas.width
       );
+
+      // Terminal check: no game API assertions may follow world disposal.
+      api.startGame();
+      api.clearAsteroids();
+      api.setPlayerPosition(30000, 30000, 30000, 0, 0);
+      api.destroyAsteroidAt(30000, 30000, 30200, 30, false);
+      api.tick(1 / 60);
+      const beforeDispose = api.getWorldDebug().fx;
+      const afterDispose = api.disposeWorld();
+      check("world disposal releases live FX and its shared ring geometry",
+        beforeDispose.debrisGroups === 1 && beforeDispose.materials === materialsPerGroup &&
+          afterDispose.debrisGroups === 0 && afterDispose.shards === 0 && afterDispose.sparks === 0 &&
+          afterDispose.rings === 0 && afterDispose.flashes === 0 && afterDispose.materials === 0 &&
+          afterDispose.stats.disposedMaterials - beforeDispose.stats.disposedMaterials === materialsPerGroup &&
+          afterDispose.stats.disposedGeometries - beforeDispose.stats.disposedGeometries === 1 &&
+          afterDispose.stats.disposedMaterials === afterDispose.stats.createdMaterials &&
+          afterDispose.stats.disposedGeometries === afterDispose.stats.createdGeometries &&
+          afterDispose.stats.disposedRingGeometries - beforeDispose.stats.disposedRingGeometries === 1);
     } catch (error) {
       result.error = error.message;
     }

@@ -1830,7 +1830,7 @@ function startLoop() {
 
 // three.js is an ES module; the world boots asynchronously and the HUD-only
 // fallback covers the gap.
-window.starRingWorldReady = import("./world3d.js?v=4.2.0-fx3r1")
+window.starRingWorldReady = import("./world3d.js?v=4.2.0-fx3r2")
   .then((mod) => {
     world3d = mod.createWorld({ world: state.world, tuning, skin: activeSkin, color: state.shipColor.mid });
     world3d.resize(cw, ch);
@@ -1844,6 +1844,13 @@ window.starRingWorldReady = import("./world3d.js?v=4.2.0-fx3r1")
 if (new URLSearchParams(window.location.search).has("test")) {
   window.starRingTestApi = {
     getWorldDebug: () => world3d?.getDebugReport?.() ?? null,
+    disposeWorld: () => {
+      const world = world3d;
+      state.running = false;
+      world3d = null;
+      world.dispose();
+      return world.getDebugReport().fx;
+    },
     getState: () => ({
       running: state.running,
       paused: state.paused,

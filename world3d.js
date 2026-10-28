@@ -34,10 +34,11 @@ let lastGates = [];
 const gateLabelCache = new Map();
 const fxPool = { debris: [], flashes: [], rings: [], sparks: [] };
 const fxKinds = ["debris", "flashes", "rings", "sparks"];
-const fxStats = { createdMaterials: 0, disposedMaterials: 0, createdGeometries: 0, disposedGeometries: 0, sharedGeometryDisposals: 0 };
+const fxStats = { createdMaterials: 0, disposedMaterials: 0, createdGeometries: 0, disposedGeometries: 0, disposedRingGeometries: 0, sharedGeometryDisposals: 0 };
 // Observe Three's actual dispose events, not removal from our live pools.
 const onFxMaterialDispose = () => { fxStats.disposedMaterials += 1; };
 const onFxGeometryDispose = () => { fxStats.disposedGeometries += 1; };
+const onFxRingDispose = () => { fxStats.disposedRingGeometries += 1; };
 const onSharedGeometryDispose = () => { fxStats.sharedGeometryDisposals += 1; };
 let fxState = null;
 let fxTuning = null;
@@ -712,6 +713,7 @@ function getDebugReport() {
 export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff }) {
   fxTuning = tuning;
   fxRingGeometry = new THREE.TorusGeometry(1, 0.08, 8, 32);
+  fxRingGeometry.addEventListener("dispose", onFxRingDispose);
   worldSize = { width: world.width, height: world.height, depth: world.depth };
   renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("game"), antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, tuning.dprCap || 2));
