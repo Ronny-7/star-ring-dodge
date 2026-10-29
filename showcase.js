@@ -9,33 +9,48 @@ const canvas = document.getElementById("showcase-canvas");
 const stage = document.getElementById("stage");
 const stageFullscreenButton = document.getElementById("stage-fullscreen");
 
+function fullscreenApi() {
+  const doc = stage.ownerDocument;
+  if (typeof stage.requestFullscreen === "function" && doc.fullscreenEnabled !== false) {
+    return { request: stage.requestFullscreen, exit: doc.exitFullscreen,
+      element: doc.fullscreenElement, event: "fullscreenchange", flag: doc.fullscreenEnabled };
+  }
+  if (typeof stage.webkitRequestFullscreen === "function" && doc.webkitFullscreenEnabled !== false) {
+    return { request: stage.webkitRequestFullscreen, exit: doc.webkitExitFullscreen,
+      element: doc.webkitFullscreenElement, event: "webkitfullscreenchange", flag: doc.webkitFullscreenEnabled };
+  }
+  return null;
+}
+
 async function toggleFullscreen() {
   const doc = stage.ownerDocument;
-  if (typeof stage.requestFullscreen !== "function" || doc.fullscreenEnabled === false) return false;
+  const api = fullscreenApi();
+  if (!api) return false;
   try {
-    if (doc.fullscreenElement === stage) await doc.exitFullscreen();
-    else await stage.requestFullscreen();
+    if (api.element === stage) await api.exit.call(doc);
+    else await api.request.call(stage);
   } catch {
     // Policy denial is not recoverable from script; do not leave a dead control.
     if (stageFullscreenButton) stageFullscreenButton.hidden = true;
-    return doc.fullscreenElement === stage;
+    return fullscreenApi()?.element === stage;
   }
-  return doc.fullscreenElement === stage;
+  return fullscreenApi()?.element === stage;
 }
 
 function syncFullscreenButton() {
   if (!stageFullscreenButton) return;
-  const active = stage.ownerDocument.fullscreenElement === stage;
+  const active = fullscreenApi()?.element === stage;
   stageFullscreenButton.setAttribute("aria-pressed", String(active));
   stageFullscreenButton.textContent = active ? "退出全屏" : "全屏";
 }
 
 if (stageFullscreenButton) {
-  if (typeof stage.requestFullscreen !== "function" || stage.ownerDocument.fullscreenEnabled === false) {
+  const api = fullscreenApi();
+  if (!api) {
     stageFullscreenButton.hidden = true;
   } else {
     stageFullscreenButton.addEventListener("click", () => { void toggleFullscreen(); });
-    document.addEventListener("fullscreenchange", syncFullscreenButton);
+    stage.ownerDocument.addEventListener(api.event, syncFullscreenButton);
     syncFullscreenButton();
   }
 }

@@ -730,15 +730,17 @@
       const startLink = landingDoc.getElementById("start-game");
       const fullscreenButton = landingDoc.getElementById("stage-fullscreen");
       const controlsCard = landingDoc.querySelector(".controls-card");
-      const fullscreenSupported = typeof landingDoc.getElementById("stage").requestFullscreen === "function" &&
-        landingDoc.fullscreenEnabled !== false;
+      const landingStage = landingDoc.getElementById("stage");
+      const fullscreenSupported = (typeof landingStage.requestFullscreen === "function" &&
+        landingDoc.fullscreenEnabled !== false) ||
+        (typeof landingStage.webkitRequestFullscreen === "function" && landingDoc.webkitFullscreenEnabled !== false);
       const fullscreenInitiallyCorrect = Boolean(fullscreenButton) &&
         fullscreenButton.hidden === !fullscreenSupported &&
         fullscreenButton.getAttribute("aria-pressed") === "false";
       let fullscreenToggleWorks = fullscreenButton?.hidden === true;
       if (fullscreenSupported) {
-        const entered = await showcase.toggleFullscreen();
-        if (entered) {
+        await showcase.toggleFullscreen();
+        if (!fullscreenButton.hidden) {
           await waitFor(() => fullscreenButton.getAttribute("aria-pressed") === "true");
           const pressed = fullscreenButton.getAttribute("aria-pressed") === "true";
           await showcase.toggleFullscreen();
