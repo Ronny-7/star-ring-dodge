@@ -408,6 +408,25 @@
           gateState.bannerTimer > 2.3 &&
           gateState.bannerTimer <= 2.5
       );
+      api.startGame();
+      api.beginRouteChoice();
+      const nearGate = api.getState().gates[0];
+      const nearGateRegion = nearGate.regionId;
+      api.setPlayerPosition(nearGate.x + 57, nearGate.y, nearGate.z, 0, 0);
+      api.tick(1 / 60);
+      const crossedAt57 = api.getState();
+      api.startGame();
+      api.beginRouteChoice();
+      const farGate = api.getState().gates[0];
+      api.setPlayerPosition(farGate.x + 59, farGate.y, farGate.z, 0, 0);
+      api.tick(1 / 60);
+      const rejectedAt59 = api.getState();
+      check(
+        "warp gate contact matches the visible ring",
+        crossedAt57.regionId === nearGateRegion &&
+          crossedAt57.gates.length === 0 &&
+          rejectedAt59.gates.length === 2
+      );
       // The flight leaves cores inside the pickup cull radius.
       api.startGame();
 
@@ -600,6 +619,24 @@
         ray.intersectObject(delta.userData.hullRoot, true)[0]?.object === bay &&
           new THREE.Box3().setFromObject(rail).max.y > new THREE.Box3().setFromObject(bay).max.y &&
           delta.userData.bounds.y / delta.userData.bounds.z < 0.34);
+      const rightWingBox = new THREE.Box3().setFromObject(delta.getObjectByName("right-flying-wing"));
+      const leadingEdge = delta.getObjectByName("right-leading-edge-cap");
+      const surfaceLayers = [
+        "right-trailing-elevon",
+        "right-access-hatch",
+        "right-outboard-hatch",
+        "right-recessed-exhaust-bay",
+        "right-exhaust-bay-rail",
+        "dorsal-fairing"
+      ].map((name) => delta.getObjectByName(name));
+      check(
+        "delta leading edge is a thick non-overlapping shell",
+        Boolean(leadingEdge) &&
+          new THREE.Box3().setFromObject(leadingEdge).getSize(new THREE.Vector3()).y > 0.6 &&
+          surfaceLayers.every((layer) =>
+            layer && new THREE.Box3().setFromObject(layer).min.y > rightWingBox.max.y + 0.01
+          )
+      );
       for (const model of [saucer, delta]) {
         const materials = new Set(Object.values(model.userData.materials));
         model.traverse((mesh) => {
@@ -764,6 +801,28 @@
           rewardsReport.canvas.height > 0 &&
           rewardsReport.canvas.width < wideReport.canvas.width
       );
+
+      showcase.selectView("ship");
+      showcase.selectModel("delta");
+      showcase.zoomBy(-5000);
+      const closeDeltaReport = showcase.getDebugReport();
+      check(
+        "focused delta keeps the camera outside the model at minimum zoom",
+        closeDeltaReport.focus === "delta" &&
+          closeDeltaReport.camera.safeDistance > closeDeltaReport.camera.focusRadius &&
+          closeDeltaReport.camera.distance >= closeDeltaReport.camera.safeDistance - 0.01
+      );
+      showcaseFrame.width = 390;
+      showcaseFrame.height = 844;
+      await nextFrames(showcaseWin, 2);
+      const resizedDeltaReport = showcase.getDebugReport();
+      check(
+        "focused delta keeps its camera clearance after resize",
+        resizedDeltaReport.focus === "delta" &&
+          resizedDeltaReport.camera.safeDistance > resizedDeltaReport.camera.focusRadius &&
+          resizedDeltaReport.camera.distance >= resizedDeltaReport.camera.safeDistance - 0.01
+      );
+      showcase.selectView("all");
 
       check(
         "showcase lines up three distinct ships",

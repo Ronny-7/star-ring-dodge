@@ -20,8 +20,8 @@ test("changed 3D child modules carry the current cache key", async () => {
     readFile(path.resolve(__dirname, "..", "world3d.js"), "utf8")
   ]);
   for (const source of [showcase, world]) {
-    assert.match(source, /\.\/delta-model\.js\?v=4\.6\.2/);
-    assert.match(source, /\.\/pickup-models\.js\?v=4\.6\.2/);
+    assert.match(source, /\.\/delta-model\.js\?v=4\.6\.4/);
+    assert.match(source, /\.\/pickup-models\.js\?v=4\.6\.4/);
   }
 });
 

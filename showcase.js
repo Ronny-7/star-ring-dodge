@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import { createFighterModel, createStudioEnvironment } from "./fighter-model.js";
-import { createDeltaModel } from "./delta-model.js?v=4.6.2";
+import { createDeltaModel } from "./delta-model.js?v=4.6.4";
 import { createSaucerModel } from "./saucer-model.js";
 import { createRockSet } from "./rock-models.js";
-import { createPickupModel } from "./pickup-models.js?v=4.6.2";
+import { createPickupModel } from "./pickup-models.js?v=4.6.4";
 
 const canvas = document.getElementById("showcase-canvas");
 const stage = document.getElementById("stage");
@@ -212,7 +212,7 @@ function initialize() {
       Math.min(Math.PI - 0.12, framing.basePhi + MAX_TILT)
     );
     const offset = new THREE.Vector3().setFromSpherical(spherical)
-      .multiplyScalar(framing.distance * orbit.factor);
+      .multiplyScalar(framing.distance * Math.max(orbit.factor, framing.minFactor));
     camera.position.copy(framing.target).add(offset);
     camera.lookAt(framing.target);
   }
@@ -232,7 +232,7 @@ function initialize() {
       : "拖动旋转 · 滚轮或双指缩放 · 点模型单独查看";
   }
 
-  function frameBounds(bounds, viewName, width = VIEWS[viewName].width) {
+  function frameBounds(bounds, viewName, width = VIEWS[viewName].width, keepCameraOutside = false) {
     const preset = VIEWS[viewName];
     const target = bounds.getCenter(new THREE.Vector3());
     const offset = new THREE.Vector3(...preset.position).sub(target);
@@ -252,8 +252,19 @@ function initialize() {
         }
       }
     }
+    const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+    const safeDistance = keepCameraOutside ? sphere.radius * 1.12 : 0;
+    const minFactor = Math.max(MIN_ZOOM, safeDistance / Math.max(distance, 0.001));
     const dir = offset.normalize();
-    framing = { target, dir, distance, basePhi: new THREE.Spherical().setFromVector3(dir).phi };
+    framing = {
+      target,
+      dir,
+      distance,
+      radius: sphere.radius,
+      safeDistance,
+      minFactor,
+      basePhi: new THREE.Spherical().setFromVector3(dir).phi
+    };
     applyCamera();
   }
 
@@ -275,8 +286,10 @@ function initialize() {
     return {
       yaw: orbit.yaw,
       pitch: orbit.pitch,
-      factor: orbit.factor,
-      distance: camera.position.distanceTo(framing.target)
+      factor: Math.max(orbit.factor, framing?.minFactor ?? MIN_ZOOM),
+      distance: camera.position.distanceTo(framing.target),
+      focusRadius: framing?.radius ?? 0,
+      safeDistance: framing?.safeDistance ?? 0
     };
   }
 
@@ -290,7 +303,8 @@ function initialize() {
   }
 
   function zoomBy(delta) {
-    const next = THREE.MathUtils.clamp(orbit.factor * Math.exp(delta * ZOOM_SPEED), MIN_ZOOM, MAX_ZOOM);
+    const minFactor = framing?.minFactor ?? MIN_ZOOM;
+    const next = THREE.MathUtils.clamp(orbit.factor * Math.exp(delta * ZOOM_SPEED), minFactor, MAX_ZOOM);
     if (next === orbit.factor) return false;
     orbit.factor = next;
     interacted = true;
@@ -311,7 +325,7 @@ function initialize() {
     interacted = true;
     resetOrbit();
     applyVisibility();
-    frameBounds(new THREE.Box3().setFromObject(item.object), view, 0);
+    frameBounds(new THREE.Box3().setFromObject(item.object), view, 0, true);
     syncHint();
     render();
     return true;
@@ -464,7 +478,7 @@ function initialize() {
     camera.aspect = width / Math.max(1, height);
     camera.updateProjectionMatrix();
     layoutShips();
-    if (focus) frameBounds(new THREE.Box3().setFromObject(focus.object), view, 0);
+    if (focus) frameBounds(new THREE.Box3().setFromObject(focus.object), view, 0, true);
     else if (VIEWS[view]) frameView(view);
     if (reducedMotion) render();
   }

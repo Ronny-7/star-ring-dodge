@@ -74,7 +74,7 @@ window.starRingConfig = {
     idleFrameInterval: 1000 / 12,
     routeChoiceInterval: 28,
     routeChoiceDuration: 11,
-    routeGateRadius: 42,
+    routeGateRadius: 58,
     routeChoiceSpawnSlowdown: 1.8,
     visualStarTrail: 0.72,
     visualHazeStrength: 0.14,

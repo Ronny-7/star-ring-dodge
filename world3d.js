@@ -2,11 +2,11 @@
 // imported; the rest of the game stays classic scripts on window.
 import * as THREE from "three";
 import { createFighterModel, createStudioEnvironment } from "./fighter-model.js";
-import { createPickupModel } from "./pickup-models.js?v=4.6.2";
+import { createPickupModel } from "./pickup-models.js?v=4.6.4";
 import { createRockSet } from "./rock-models.js";
 import { createSpaceEnvironment } from "./space-environment.js";
 import { createShipMaterials } from "./ship-materials.js";
-import { createDeltaModel } from "./delta-model.js?v=4.6.2";
+import { createDeltaModel } from "./delta-model.js?v=4.6.4";
 import { createSaucerModel } from "./saucer-model.js";
 
 const sceneObjects = {
