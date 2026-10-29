@@ -733,6 +733,24 @@
           fullscreenButton.getAttribute("aria-pressed") === "false"
       );
 
+      api.startGame();
+      await nextFrames(win, 2);
+      api.pauseGame();
+      await nextFrames(win, 2);
+      const pauseReturn = win.document.getElementById("showcase-return");
+      const pauseVisible = Boolean(pauseReturn) && !pauseReturn.hidden;
+      const pauseHref = pauseReturn?.getAttribute("href");
+      api.startGame();
+      await nextFrames(win, 2);
+      const startReturn = win.document.getElementById("showcase-return");
+      check(
+        "only the pause panel offers a way back to the landing page",
+        pauseVisible &&
+          pauseHref === "showcase.html" &&
+          Boolean(startReturn) &&
+          startReturn.hidden === true
+      );
+
       // GPU memory: renderer.info counts what the GPU still holds. Compare two
       // equally-warmed snapshots so transient asteroids cannot skew the result:
       // a leak keeps climbing, a healthy scene returns to the same level.

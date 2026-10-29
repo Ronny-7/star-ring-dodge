@@ -18,6 +18,7 @@ const overlayStatGrid = document.getElementById("overlay-stat-grid");
 const overlayRecord = document.getElementById("overlay-record");
 const startButton = document.getElementById("start-button");
 const showcaseLink = document.getElementById("showcase-link");
+const showcaseReturn = document.getElementById("showcase-return");
 const playfieldEl = canvas.parentElement;
 const orientationButton = document.querySelector("[data-orientation-button]");
 const settingsButton = document.getElementById("settings-button");
@@ -121,6 +122,7 @@ function applyLanguageToDOM() {
   set("skin-delta", L("delta"));
   set("skin-saucer", L("saucer"));
   set("showcase-link", ui.showcaseLink);
+  set("showcase-return", ui.showcaseReturn);
   set("settings-color-title", L("shipColor"));
   set("settings-language-title", L("language"));
   syncToggleButton(musicBtn, audioController.isMusicEnabled());
@@ -317,12 +319,14 @@ function showOverlay(mode, title, text, buttonText) {
   overlayText.textContent = text;
   startButton.textContent = buttonText;
   if (showcaseLink) showcaseLink.hidden = mode !== "start";
+  if (showcaseReturn) showcaseReturn.hidden = mode !== "pause";
   if (mode !== "gameover") hideOverlayStats();
   overlay.classList.remove("hidden");
 }
 
 function hideOverlay() {
   overlay.classList.add("hidden");
+  if (showcaseReturn) showcaseReturn.hidden = true;
 }
 
 /* ---------- 存档 ---------- */
