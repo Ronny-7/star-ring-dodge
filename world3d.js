@@ -631,19 +631,20 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       shipGroup.position.set(state.player.x, state.player.y, state.player.z);
       shipGroup.rotation.set(-state.player.pitch, -state.player.yaw, state.player.roll, "YXZ");
       if (shipGroup.userData.glow) {
-        shipGroup.userData.glow.intensity = 60 + state.player.thrust * 140;
+        shipGroup.userData.glow.intensity = 60 + state.player.thrust * 100;
       }
       for (const flame of shipGroup.userData.flames) {
         const pulse = 0.9 + Math.sin(state.pulseTime * 30) * 0.08;
-        // thrust runs 0.3 (idle) .. 1.0 (cruise) .. 1.35 (boost); normalise the
-        // top band so the plume widens and brightens unmistakably on boost.
+        // thrust runs 0.3 (idle) .. 1.0 (cruise) .. 1.35 (boost). Boost already
+        // reads through the wider plume; keep it from ballooning further.
         const boostAmount = Math.max(0, Math.min(1, (state.player.thrust - 1) / 0.35));
+        const plumeThrust = state.player.thrust - boostAmount * 0.22;
         flame.scale.set(
-          1 + boostAmount * 1.25,
-          (0.55 + state.player.thrust * 1.15) * pulse,
-          1 + boostAmount * 1.25
+          1 + boostAmount * 0.45,
+          (0.55 + plumeThrust * 1.15) * pulse,
+          1 + boostAmount * 0.45
         );
-        flame.material.opacity = Math.min(1, 0.28 + state.player.thrust * 0.5 + boostAmount * 0.22);
+        flame.material.opacity = Math.min(1, 0.28 + plumeThrust * 0.5 + boostAmount * 0.1);
       }
       if (shipGroup.userData.ring) {
         shipGroup.userData.ring.rotation.z += dt * 1.4;

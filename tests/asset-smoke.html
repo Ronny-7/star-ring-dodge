@@ -708,6 +708,14 @@
       const zoomedIn = showcase.getDebugReport().camera;
 
       showcase.selectView("rewards");
+      const rewardsGroup = showcase.getDebugReport();
+      // A tap isolates one model: the camera closes in and the group returns
+      // when the view is picked again.
+      const focused = showcase.selectModel("shield");
+      const focusReport = showcase.getDebugReport();
+      const hiddenGroupRejected = showcase.selectModel("fighter") === false;
+      showcase.selectView("rewards");
+      const regrouped = showcase.getDebugReport();
       showcaseFrame.width = 390;
       showcaseFrame.height = 844;
       await nextFrames(showcaseWin, 3);
@@ -716,7 +724,7 @@
         showcaseDoc.getElementById("landing").hidden === false &&
         showcaseDoc.getElementById("game-view").hidden === true;
       check(
-        "one page hosts the landing models and the game, and orbits and zooms",
+        "one page hosts the landing models and the game, and orbits, zooms and isolates one model",
         mergedShell &&
           wideReport.models.ship === 3 &&
           wideReport.models.rewards === 3 &&
@@ -727,6 +735,12 @@
           Math.abs(orbited.pitch) > 0.1 &&
           zoomedOut.factor > 1 &&
           Math.abs(zoomedIn.factor - 0.45) < 1e-6 &&
+          focused === true &&
+          focusReport.focus === "shield" &&
+          focusReport.camera.distance < rewardsGroup.camera.distance * 0.6 &&
+          hiddenGroupRejected &&
+          regrouped.focus === null &&
+          Math.abs(regrouped.camera.distance - rewardsGroup.camera.distance) < 1 &&
           rewardsReport.view === "rewards" &&
           rewardsReport.camera.factor === 1 &&
           rewardsReport.camera.yaw === 0 &&
