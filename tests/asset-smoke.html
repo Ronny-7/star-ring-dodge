@@ -711,6 +711,7 @@
       check(
         "showcase lines up three distinct ships",
         wideReport.shipVariants.join(",") === "fighter,delta,saucer" &&
+          wideReport.shipBounds.length === 3 &&
           wideReport.shipBounds.every((a, i, bounds) => bounds.slice(i + 1).every(
             (b) => Math.abs(a.x / a.z - b.x / b.z) > 0.05))
       );
