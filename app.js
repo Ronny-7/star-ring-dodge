@@ -316,7 +316,8 @@ let profile = storageController.loadProfile(localStorage, profileKey);
 if (profile.skin) activeSkin = profile.skin;
 if (profile.color) activeColor = profile.color;
 let runAchievementUnlocks = [];
-let overlayMode = "start";
+// The landing view owns the first screen, so no start panel exists to return to.
+let overlayMode = "none";
 let lastGameOver = { score: 0, newBest: false };
 const hudCache = { score: null, health: null, best: null };
 bestEl.textContent = String(bestScore);
