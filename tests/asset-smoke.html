@@ -84,6 +84,15 @@
       const api = await waitFor(() => win.starRingTestApi || null);
       const ready = await waitFor(() => win.starRingWorldReady || null);
       await ready;
+
+      // The boot start panel is the only open start panel the page ever shows,
+      // so sample it before anything starts a run.
+      const bootReturn = win.document.getElementById("showcase-return");
+      const startPanelClean =
+        Boolean(bootReturn) &&
+        bootReturn.hidden === true &&
+        !win.document.getElementById("overlay").classList.contains("hidden");
+
       api.startGame();
       await nextFrames(win, 2);
 
@@ -733,23 +742,40 @@
           fullscreenButton.getAttribute("aria-pressed") === "false"
       );
 
+      // Each mode is asserted while its panel is actually open, not merely
+      // closed: a link leaking onto the start or game-over screen must fail.
+      const overlayEl = win.document.getElementById("overlay");
+      const panelOpen = () => !overlayEl.classList.contains("hidden");
+      const returnState = () => {
+        const el = win.document.getElementById("showcase-return");
+        return { present: Boolean(el), hidden: el?.hidden, href: el?.getAttribute("href") };
+      };
+
       api.startGame();
       await nextFrames(win, 2);
       api.pauseGame();
       await nextFrames(win, 2);
-      const pauseReturn = win.document.getElementById("showcase-return");
-      const pauseVisible = Boolean(pauseReturn) && !pauseReturn.hidden;
-      const pauseHref = pauseReturn?.getAttribute("href");
-      api.startGame();
+      const pauseReturn = returnState();
+      const pausePanelOpen = panelOpen();
+      api.resumeGame();
       await nextFrames(win, 2);
-      const startReturn = win.document.getElementById("showcase-return");
+      api.endGame();
+      await nextFrames(win, 2);
+      const overReturn = returnState();
+      const gameOverPanelOpen = panelOpen();
       check(
         "only the pause panel offers a way back to the landing page",
-        pauseVisible &&
-          pauseHref === "showcase.html" &&
-          Boolean(startReturn) &&
-          startReturn.hidden === true
+        startPanelClean &&
+          pausePanelOpen &&
+          pauseReturn.present &&
+          pauseReturn.hidden === false &&
+          pauseReturn.href === "showcase.html" &&
+          gameOverPanelOpen &&
+          overReturn.present &&
+          overReturn.hidden === true
       );
+      api.startGame();
+      await nextFrames(win, 2);
 
       // GPU memory: renderer.info counts what the GPU still holds. Compare two
       // equally-warmed snapshots so transient asteroids cannot skew the result:
