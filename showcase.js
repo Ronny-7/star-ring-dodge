@@ -73,6 +73,7 @@ function initialize() {
         rockForms: [],
         camera: { yaw: 0, pitch: 0, factor: 1, distance: 0 },
         focus: null,
+        pickable: [],
         canvas: { width: 0, height: 0 },
         error: String(error)
       }),
@@ -378,6 +379,11 @@ function initialize() {
     return item.sphere;
   }
 
+  function pickableItems() {
+    // Hidden siblings keep their bounding spheres; never pick what is not drawn.
+    return inspectables.filter((item) => item.root.visible && item.object.visible);
+  }
+
   function modelUnderPointer(event) {
     const rect = canvas.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -386,8 +392,7 @@ function initialize() {
     const ray = raycaster.ray;
     let best = null;
     let bestDistance = Infinity;
-    for (const item of inspectables) {
-      if (!item.root.visible) continue;
+    for (const item of pickableItems()) {
       const sphere = sphereFor(item);
       const reach = sphere.radius + camera.position.distanceTo(sphere.center) * 0.05;
       const hitPoint = ray.intersectSphere(new THREE.Sphere(sphere.center, reach), new THREE.Vector3());
@@ -502,6 +507,7 @@ function initialize() {
       rockForms: rockSet.forms.map((form) => form.id),
       camera: cameraReport(),
       focus: focus ? focus.id : null,
+      pickable: pickableItems().map((item) => item.id),
       canvas: { width: renderer.domElement.width, height: renderer.domElement.height }
     };
   }

@@ -737,6 +737,7 @@
           Math.abs(zoomedIn.factor - 0.45) < 1e-6 &&
           focused === true &&
           focusReport.focus === "shield" &&
+          focusReport.pickable.join(",") === "shield" &&
           focusReport.camera.distance < rewardsGroup.camera.distance * 0.6 &&
           hiddenGroupRejected &&
           regrouped.focus === null &&
