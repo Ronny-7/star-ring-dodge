@@ -594,19 +594,7 @@ button:focus-visible,
   outline-offset: 3px;
 }
 
-.showcase-link {
-  display: block;
-  width: fit-content;
-  margin: 14px auto 0;
-  color: var(--muted-strong);
-  font-size: 0.85rem;
-  text-decoration: none;
-  border-bottom: 1px solid rgba(136, 199, 255, 0.28);
-}
-.showcase-link:hover { color: var(--accent); border-color: var(--accent); }
-.showcase-link:focus-visible { outline: 2px solid var(--accent-3); outline-offset: 3px; }
-.showcase-link[hidden] { display: none; }
-
+.showcase-link,
 .showcase-return {
   display: block;
   width: fit-content;
@@ -616,8 +604,11 @@ button:focus-visible,
   text-decoration: none;
   border-bottom: 1px solid rgba(136, 199, 255, 0.28);
 }
+.showcase-link:hover,
 .showcase-return:hover { color: var(--accent); border-color: var(--accent); }
+.showcase-link:focus-visible,
 .showcase-return:focus-visible { outline: 2px solid var(--accent-3); outline-offset: 3px; }
+.showcase-link[hidden],
 .showcase-return[hidden] { display: none; }
 
 .touch-controls {

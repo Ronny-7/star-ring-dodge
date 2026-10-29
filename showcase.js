@@ -11,11 +11,13 @@ const stageFullscreenButton = document.getElementById("stage-fullscreen");
 
 async function toggleFullscreen() {
   const doc = stage.ownerDocument;
-  if (typeof stage.requestFullscreen !== "function") return false;
+  if (typeof stage.requestFullscreen !== "function" || doc.fullscreenEnabled === false) return false;
   try {
     if (doc.fullscreenElement === stage) await doc.exitFullscreen();
     else await stage.requestFullscreen();
   } catch {
+    // Policy denial is not recoverable from script; do not leave a dead control.
+    if (stageFullscreenButton) stageFullscreenButton.hidden = true;
     return doc.fullscreenElement === stage;
   }
   return doc.fullscreenElement === stage;
@@ -29,7 +31,7 @@ function syncFullscreenButton() {
 }
 
 if (stageFullscreenButton) {
-  if (typeof stage.requestFullscreen !== "function") {
+  if (typeof stage.requestFullscreen !== "function" || stage.ownerDocument.fullscreenEnabled === false) {
     stageFullscreenButton.hidden = true;
   } else {
     stageFullscreenButton.addEventListener("click", () => { void toggleFullscreen(); });

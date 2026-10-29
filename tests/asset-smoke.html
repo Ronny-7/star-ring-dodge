@@ -666,6 +666,7 @@
       );
 
       const showcaseFrame = document.createElement("iframe");
+      showcaseFrame.allowFullscreen = true;
       showcaseFrame.src = "../showcase.html?test=1";
       showcaseFrame.width = 1280;
       showcaseFrame.height = 900;
@@ -729,7 +730,24 @@
       const startLink = landingDoc.getElementById("start-game");
       const fullscreenButton = landingDoc.getElementById("stage-fullscreen");
       const controlsCard = landingDoc.querySelector(".controls-card");
-      const fullscreenSupported = typeof landingDoc.getElementById("stage").requestFullscreen === "function";
+      const fullscreenSupported = typeof landingDoc.getElementById("stage").requestFullscreen === "function" &&
+        landingDoc.fullscreenEnabled !== false;
+      const fullscreenInitiallyCorrect = Boolean(fullscreenButton) &&
+        fullscreenButton.hidden === !fullscreenSupported &&
+        fullscreenButton.getAttribute("aria-pressed") === "false";
+      let fullscreenToggleWorks = fullscreenButton?.hidden === true;
+      if (fullscreenSupported) {
+        const entered = await showcase.toggleFullscreen();
+        if (entered) {
+          await waitFor(() => fullscreenButton.getAttribute("aria-pressed") === "true");
+          const pressed = fullscreenButton.getAttribute("aria-pressed") === "true";
+          await showcase.toggleFullscreen();
+          await waitFor(() => fullscreenButton.getAttribute("aria-pressed") === "false");
+          fullscreenToggleWorks = pressed && fullscreenButton.getAttribute("aria-pressed") === "false";
+        } else {
+          fullscreenToggleWorks = fullscreenButton.hidden === true;
+        }
+      }
       check(
         "landing page offers the game, the controls and a working fullscreen toggle",
         Boolean(startLink) &&
@@ -737,8 +755,10 @@
           Boolean(controlsCard) &&
           /WASD/.test(controlsCard.textContent) &&
           /Shift/.test(controlsCard.textContent) &&
+          /触屏：.*开火.*暂停/.test(controlsCard.textContent) &&
           Boolean(fullscreenButton) &&
-          (fullscreenSupported ? fullscreenButton.hidden === false : fullscreenButton.hidden === true) &&
+          fullscreenInitiallyCorrect &&
+          fullscreenToggleWorks &&
           fullscreenButton.getAttribute("aria-pressed") === "false"
       );
 
