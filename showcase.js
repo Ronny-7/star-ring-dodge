@@ -7,6 +7,36 @@ import { createPickupModel } from "./pickup-models.js";
 
 const canvas = document.getElementById("showcase-canvas");
 const stage = document.getElementById("stage");
+const stageFullscreenButton = document.getElementById("stage-fullscreen");
+
+async function toggleFullscreen() {
+  const doc = stage.ownerDocument;
+  if (typeof stage.requestFullscreen !== "function") return false;
+  try {
+    if (doc.fullscreenElement === stage) await doc.exitFullscreen();
+    else await stage.requestFullscreen();
+  } catch {
+    return doc.fullscreenElement === stage;
+  }
+  return doc.fullscreenElement === stage;
+}
+
+function syncFullscreenButton() {
+  if (!stageFullscreenButton) return;
+  const active = stage.ownerDocument.fullscreenElement === stage;
+  stageFullscreenButton.setAttribute("aria-pressed", String(active));
+  stageFullscreenButton.textContent = active ? "退出全屏" : "全屏";
+}
+
+if (stageFullscreenButton) {
+  if (typeof stage.requestFullscreen !== "function") {
+    stageFullscreenButton.hidden = true;
+  } else {
+    stageFullscreenButton.addEventListener("click", () => { void toggleFullscreen(); });
+    document.addEventListener("fullscreenchange", syncFullscreenButton);
+    syncFullscreenButton();
+  }
+}
 
 function initialize() {
   let renderer;
@@ -26,7 +56,8 @@ function initialize() {
         canvas: { width: 0, height: 0 },
         error: String(error)
       }),
-      selectView: () => false
+      selectView: () => false,
+      toggleFullscreen
     };
     window.starRingShowcaseReady = true;
     return;
@@ -217,7 +248,7 @@ function initialize() {
 
   resize();
   selectView("all");
-  window.starRingShowcase = { getDebugReport, selectView };
+  window.starRingShowcase = { getDebugReport, selectView, toggleFullscreen };
   window.starRingShowcaseReady = true;
   if (!reducedMotion) requestAnimationFrame(animate);
 }

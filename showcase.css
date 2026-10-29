@@ -20,10 +20,26 @@
 .legend-card ul { margin: 0; padding: 0; list-style: none; }
 .legend-card li { display: flex; gap: 8px; align-items: center; padding: 4px 0; color: var(--muted-strong); font-size: .86rem; }
 .swatch { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); }
+.stage-fullscreen { position: absolute; z-index: 2; top: 16px; right: 16px; min-width: 0; height: 34px; margin: 0; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5, 10, 20, .72); color: var(--muted-strong); box-shadow: none; }
+.stage-fullscreen:hover { color: var(--accent); }
+.stage-fullscreen[hidden] { display: none; }
+.showcase-stage:fullscreen { height: 100vh; border: 0; border-radius: 0; }
+.controls-card { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.controls-card ul { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 10px 0 0; padding: 0; list-style: none; color: var(--muted-strong); font-size: .88rem; }
+.controls-card kbd { display: inline-block; margin-right: 4px; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: 4px; background: rgba(8, 16, 30, .7); color: var(--text); font: inherit; font-size: .82rem; }
+.landing-actions { margin-top: 18px; display: flex; justify-content: center; }
+.start-game { display: inline-flex; align-items: center; justify-content: center; min-width: 200px; height: 52px; padding: 0 28px; border-radius: 8px; background: linear-gradient(135deg, #62e4ff 0%, #7b8cff 52%, #8affd1 100%); color: #07111d; font-weight: 800; font-size: 1.02rem; text-decoration: none; box-shadow: 0 12px 30px rgba(88, 196, 255, .22); }
+/* .showcase a outranks a bare .start-game, and the gradient needs dark text. */
+.showcase a.start-game { color: #07111d; }
+.start-game:hover { color: #07111d; filter: brightness(1.06); }
 @media (max-width: 760px) {
   .showcase { padding: 18px; }
   .showcase-header { align-items: start; flex-direction: column; }
   .showcase-stage { height: 56vh; min-height: 360px; }
   .legend { grid-template-columns: 1fr; }
   .stage-tabs { right: 12px; left: 12px; top: 12px; overflow-x: auto; }
+  /* The narrow tab row spans the stage width, so drop the toggle under it. */
+  .stage-fullscreen { top: 64px; right: 12px; }
+  .controls-card ul { flex-direction: column; gap: 6px; }
+  .start-game { width: 100%; }
 }

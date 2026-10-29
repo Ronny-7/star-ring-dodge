@@ -716,6 +716,23 @@
             (b) => Math.abs(a.x / a.z - b.x / b.z) > 0.05))
       );
 
+      const landingDoc = showcaseWin.document;
+      const startLink = landingDoc.getElementById("start-game");
+      const fullscreenButton = landingDoc.getElementById("stage-fullscreen");
+      const controlsCard = landingDoc.querySelector(".controls-card");
+      const fullscreenSupported = typeof landingDoc.getElementById("stage").requestFullscreen === "function";
+      check(
+        "landing page offers the game, the controls and a working fullscreen toggle",
+        Boolean(startLink) &&
+          startLink.getAttribute("href") === "index.html" &&
+          Boolean(controlsCard) &&
+          /WASD/.test(controlsCard.textContent) &&
+          /Shift/.test(controlsCard.textContent) &&
+          Boolean(fullscreenButton) &&
+          (fullscreenSupported ? fullscreenButton.hidden === false : fullscreenButton.hidden === true) &&
+          fullscreenButton.getAttribute("aria-pressed") === "false"
+      );
+
       // GPU memory: renderer.info counts what the GPU still holds. Compare two
       // equally-warmed snapshots so transient asteroids cannot skew the result:
       // a leak keeps climbing, a healthy scene returns to the same level.

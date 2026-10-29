@@ -17,11 +17,12 @@
   <main class="showcase">
     <header class="showcase-header">
       <div class="showcase-brand"><a href="index.html">星环闪避</a> <span class="build-tag">v4.4.0</span></div>
-      <a href="index.html">← 返回游戏</a>
+      <a href="index.html">进入游戏 →</a>
     </header>
     <section class="showcase-intro">
       <p class="panel-label">RUNTIME ASSETS / 运行时资产</p>
       <h1>三种轮廓。一眼分清。</h1>
+      <p>在流动的星域中高速机动，规避陨石、回收能量核心，在跃迁时选择下一段航线。</p>
       <p>模型直接来自游戏工厂：三艘飞船、同一组奖励与陨石。</p>
     </section>
     <section class="showcase-stage" id="stage" aria-label="运行时模型展示">
@@ -31,8 +32,22 @@
         <button type="button" data-view="rewards" aria-pressed="false">奖励</button>
         <button type="button" data-view="rocks" aria-pressed="false">陨石</button>
       </div>
+      <button class="stage-fullscreen" id="stage-fullscreen" type="button" aria-pressed="false">全屏</button>
       <canvas id="showcase-canvas" aria-label="飞船、奖励和陨石的三维模型"></canvas>
       <p class="stage-fallback" hidden>模型暂时无法显示，请检查网络或使用支持 WebGL 的浏览器。下方仍可查看资产说明。</p>
+    </section>
+    <section class="controls-card" aria-label="操作说明">
+      <p class="panel-label">CONTROLS / 操作</p>
+      <ul>
+        <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动</li>
+        <li><kbd>Shift</kbd> 加力（触屏：把左摇杆推到底）</li>
+        <li><kbd>J</kbd> 发射激光</li>
+        <li><kbd>Space</kbd> 开始或重开，<kbd>P</kbd> / <kbd>Esc</kbd> 暂停</li>
+        <li>触屏：左侧拖动移动，右侧拖动转视角</li>
+      </ul>
+    </section>
+    <section class="landing-actions">
+      <a class="start-game" id="start-game" href="index.html">开始游戏</a>
     </section>
     <section class="legend" aria-label="资产说明">
       <article class="legend-card">
@@ -65,6 +80,8 @@
     function showcaseLoadFailed(event) {
       if (window.starRingShowcaseReady) return;
       document.querySelector(".stage-fallback").hidden = false;
+      // No scene loaded means nothing to enlarge.
+      document.getElementById("stage-fullscreen").hidden = true;
       const error = event?.message || String(event?.error || "Failed to load showcase module or its dependencies.");
       window.starRingShowcase = {
         getDebugReport: () => ({
@@ -78,7 +95,8 @@
           canvas: { width: 0, height: 0 },
           error
         }),
-        selectView: () => false
+        selectView: () => false,
+        toggleFullscreen: () => Promise.resolve(false)
       };
       window.starRingShowcaseReady = true;
       window.removeEventListener("error", showcaseModuleError, true);
