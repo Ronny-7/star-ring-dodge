@@ -1,4 +1,4 @@
-(function (root, factory) {
+﻿(function (root, factory) {
   if (typeof module === "object" && module.exports) {
     module.exports = factory();
   } else {
@@ -21,6 +21,7 @@
     togglePause,
     pauseGame,
     handleSettingsKeydown,
+    isGameViewActive = () => true,
     isCompactLandscapeMode = () => false,
     isForceLandscapeMode = () => false,
     requestLandscapeMode,
@@ -188,6 +189,8 @@
 
     function handleKeyDown(event) {
       if (handleSettingsKeydown?.(event)) return;
+      // One page holds both views: a hidden game must not eat keys.
+      if (!isGameViewActive()) return;
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       const state = getState?.() || {};
       if (event.code === "Space") {

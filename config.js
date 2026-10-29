@@ -244,11 +244,7 @@ window.starRingConfig = {
 
   uiText: {
     zh: {
-      startTitle: "按空格开始",
-      startText: "方向键或 WASD 移动，J 发射激光，P 或 Esc 暂停。拾取绿色能量核得分，存活后选择跃迁门进入不同星域。",
-      startButton: "开始游戏",
-      showcaseLink: "模型展示",
-      showcaseReturn: "返回展示页",
+      homeReturn: "返回主页",
       pauseTitle: "已暂停",
       pauseText: "按 P、Esc 或点击按钮继续。",
       pauseButton: "继续游戏",
@@ -259,11 +255,7 @@ window.starRingConfig = {
       gameOver: (score) => `你的分数是 ${score}。按空格可以立即重开。`
     },
     en: {
-      startTitle: "Press Space to Start",
-      startText: "Move with arrows or WASD, J fires laser, P or Esc pauses. Collect green energy cores for score, then pick a warp gate to enter a new sector.",
-      startButton: "Start Game",
-      showcaseLink: "Model Gallery",
-      showcaseReturn: "Back to showcase",
+      homeReturn: "Back to home",
       pauseTitle: "Paused",
       pauseText: "Press P, Esc, or the button to continue.",
       pauseButton: "Resume",
@@ -322,12 +314,7 @@ window.starRingConfig = {
       shipColor: "飞船颜色", language: "语言", on: "开", off: "关", exit: "退出", landscape: "横屏", orientationHint: "横屏游玩视野更宽",
       gameTitle: "星环闪避", gameSubtitle: "在流动星域中机动穿梭，规避陨石流，回收高能核心，并选择跃迁门探索下一片区域。",
       scoreLabel: "分数", healthLabel: "生命", bestLabel: "最高",
-      missionOverview: "任务概要", mission1Title: "探索", mission1Desc: "穿越流动星域，定期选择跃迁门进入风险与收益不同的区域。",
-      mission2Title: "回收", mission2Desc: "接触绿色能量核以获得高额分数补给，不同星域会改变资源节奏。",
-      mission3Title: "火力", mission3Desc: "使用激光清除障碍，优先处理大型陨石，为跃迁选择留出空间。",
-      controlsLabel: "操作", controlHint1: "方向键或 WASD 移动", controlHint2: "J 发射激光", controlHint3: "Space 开始或重开，P 或 Esc 暂停",
-      controlHintBoost: "Shift 加力（触屏：把左摇杆推到底）",
-      tacticalView: "战术视图", touchDrag: "拖动移动", touchFire: "开火", touchPause: "暂停", newRecord: "新纪录已建立"
+      touchDrag: "拖动移动", touchFire: "开火", touchPause: "暂停", newRecord: "新纪录已建立"
     },
     en: {
       sector: "SECTOR", threat: "THREAT", laser: "LASER", core: "CORE", shield: "SHIELD", double: "DOUBLE",
@@ -344,14 +331,9 @@ window.starRingConfig = {
       settings: "SETTINGS", close: "Close", audio: "Audio", music: "Music", sfx: "SFX",
       ship: "Ship", fighter: "Fighter", delta: "Delta", saucer: "Saucer",
       shipColor: "Ship Color", language: "Language", on: "ON", off: "OFF", exit: "Exit", landscape: "Landscape", orientationHint: "Landscape gives a wider view",
-      gameTitle: "Star Ring Dodge", gameSubtitle: "Navigate drifting sectors, dodge asteroids, collect energy cores, and warp to new regions.",
+      gameTitle: "Star Ring Dodge",
       scoreLabel: "Score", healthLabel: "Health", bestLabel: "Best",
-      missionOverview: "Mission Brief", mission1Title: "Explore", mission1Desc: "Traverse drifting sectors and pick warp gates to enter regions with different risk and reward.",
-      mission2Title: "Collect", mission2Desc: "Gather green energy cores for bonus score. Different sectors change resource pacing.",
-      mission3Title: "Fire", mission3Desc: "Use your laser to clear obstacles. Prioritize large asteroids to make room for warp choices.",
-      controlsLabel: "Controls", controlHint1: "Arrows or WASD to move", controlHint2: "J to fire laser", controlHint3: "Space to start or restart, P or Esc to pause",
-      controlHintBoost: "Shift to boost (touch: push the left stick to the edge)",
-      tacticalView: "Tactical View", touchDrag: "Drag to move", touchFire: "Fire", touchPause: "Pause", newRecord: "New Record"
+      touchDrag: "Drag to move", touchFire: "Fire", touchPause: "Pause", newRecord: "New Record"
     }
   }
 };

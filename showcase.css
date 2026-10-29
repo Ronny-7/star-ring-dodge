@@ -1,14 +1,14 @@
 .showcase { position: relative; z-index: 1; max-width: 1480px; margin: 0 auto; padding: 28px; }
+.showcase[hidden] { display: none; }
 .showcase-header { display: flex; justify-content: space-between; gap: 20px; align-items: end; }
-.showcase a { color: var(--muted-strong); text-decoration: none; }
-.showcase a:hover { color: var(--accent); }
-.showcase a:focus-visible { outline: 2px solid var(--accent-3); outline-offset: 3px; }
 .showcase-brand { display: flex; gap: 14px; align-items: center; font-weight: 700; }
 .showcase-intro { margin: 36px 0 24px; }
 .showcase-intro h1 { margin: 12px 0; font-size: clamp(1.8rem, 3.5vw, 3rem); }
 .showcase-intro > p:last-child { color: var(--muted-strong); line-height: 1.6; }
 .showcase-stage { position: relative; height: clamp(420px, 66vh, 760px); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: radial-gradient(circle at 50% 38%, rgba(38, 68, 94, .55), rgba(4, 8, 15, .92) 68%); }
-#showcase-canvas { display: block; width: 100%; height: 100%; }
+#showcase-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+#showcase-canvas:active { cursor: grabbing; }
+.stage-hint { position: absolute; z-index: 2; bottom: 14px; left: 16px; margin: 0; padding: 0; color: var(--muted); font-size: .78rem; pointer-events: none; }
 .stage-tabs { position: absolute; z-index: 2; top: 16px; left: 16px; display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5, 10, 20, .72); }
 .stage-tabs button { min-width: 0; height: 34px; margin: 0; padding: 0 12px; background: transparent; color: var(--muted); box-shadow: none; }
 .stage-tabs button[aria-pressed="true"] { background: var(--accent); color: #07111d; }
@@ -28,18 +28,18 @@
 .controls-card ul { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 10px 0 0; padding: 0; list-style: none; color: var(--muted-strong); font-size: .88rem; }
 .controls-card kbd { display: inline-block; margin-right: 4px; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: 4px; background: rgba(8, 16, 30, .7); color: var(--text); font: inherit; font-size: .82rem; }
 .landing-actions { margin-top: 18px; display: flex; justify-content: center; }
-.start-game { display: inline-flex; align-items: center; justify-content: center; min-width: 200px; height: 52px; padding: 0 28px; border-radius: 8px; background: linear-gradient(135deg, #62e4ff 0%, #7b8cff 52%, #8affd1 100%); color: #07111d; font-weight: 800; font-size: 1.02rem; text-decoration: none; box-shadow: 0 12px 30px rgba(88, 196, 255, .22); }
-/* .showcase a outranks a bare .start-game, and the gradient needs dark text. */
-.showcase a.start-game { color: #07111d; }
-.start-game:hover { color: #07111d; filter: brightness(1.06); }
+.start-game { display: inline-flex; align-items: center; justify-content: center; min-width: 200px; height: 52px; padding: 0 28px; border: 0; border-radius: 8px; background: linear-gradient(135deg, #62e4ff 0%, #7b8cff 52%, #8affd1 100%); color: #07111d; font: inherit; font-weight: 800; font-size: 1.02rem; text-decoration: none; cursor: pointer; box-shadow: 0 12px 30px rgba(88, 196, 255, .22); }
+.start-game:hover { filter: brightness(1.06); }
+.start-game:focus-visible { outline: 2px solid var(--accent-3); outline-offset: 3px; }
 @media (max-width: 760px) {
   .showcase { padding: 18px; }
-  .showcase-header { align-items: start; flex-direction: column; }
+  .showcase-header { align-items: center; }
+  .showcase-brand { gap: 10px; }
   .showcase-stage { height: 56vh; min-height: 360px; }
   .legend { grid-template-columns: 1fr; }
+  .start-game { width: auto; min-width: 0; height: 44px; padding: 0 18px; font-size: 0.95rem; }
   .stage-tabs { right: 12px; left: 12px; top: 12px; overflow-x: auto; }
   /* The narrow tab row spans the stage width, so drop the toggle under it. */
   .stage-fullscreen { top: 64px; right: 12px; }
   .controls-card ul { flex-direction: column; gap: 6px; }
-  .start-game { width: 100%; }
 }

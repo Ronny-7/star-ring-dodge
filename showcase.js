@@ -70,10 +70,13 @@ function initialize() {
         shipBounds: [],
         pickupVariants: [],
         rockForms: [],
+        camera: { yaw: 0, pitch: 0, factor: 1, distance: 0 },
         canvas: { width: 0, height: 0 },
         error: String(error)
       }),
       selectView: () => false,
+      orbitBy: () => false,
+      zoomBy: () => false,
       toggleFullscreen
     };
     window.starRingShowcaseReady = true;
@@ -148,6 +151,17 @@ function initialize() {
     rocks: { position: [150, 10, 510], width: 320 }
   };
 
+  // Camera orbit. The studio lights stay fixed, so dragging rotates the view
+  // around the models instead of dragging the light rig across them.
+  const MAX_TILT = THREE.MathUtils.degToRad(65);
+  const MIN_ZOOM = 0.45;
+  const MAX_ZOOM = 2.2;
+  const ORBIT_SPEED = 0.006;
+  const ZOOM_SPEED = 0.0012;
+  const orbit = { yaw: 0, pitch: 0, factor: 1 };
+  let framing = null;
+  let interacted = false;
+
   function layoutShips() {
     const stacked = stage.clientWidth < 640;
     const sizes = ships.map((ship) => {
@@ -166,6 +180,21 @@ function initialize() {
     rocksRoot.position.set(stacked ? 0 : 170, stacked ? -340 : -100, 120);
     VIEWS.ship.width = stacked ? Math.max(...sizes.map((size) => size.x)) * 1.2
       : centers.at(-1) + (sizes[0].x + sizes.at(-1).x) / 2;
+  }
+
+  function applyCamera() {
+    if (!framing) return;
+    const spherical = new THREE.Spherical().setFromVector3(framing.dir);
+    spherical.theta += orbit.yaw;
+    spherical.phi = THREE.MathUtils.clamp(
+      spherical.phi - orbit.pitch,
+      Math.max(0.12, framing.basePhi - MAX_TILT),
+      Math.min(Math.PI - 0.12, framing.basePhi + MAX_TILT)
+    );
+    const offset = new THREE.Vector3().setFromSpherical(spherical)
+      .multiplyScalar(framing.distance * orbit.factor);
+    camera.position.copy(framing.target).add(offset);
+    camera.lookAt(framing.target);
   }
 
   function frameView(name) {
@@ -192,14 +221,57 @@ function initialize() {
         }
       }
     }
-    offset.normalize().multiplyScalar(distance);
-    camera.position.copy(target).add(offset);
-    camera.lookAt(target);
+    const dir = offset.normalize();
+    framing = { target, dir, distance, basePhi: new THREE.Spherical().setFromVector3(dir).phi };
+    applyCamera();
+  }
+
+  function render() {
+    // A hidden stage measures 0x0; skip it so returning restores a real frame.
+    if (stage.clientWidth < 1 || stage.clientHeight < 1) return;
+    renderer.render(scene, camera);
+  }
+
+  function cameraReport() {
+    return {
+      yaw: orbit.yaw,
+      pitch: orbit.pitch,
+      factor: orbit.factor,
+      distance: camera.position.distanceTo(framing.target)
+    };
+  }
+
+  function orbitBy(dx, dy) {
+    orbit.yaw -= dx * ORBIT_SPEED;
+    orbit.pitch = THREE.MathUtils.clamp(orbit.pitch + dy * ORBIT_SPEED, -MAX_TILT, MAX_TILT);
+    interacted = true;
+    applyCamera();
+    render();
+    return true;
+  }
+
+  function zoomBy(delta) {
+    const next = THREE.MathUtils.clamp(orbit.factor * Math.exp(delta * ZOOM_SPEED), MIN_ZOOM, MAX_ZOOM);
+    if (next === orbit.factor) return false;
+    orbit.factor = next;
+    interacted = true;
+    applyCamera();
+    render();
+    return true;
+  }
+
+  function resetOrbit() {
+    orbit.yaw = 0;
+    orbit.pitch = 0;
+    orbit.factor = 1;
   }
 
   function selectView(next) {
     if (!Object.hasOwn(VIEWS, next)) return false;
+    // Re-selecting the active tab is the reset gesture for orbit and zoom.
+    if (next === view) interacted = false;
     view = next;
+    resetOrbit();
     shipRoot.visible = view === "all" || view === "ship";
     rewardsRoot.visible = view === "all" || view === "rewards";
     rocksRoot.visible = view === "all" || view === "rocks";
@@ -207,23 +279,67 @@ function initialize() {
     stage.querySelectorAll("button[data-view]").forEach((button) => {
       button.setAttribute("aria-pressed", String(button.dataset.view === view));
     });
-    renderer.render(scene, camera);
+    render();
     return true;
   }
   stage.querySelectorAll("button[data-view]").forEach((button) => {
     button.addEventListener("click", () => selectView(button.dataset.view));
   });
 
+  // Drag to orbit (mouse, pen, one finger), pinch or wheel to zoom.
+  const pointers = new Map();
+  let pinchDistance = 0;
+
+  function distanceBetweenPointers() {
+    const [a, b] = [...pointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  canvas.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    canvas.setPointerCapture?.(event.pointerId);
+    if (pointers.size === 2) pinchDistance = distanceBetweenPointers();
+  });
+
+  canvas.addEventListener("pointermove", (event) => {
+    const previous = pointers.get(event.pointerId);
+    if (!previous) return;
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.size > 1) {
+      const next = distanceBetweenPointers();
+      if (pinchDistance > 0 && next > 0) zoomBy((pinchDistance - next) * 2.4);
+      pinchDistance = next;
+      return;
+    }
+    orbitBy(event.clientX - previous.x, event.clientY - previous.y);
+  });
+
+  function endPointer(event) {
+    pointers.delete(event.pointerId);
+    pinchDistance = 0;
+  }
+  canvas.addEventListener("pointerup", endPointer);
+  canvas.addEventListener("pointercancel", endPointer);
+  canvas.addEventListener("lostpointercapture", endPointer);
+
+  canvas.addEventListener("wheel", (event) => {
+    const unit = event.deltaMode === 1 ? 16 : 1;
+    // At the zoom limit the wheel falls through so the page can still scroll.
+    if (zoomBy(event.deltaY * unit)) event.preventDefault();
+  }, { passive: false });
+
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   function resize() {
     const width = stage.clientWidth;
     const height = stage.clientHeight;
+    if (width < 1 || height < 1) return;
     renderer.setSize(width, height, false);
     camera.aspect = width / Math.max(1, height);
     camera.updateProjectionMatrix();
     layoutShips();
     if (VIEWS[view]) frameView(view);
-    if (reducedMotion) renderer.render(scene, camera);
+    if (reducedMotion) render();
   }
   new ResizeObserver(resize).observe(stage);
   window.addEventListener("resize", resize);
@@ -231,18 +347,21 @@ function initialize() {
   const startedAt = performance.now();
   function animate(now) {
     const elapsed = (now - startedAt) / 1000;
-    ships.forEach((ship) => { ship.rotation.y = Math.sin(elapsed * 0.12) * 0.12; });
-    rewardsRoot.children.forEach((pickup, index) => {
-      const { body, variant } = pickup.userData.pickup;
-      body.rotation.y = variant === "shield"
-        ? Math.sin(elapsed * 0.33 + index) * 0.22
-        : elapsed * (variant === "core" ? 0.4 : 0.3) + index;
-      pickup.position.y = Math.sin(elapsed * 0.9 + index) * 4;
-    });
-    rocksRoot.children.forEach((rock, index) => {
-      rock.rotation.y = elapsed * 0.12 + index * 1.7;
-    });
-    renderer.render(scene, camera);
+    if (!interacted) {
+      ships.forEach((ship) => { ship.rotation.y = Math.sin(elapsed * 0.12) * 0.12; });
+      rewardsRoot.children.forEach((pickup, index) => {
+        const { body, variant } = pickup.userData.pickup;
+        body.rotation.y = variant === "shield"
+          ? Math.sin(elapsed * 0.33 + index) * 0.22
+          : elapsed * (variant === "core" ? 0.4 : 0.3) + index;
+        pickup.position.y = Math.sin(elapsed * 0.9 + index) * 4;
+      });
+      rocksRoot.children.forEach((rock, index) => {
+        rock.rotation.y = elapsed * 0.12 + index * 1.7;
+      });
+    }
+    // The game view hides the stage; render() skips the 0x0 frame.
+    render();
     requestAnimationFrame(animate);
   }
 
@@ -259,13 +378,14 @@ function initialize() {
       shipBounds,
       pickupVariants: rewardsRoot.children.map((pickup) => pickup.userData.pickup.variant),
       rockForms: rockSet.forms.map((form) => form.id),
+      camera: cameraReport(),
       canvas: { width: renderer.domElement.width, height: renderer.domElement.height }
     };
   }
 
   resize();
   selectView("all");
-  window.starRingShowcase = { getDebugReport, selectView, toggleFullscreen };
+  window.starRingShowcase = { getDebugReport, selectView, orbitBy, zoomBy, toggleFullscreen };
   window.starRingShowcaseReady = true;
   if (!reducedMotion) requestAnimationFrame(animate);
 }

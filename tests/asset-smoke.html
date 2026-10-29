@@ -85,13 +85,14 @@
       const ready = await waitFor(() => win.starRingWorldReady || null);
       await ready;
 
-      // The boot start panel is the only open start panel the page ever shows,
-      // so sample it before anything starts a run.
-      const bootReturn = win.document.getElementById("showcase-return");
-      const startPanelClean =
+      // The merged page has no start panel: ?test=1 boots straight into a run,
+      // so the pause panel is the only place the way home may appear.
+      await waitFor(() => win.document.getElementById("overlay")?.classList.contains("hidden"));
+      const bootReturn = win.document.getElementById("back-home");
+      const bootOverlayClean =
         Boolean(bootReturn) &&
         bootReturn.hidden === true &&
-        !win.document.getElementById("overlay").classList.contains("hidden");
+        win.document.getElementById("overlay").classList.contains("hidden");
 
       api.startGame();
       await nextFrames(win, 2);
@@ -667,7 +668,8 @@
 
       const showcaseFrame = document.createElement("iframe");
       showcaseFrame.allowFullscreen = true;
-      showcaseFrame.src = "../showcase.html?test=1";
+      // The landing view is the entry of the same index.html the game runs in.
+      showcaseFrame.src = "../index.html";
       showcaseFrame.width = 1280;
       showcaseFrame.height = 900;
       showcaseFrame.style.cssText = "position:absolute;left:-16000px;top:0;border:0;";
@@ -682,12 +684,12 @@
           showcaseFrame.remove();
           reject(new Error(message));
         };
-        const timer = setTimeout(() => fail("timed out loading showcase.html after 20000 ms"), 20000);
+        const timer = setTimeout(() => fail("timed out loading the landing page after 20000 ms"), 20000);
         showcaseFrame.onload = () => {
           cleanup();
           resolve(showcaseFrame.contentWindow);
         };
-        showcaseFrame.onerror = () => fail("failed to load showcase.html");
+        showcaseFrame.onerror = () => fail("failed to load the landing page");
       });
       document.body.append(showcaseFrame);
       const showcaseWin = await showcaseLoaded;
@@ -695,24 +697,39 @@
         () => (showcaseWin.starRingShowcaseReady ? showcaseWin.starRingShowcase : null),
         20000
       );
-      const showcaseHref = win.document.getElementById("showcase-link")?.getAttribute("href") || "";
       const showcaseDoc = showcaseWin.document;
       const wideReport = showcase.getDebugReport();
+
+      showcase.orbitBy(160, 40);
+      const orbited = showcase.getDebugReport().camera;
+      showcase.zoomBy(500);
+      const zoomedOut = showcase.getDebugReport().camera;
+      showcase.zoomBy(-5000);
+      const zoomedIn = showcase.getDebugReport().camera;
+
       showcase.selectView("rewards");
       showcaseFrame.width = 390;
       showcaseFrame.height = 844;
       await nextFrames(showcaseWin, 3);
       const rewardsReport = showcase.getDebugReport();
+      const mergedShell = Boolean(showcaseDoc.getElementById("landing")) &&
+        showcaseDoc.getElementById("landing").hidden === false &&
+        showcaseDoc.getElementById("game-view").hidden === true;
       check(
-        "showcase loads real models, links from the game, and fits a narrow viewport",
-        showcaseHref === "showcase.html?v=4.5.0" &&
-          Boolean(showcaseDoc.querySelector(".stage-fallback")) &&
+        "one page hosts the landing models and the game, and orbits and zooms",
+        mergedShell &&
           wideReport.models.ship === 3 &&
           wideReport.models.rewards === 3 &&
           wideReport.models.rocks === 3 &&
           wideReport.pickupVariants.join(",") === "core,shield,double" &&
           wideReport.rockForms.length === 3 &&
+          Math.abs(orbited.yaw) > 0.3 &&
+          Math.abs(orbited.pitch) > 0.1 &&
+          zoomedOut.factor > 1 &&
+          Math.abs(zoomedIn.factor - 0.45) < 1e-6 &&
           rewardsReport.view === "rewards" &&
+          rewardsReport.camera.factor === 1 &&
+          rewardsReport.camera.yaw === 0 &&
           rewardsReport.canvas.width > 0 &&
           rewardsReport.canvas.height > 0 &&
           rewardsReport.canvas.width < wideReport.canvas.width
@@ -750,10 +767,46 @@
           fullscreenToggleWorks = fullscreenButton.hidden === true;
         }
       }
+      // Entering the game is a view switch in the same document, and the browser
+      // back button (a hash entry) returns to the landing view.
+      startLink?.click();
+      const enteredGame = startLink ? await waitFor(() => {
+        const gameShown = landingDoc.getElementById("game-view").hidden === false;
+        const landingHidden = landingDoc.getElementById("landing").hidden === true;
+        return gameShown && landingHidden ? true : null;
+      }, 30000) : false;
+      const bootedGameCanvas = landingDoc.getElementById("game");
+      const canvasSized = Boolean(bootedGameCanvas) && bootedGameCanvas.width >= 320 && bootedGameCanvas.height >= 240;
+      showcaseWin.history.back();
+      const returnedToLanding = await waitFor(
+        () => landingDoc.getElementById("landing").hidden === false ? true : null,
+        10000
+      );
+      // The game scripts are loaded by now, so a key press on the landing view
+      // would reach them. Prove the view gate blocks it — and, in the second
+      // arm, that the same key still starts a run when the view is active.
+      const spaceKey = { key: " ", code: "Space", preventDefault() {} };
+      const probeStart = (viewActive) => {
+        let started = false;
+        const probe = win.starRingInput.createInputController({
+          windowObject: win,
+          documentObject: win.document,
+          getState: () => ({ running: false, gameOver: true, paused: false }),
+          fireLaser: () => {},
+          startGame: () => { started = true; },
+          togglePause: () => {},
+          pauseGame: () => {},
+          isGameViewActive: () => viewActive
+        });
+        probe.handleKeyDown(spaceKey);
+        return started;
+      };
+      const keysIgnoredOnLanding = probeStart(false) === false;
+      const keysLiveInGame = probeStart(true) === true;
       check(
-        "landing page offers the game, the controls and a working fullscreen toggle",
+        "landing page offers the game, the controls, fullscreen, enters and leaves the game view, and ignores game keys there",
         Boolean(startLink) &&
-          startLink.getAttribute("href") === "index.html" &&
+          startLink.tagName === "BUTTON" &&
           Boolean(controlsCard) &&
           /WASD/.test(controlsCard.textContent) &&
           /Shift/.test(controlsCard.textContent) &&
@@ -761,16 +814,21 @@
           Boolean(fullscreenButton) &&
           fullscreenInitiallyCorrect &&
           fullscreenToggleWorks &&
-          fullscreenButton.getAttribute("aria-pressed") === "false"
+          fullscreenButton.getAttribute("aria-pressed") === "false" &&
+          enteredGame === true &&
+          canvasSized &&
+          returnedToLanding === true &&
+          keysIgnoredOnLanding &&
+          keysLiveInGame
       );
 
       // Each mode is asserted while its panel is actually open, not merely
-      // closed: a link leaking onto the start or game-over screen must fail.
+      // closed: a way home leaking onto the game-over screen must fail.
       const overlayEl = win.document.getElementById("overlay");
       const panelOpen = () => !overlayEl.classList.contains("hidden");
       const returnState = () => {
-        const el = win.document.getElementById("showcase-return");
-        return { present: Boolean(el), hidden: el?.hidden, href: el?.getAttribute("href") };
+        const el = win.document.getElementById("back-home");
+        return { present: Boolean(el), hidden: el?.hidden, tag: el?.tagName, href: el?.getAttribute("href") };
       };
 
       api.startGame();
@@ -787,11 +845,12 @@
       const gameOverPanelOpen = panelOpen();
       check(
         "only the pause panel offers a way back to the landing page",
-        startPanelClean &&
+        bootOverlayClean &&
           pausePanelOpen &&
           pauseReturn.present &&
           pauseReturn.hidden === false &&
-          pauseReturn.href === "showcase.html?v=4.5.0" &&
+          pauseReturn.tag === "BUTTON" &&
+          pauseReturn.href === null &&
           gameOverPanelOpen &&
           overReturn.present &&
           overReturn.hidden === true

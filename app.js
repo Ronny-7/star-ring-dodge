@@ -17,8 +17,7 @@ const overlayStats = document.getElementById("overlay-stats");
 const overlayStatGrid = document.getElementById("overlay-stat-grid");
 const overlayRecord = document.getElementById("overlay-record");
 const startButton = document.getElementById("start-button");
-const showcaseLink = document.getElementById("showcase-link");
-const showcaseReturn = document.getElementById("showcase-return");
+const backHomeButton = document.getElementById("back-home");
 const playfieldEl = canvas.parentElement;
 const orientationButton = document.querySelector("[data-orientation-button]");
 const settingsButton = document.getElementById("settings-button");
@@ -61,9 +60,7 @@ function setLanguage(lang) {
   applyLanguageToDOM();
   syncLandscapeUi();
   if (overlay && !overlay.classList.contains("hidden")) {
-    if (overlayMode === "start") {
-      showOverlay("start", ui.startTitle, ui.startText, ui.startButton);
-    } else if (overlayMode === "pause") {
+    if (overlayMode === "pause") {
       showOverlay("pause", ui.pauseTitle, ui.pauseText, ui.pauseButton);
     } else if (overlayMode === "gameover") {
       showOverlay(
@@ -86,24 +83,9 @@ function applyLanguageToDOM() {
     if (el) el.setAttribute(attr, text);
   };
   document.title = L("gameTitle");
-  set("game-title", L("gameTitle"));
-  set("game-subtitle", L("gameSubtitle"));
   set("score-label", L("scoreLabel"));
   set("health-label", L("healthLabel"));
   set("best-label", L("bestLabel"));
-  set("mission-overview", L("missionOverview"));
-  set("mission-1-title", L("mission1Title"));
-  set("mission-1-desc", L("mission1Desc"));
-  set("mission-2-title", L("mission2Title"));
-  set("mission-2-desc", L("mission2Desc"));
-  set("mission-3-title", L("mission3Title"));
-  set("mission-3-desc", L("mission3Desc"));
-  set("controls-label", L("controlsLabel"));
-  set("control-hint-1", L("controlHint1"));
-  set("control-hint-2", L("controlHint2"));
-  set("control-hint-3", L("controlHint3"));
-  set("control-hint-4", L("controlHintBoost"));
-  set("tactical-view-label", L("tacticalView"));
   set("orientation-hint", L("orientationHint"));
   set("touch-drag-label", L("touchDrag"));
   set("touch-fire-btn", L("touchFire"));
@@ -121,8 +103,7 @@ function applyLanguageToDOM() {
   set("skin-fighter", L("fighter"));
   set("skin-delta", L("delta"));
   set("skin-saucer", L("saucer"));
-  set("showcase-link", ui.showcaseLink);
-  set("showcase-return", ui.showcaseReturn);
+  set("back-home", ui.homeReturn);
   set("settings-color-title", L("shipColor"));
   set("settings-language-title", L("language"));
   syncToggleButton(musicBtn, audioController.isMusicEnabled());
@@ -318,15 +299,14 @@ function showOverlay(mode, title, text, buttonText) {
   overlayTitle.textContent = title;
   overlayText.textContent = text;
   startButton.textContent = buttonText;
-  if (showcaseLink) showcaseLink.hidden = mode !== "start";
-  if (showcaseReturn) showcaseReturn.hidden = mode !== "pause";
+  if (backHomeButton) backHomeButton.hidden = mode !== "pause";
   if (mode !== "gameover") hideOverlayStats();
   overlay.classList.remove("hidden");
 }
 
 function hideOverlay() {
   overlay.classList.add("hidden");
-  if (showcaseReturn) showcaseReturn.hidden = true;
+  if (backHomeButton) backHomeButton.hidden = true;
 }
 
 /* ---------- 存档 ---------- */
@@ -1801,6 +1781,7 @@ inputController = window.starRingInput.createInputController({
   togglePause,
   pauseGame,
   handleSettingsKeydown,
+  isGameViewActive: () => document.body.dataset.view === "game",
   isCompactLandscapeMode,
   isForceLandscapeMode,
   requestLandscapeMode,
@@ -1835,7 +1816,7 @@ resizeCanvas();
 renderSkinPreviews();
 applyLanguage();
 applyLanguageToDOM();
-showOverlay("start", ui.startTitle, ui.startText, ui.startButton);
+hideOverlay();
 draw();
 
 function startLoop() {
@@ -1850,7 +1831,7 @@ function startLoop() {
 
 // three.js is an ES module; the world boots asynchronously and the HUD-only
 // fallback covers the gap.
-window.starRingWorldReady = import("./world3d.js?v=4.5.0")
+window.starRingWorldReady = import("./world3d.js?v=4.6.0")
   .then((mod) => {
     world3d = mod.createWorld({ world: state.world, tuning, skin: activeSkin, color: state.shipColor.mid });
     world3d.resize(cw, ch);
@@ -1860,6 +1841,23 @@ window.starRingWorldReady = import("./world3d.js?v=4.5.0")
     console.error("WebGL world failed to load, running HUD-only:", error);
     startLoop();
   });
+
+// The page shell (views.js) owns navigation; this is the only handle it needs.
+window.starRingGame = {
+  start: startGame,
+  leave() {
+    inputController?.clearAll();
+    closeSettings();
+    stopMusic();
+    state.running = false;
+    state.paused = false;
+    state.gameOver = true;
+    state.lastTime = 0;
+    hideOverlay();
+    // A locked pointer outlives a hidden canvas and would keep feeding look input.
+    if (document.pointerLockElement) document.exitPointerLock?.();
+  }
+};
 
 if (new URLSearchParams(window.location.search).has("test")) {
   window.starRingTestApi = {

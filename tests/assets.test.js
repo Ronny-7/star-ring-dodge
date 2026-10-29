@@ -46,8 +46,9 @@ test("browser renders the procedural fighter with the real asset debug API", asy
       "--headless=new",
       "--no-sandbox",
       "--user-data-dir=" + path.join(resultDir, "profile"),
-      // Fullscreen permission rejection also needs time within the virtual clock.
-      "--virtual-time-budget=120000",
+      // Fullscreen permission rejection also needs time within the virtual clock,
+      // and the landing check boots the game in a second frame before returning.
+      "--virtual-time-budget=260000",
       "--window-size=1280,900",
       "--dump-dom",
       `http://127.0.0.1:${port}/tests/asset-smoke.html`
