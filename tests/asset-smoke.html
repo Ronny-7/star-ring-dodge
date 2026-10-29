@@ -716,6 +716,73 @@
             (b) => Math.abs(a.x / a.z - b.x / b.z) > 0.05))
       );
 
+      // GPU memory: renderer.info counts what the GPU still holds. Compare two
+      // equally-warmed snapshots so transient asteroids cannot skew the result:
+      // a leak keeps climbing, a healthy scene returns to the same level.
+      api.startGame();
+      api.clearAsteroids();
+      await nextFrames(win, 3);
+      api.selectSkin("delta");
+      api.selectSkin("saucer");
+      api.selectSkin("default");
+      api.clearAsteroids();
+      await nextFrames(win, 3);
+      const gpuWarm = api.getWorldDebug().gpu;
+      for (let cycle = 0; cycle < 5; cycle += 1) {
+        api.selectSkin("delta");
+        api.tick(1 / 60);
+        api.selectSkin("saucer");
+        api.tick(1 / 60);
+        api.selectSkin("default");
+        api.tick(1 / 60);
+      }
+      api.clearAsteroids();
+      await nextFrames(win, 3);
+      const gpuSkins = api.getWorldDebug().gpu;
+      for (let cycle = 0; cycle < 5; cycle += 1) {
+        api.startGame();
+        api.clearAsteroids();
+        api.tick(1 / 60);
+      }
+      api.clearAsteroids();
+      await nextFrames(win, 3);
+      const gpuRestarts = api.getWorldDebug().gpu;
+      // A throttled or unpainted frame leaves every counter at its empty level
+      // and would make the equality checks pass trivially, so require that the
+      // scene actually uploaded its geometry first.
+      const gpuFlat =
+        gpuWarm.geometries > 40 &&
+        gpuWarm.textures > 4 &&
+        gpuSkins.geometries === gpuWarm.geometries &&
+        gpuSkins.textures === gpuWarm.textures &&
+        gpuRestarts.geometries === gpuWarm.geometries &&
+        gpuRestarts.textures === gpuWarm.textures;
+      if (!gpuFlat) {
+        throw new Error(
+          `GPU counters drifted: warm=${JSON.stringify(gpuWarm)} skins=${JSON.stringify(gpuSkins)} restarts=${JSON.stringify(gpuRestarts)}`
+        );
+      }
+      check("skin switching and restarts hold GPU memory flat", gpuFlat);
+
+      // GPU counters alone are render-timing dependent, so pair them with the
+      // deterministic release accounting: after the effects expire, everything
+      // the FX pool created must have been disposed exactly once.
+      for (let burst = 0; burst < 5; burst += 1) {
+        api.destroyAsteroidAt(30200 + burst * 40, 30000, 30200, 30, false);
+        for (let frame = 0; frame < 60; frame += 1) api.tick(1 / 60);
+      }
+      const fxSettled = api.getWorldDebug().fx;
+      check(
+        "destruction effects release everything they allocate",
+        fxSettled.debrisGroups === 0 &&
+          fxSettled.shards === 0 &&
+          fxSettled.sparks === 0 &&
+          fxSettled.rings === 0 &&
+          fxSettled.stats.disposedMaterials === fxSettled.stats.createdMaterials &&
+          fxSettled.stats.disposedGeometries === fxSettled.stats.createdGeometries
+      );
+      api.clearAsteroids();
+
       // Terminal check: no game API assertions may follow world disposal.
       api.startGame();
       api.clearAsteroids();

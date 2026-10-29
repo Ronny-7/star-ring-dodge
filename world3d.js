@@ -471,6 +471,13 @@ function getDebugReport() {
   const base = {
     fighter: null,
     lights,
+    // renderer.info counts what the GPU still holds, so it is the honest
+    // proxy for a leak: counts that climb across restarts never come back down.
+    gpu: {
+      geometries: renderer?.info?.memory?.geometries ?? null,
+      textures: renderer?.info?.memory?.textures ?? null,
+      programs: renderer?.info?.programs?.length ?? null
+    },
     fx: {
       debrisGroups: fxPool.debris.length,
       shards: fxPool.debris.reduce((n, effect) => n + effect.objects.length, 0),

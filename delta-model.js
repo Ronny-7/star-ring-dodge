@@ -87,6 +87,10 @@ export function createDeltaModel({ color, environment, hullTexture }, flameBuild
     [0, 48], [86, -12], [86, -20], [65, -28], [55, -20],
     [36, -38], [25, -29], [12, -40], [0, -31]
   ], 5.5, 0.8);
+  // Measured upper surface of the wing extrusion: depth 5.5 plus 0.8 bevel on
+  // both faces. Everything sitting on the wing is positioned from this constant
+  // so details cannot float or sink when the outline changes.
+  const SKIN_Y = 3.55;
   for (const side of [-1, 1]) {
     const prefix = side < 0 ? "left" : "right";
     const wing = add(hullRoot, wingGeometry.clone(), hull, [0, 0, 0], `${prefix}-flying-wing`);
@@ -95,25 +99,38 @@ export function createDeltaModel({ color, environment, hullTexture }, flameBuild
 
     const tail = add(hullRoot, panelGeometry([
       [15, -30], [25, -23], [35, -32], [35, -36], [25, -27], [15, -36]
-    ], 0.45, 0.18), edge, [0, 3.45, 0], `${prefix}-trailing-elevon`);
+    ], 0.45, 0.18), edge, [0, SKIN_Y + 0.12, 0], `${prefix}-trailing-elevon`);
     tail.scale.x = side;
     parts[`${prefix}Tail`] = tail;
 
-    const skin = add(hullRoot, panelGeometry([
-      [9, 32], [76, -12], [66, -17], [45, -4], [18, 17]
-    ], 0.18, 0.12), edge, [0, 3.65, 0], `${prefix}-leading-edge-skin`);
-    skin.scale.x = side;
     const marking = add(hullRoot, panelGeometry([
       [46, -8], [48, -9.4], [54, -13.3], [52, -12]
-    ], 0.1, 0.05), lowVis, [0, 3.15, 0], `${prefix}-low-vis-marking`);
+    ], 0.1, 0.05), lowVis, [0, SKIN_Y + 0.01, 0], `${prefix}-low-vis-marking`);
     marking.scale.x = side;
 
-    // Dark infill clears the uncut wing skin; four raised rails give it depth.
+    // Access hatches sit flat on the skin. Earlier thin diagonal "seam strips"
+    // read as loose debris rather than panel lines, so the plate detail comes
+    // from the hatches and the grid panel below instead.
+    add(hullRoot, panelGeometry([
+      [12, 26], [22, 20], [21.2, 18.4], [11.2, 24.4]
+    ], 0.06, 0.02), dark, [0, SKIN_Y + 0.01, 0], `${prefix}-access-hatch`).scale.x = side;
+    add(hullRoot, panelGeometry([
+      [52, -18], [64, -24], [63.2, -25.4], [51.2, -19.4]
+    ], 0.05, 0.02), dark, [0, SKIN_Y + 0.01, 0], `${prefix}-outboard-hatch`).scale.x = side;
+    for (const [sx, sz] of [[26, 14], [38, 2], [50, -10]]) {
+      add(hullRoot, panelGeometry([
+        [sx, sz], [sx + 3.4, sz - 1.9], [sx + 3.2, sz - 2.4], [sx - 0.2, sz + 0.3]
+      ], 0.05, 0.018), edge, [0, SKIN_Y + 0.01, 0], `${prefix}-service-panel`).scale.x = side;
+    }
+
+    // The wing is a solid extrusion, so a bay cannot be cut into it. Instead the
+    // dark panel is the outermost surface at that footprint, and the rails stand
+    // proud around it; the rail shadow is what reads as depth.
     const bayOutline = [
       [6, 12], [18, 5], [21, -26], [5, -26]
     ];
-    add(hullRoot, panelGeometry(bayOutline, 0.5, 0.12), duct,
-      [0, 3.55, 0], `${prefix}-recessed-exhaust-bay`).scale.x = side;
+    add(hullRoot, panelGeometry(bayOutline, 0.12, 0.05), duct,
+      [0, SKIN_Y + 0.03, 0], `${prefix}-recessed-exhaust-bay`).scale.x = side;
     const bayInner = [[7.2, 10], [16.8, 4.3], [19.7, -24.7], [6.3, -24.7]];
     const rails = new THREE.Group();
     rails.name = `${prefix}-exhaust-bay-rail`;
@@ -122,22 +139,22 @@ export function createDeltaModel({ color, environment, hullTexture }, flameBuild
     for (let i = 0; i < 4; i++) {
       const next = (i + 1) % 4;
       add(rails, panelGeometry([bayOutline[i], bayOutline[next], bayInner[next], bayInner[i]],
-        0.9, 0.16), edge, [0, 4.1, 0], `${prefix}-exhaust-bay-rail-${i}`);
+        0.16, 0.04), edge, [0, SKIN_Y + 0.06, 0], `${prefix}-exhaust-bay-rail-${i}`);
     }
     const rim = add(hullRoot, new THREE.TorusGeometry(3.7, 0.6, 8, 24), edge,
-      [side * 13, 4.3, -27], `${prefix}-nozzle-rim`);
+      [side * 13, SKIN_Y - 0.05, -27], `${prefix}-nozzle-rim`);
     rim.scale.y = 0.53;
     const recess = add(hullRoot, new THREE.CircleGeometry(3.5, 24), duct,
-      [side * 13, 4.3, -26.8], `${prefix}-nozzle-recess`);
+      [side * 13, SKIN_Y - 0.05, -26.8], `${prefix}-nozzle-recess`);
     recess.rotation.y = Math.PI;
     recess.scale.y = 0.53;
     const core = add(hullRoot, new THREE.CircleGeometry(2.4, 24), engine,
-      [side * 13, 4.3, -26.95], `${prefix}-engine-core`);
+      [side * 13, SKIN_Y - 0.05, -26.95], `${prefix}-engine-core`);
     core.rotation.y = Math.PI;
     core.scale.y = 0.42;
     parts[`${prefix}Engine`] = core;
     for (const [radius, length] of [[3.1, 29], [1.5, 18]]) {
-      const flame = flameBuilder(group, side * 13, 4.3, -27.6, radius, length);
+      const flame = flameBuilder(group, side * 13, SKIN_Y - 0.05, -27.6, radius, length);
       flame.scale.x = 1.2;
       flame.castShadow = true;
       flame.receiveShadow = true;

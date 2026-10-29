@@ -51,23 +51,31 @@ export function createSaucerModel({ color, environment, hullTexture }) {
   ring(55.5, 0.3, 4.6, edge);
 
   // Nacelles sit in the rim rather than on spokes: each is short, mostly buried
-  // in the hull, with a blister collar blending it into the disc face.
+  // in the hull, with a blister collar blending it into the disc face. All eight
+  // are identical, so one set of geometries is built and reused eight times.
+  const collarGeometry = new THREE.CylinderGeometry(8.6, 10.4, 5.5, 14, 1, false);
+  const nacelleGeometry = new THREE.CylinderGeometry(5.4, 6.4, 12.5, 12, 1, true);
+  const nacelleDuctGeometry = new THREE.CylinderGeometry(4.4, 4.4, 11.6, 12);
+  const nacelleLipGeometry = new THREE.TorusGeometry(5.0, 0.75, 6, 12);
+  const nacelleCoreGeometry = new THREE.CylinderGeometry(3.4, 3.4, 0.5, 12);
+  const nacelleGrilleGeometry = new THREE.BoxGeometry(0.6, 0.8, 6);
+  const jointGeometry = new THREE.BoxGeometry(0.45, 0.3, 17);
+  const panelGeometry = new THREE.BoxGeometry(7, 0.6, 5);
+  const panelGrooveGeometry = new THREE.BoxGeometry(0.5, 0.3, 4);
   for (let i = 0; i < 8; i += 1) {
     const angle = Math.PI / 8 + i * Math.PI / 4;
     const x = Math.sin(angle);
     const z = Math.cos(angle);
-    const collar = add(hullRoot, new THREE.CylinderGeometry(8.6, 10.4, 5.5, 14, 1, false),
-      hull, x * 51, 0.6, z * 51);
+    const collar = add(hullRoot, collarGeometry, hull, x * 51, 0.6, z * 51);
     collar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(x, 0, z));
-    const nacelle = add(hullRoot, new THREE.CylinderGeometry(5.4, 6.4, 12.5, 12, 1, true),
-      hull, x * 51.5, -0.5, z * 51.5);
+    const nacelle = add(hullRoot, nacelleGeometry, hull, x * 51.5, -0.5, z * 51.5);
     nacelle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(x, 0, z));
-    add(nacelle, new THREE.CylinderGeometry(4.4, 4.4, 11.6, 12), dark);
-    const lip = add(nacelle, new THREE.TorusGeometry(5.0, 0.75, 6, 12), edge, 0, 6.2);
+    add(nacelle, nacelleDuctGeometry, dark);
+    const lip = add(nacelle, nacelleLipGeometry, edge, 0, 6.2);
     lip.rotation.x = Math.PI / 2;
-    add(nacelle, new THREE.CylinderGeometry(3.4, 3.4, 0.5, 12), engine, 0, 5.6);
+    add(nacelle, nacelleCoreGeometry, engine, 0, 5.6);
     for (const offset of [-2.2, 0, 2.2]) {
-      add(nacelle, new THREE.BoxGeometry(0.6, 0.8, 6), dark, offset, 6.4);
+      add(nacelle, nacelleGrilleGeometry, dark, offset, 6.4);
     }
     if (i === 2) parts.rightEngine = nacelle;
     if (i === 5) parts.leftEngine = nacelle;
@@ -75,12 +83,12 @@ export function createSaucerModel({ color, environment, hullTexture }) {
     if (i === 4) parts.leftTail = nacelle;
 
     // Narrow radial joints and inset inspection panels break up the armour face.
-    const joint = add(hullRoot, new THREE.BoxGeometry(0.45, 0.3, 17), dark, x * 43, 6.5, z * 43);
+    const joint = add(hullRoot, jointGeometry, dark, x * 43, 6.5, z * 43);
     joint.rotation.set(0.38, angle, 0, "YXZ");
-    const panel = add(hullRoot, new THREE.BoxGeometry(7, 0.6, 5), dark, x * 27, 10.3, z * 27);
+    const panel = add(hullRoot, panelGeometry, dark, x * 27, 10.3, z * 27);
     panel.rotation.y = angle;
     for (const offset of [-2, 0, 2]) {
-      add(panel, new THREE.BoxGeometry(0.5, 0.3, 4), edge, offset, 0.4);
+      add(panel, panelGrooveGeometry, edge, offset, 0.4);
     }
   }
 
@@ -88,14 +96,16 @@ export function createSaucerModel({ color, environment, hullTexture }) {
   parts.cockpit.scale.y = 0.6;
   ring(19.4, 1.1, 10, dark);
   ring(19.5, 0.35, 11, engine);
+  const gearGeometry = new THREE.BoxGeometry(4, 3, 11);
   for (let i = 0; i < 3; i += 1) {
     const angle = i * Math.PI * 2 / 3;
-    const gear = add(hullRoot, new THREE.BoxGeometry(4, 3, 11), edge, Math.sin(angle) * 26, -9, Math.cos(angle) * 26);
+    const gear = add(hullRoot, gearGeometry, edge, Math.sin(angle) * 26, -9, Math.cos(angle) * 26);
     gear.rotation.y = angle;
   }
+  const navGeometry = new THREE.SphereGeometry(1.6, 12, 8);
   for (const side of [-1, 1]) {
     const material = side > 0 ? navRed : navGreen;
-    add(hullRoot, new THREE.SphereGeometry(1.6, 12, 8), material, side * 54, 3, 7);
+    add(hullRoot, navGeometry, material, side * 54, 3, 7);
     navLights.push({ color: "#" + material.color.getHexString(), x: side * 54 });
   }
 
