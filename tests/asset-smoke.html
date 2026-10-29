@@ -260,6 +260,13 @@
           restoredFighter &&
           restoredFighter.textureCount === firstFighter.textureCount
       );
+      check(
+        "delta ship has layered hard-surface detail",
+        deltaFighter.detail?.canopyFrame === true &&
+          deltaFighter.detail?.intakeLouverCount >= 4 &&
+          deltaFighter.detail?.nozzleCoreCount === 2 &&
+          deltaFighter.detail?.panelAccentCount >= 6
+      );
 
       // Mouse look must reach the chase camera in the same tick: any smoothing
       // makes the view trail the mouse and keep turning after input stops.
@@ -396,6 +403,7 @@
         "warp gates show what they are and where they lead",
         gateReport.length === 2 &&
           gateReport.every((gate) => gate.hasLabel === true && gate.label.length > 0) &&
+          gateReport.every((gate) => gate.visualLayers === 4) &&
           new Set(gateReport.map((gate) => gate.regionId)).size === 2 &&
           gateState.bannerTimer > 2.3 &&
           gateState.bannerTimer <= 2.5
@@ -448,7 +456,14 @@
             [corePickup, shieldPickup, doublePickup].map(
               (pickup) => `${pickup.size.x}x${pickup.size.y}x${pickup.size.z}`
             )
-          ).size === 3
+           ).size === 3
+      );
+      check(
+        "reward models read as layered devices",
+        corePickup.detail?.shell === true &&
+          shieldPickup.detail?.frame === true &&
+          doublePickup.detail?.connectorCount === 2 &&
+          [corePickup, shieldPickup, doublePickup].every((pickup) => pickup.detail?.componentCount >= 5)
       );
       api.clearAsteroids();
 
@@ -769,6 +784,17 @@
       const fullscreenInitiallyCorrect = Boolean(fullscreenButton) &&
         fullscreenButton.hidden === !fullscreenSupported &&
         fullscreenButton.getAttribute("aria-pressed") === "false";
+      const settingsPanel = landingDoc.querySelector(".settings-panel");
+      const settingsStyle = settingsPanel ? showcaseWin.getComputedStyle(settingsPanel) : null;
+      const settingsLayered = Boolean(settingsPanel && settingsStyle) &&
+        Number.parseFloat(settingsStyle.borderRadius) >= 16 &&
+        settingsStyle.boxShadow !== "none" &&
+        landingDoc.querySelectorAll(".settings-section").length === 4 &&
+        landingDoc.querySelector(".toggle-btn.active")?.getAttribute("aria-pressed") === "true";
+      check(
+        "settings panel has a layered HUD treatment",
+        settingsLayered
+      );
       let fullscreenToggleWorks = fullscreenButton?.hidden === true;
       if (fullscreenSupported) {
         await showcase.toggleFullscreen();
