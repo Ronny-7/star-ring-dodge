@@ -704,7 +704,7 @@
       const rewardsReport = showcase.getDebugReport();
       check(
         "showcase loads real models, links from the game, and fits a narrow viewport",
-        showcaseHref.startsWith("showcase.html") &&
+        showcaseHref === "showcase.html?v=4.5.0" &&
           Boolean(showcaseDoc.querySelector(".stage-fallback")) &&
           wideReport.models.ship === 3 &&
           wideReport.models.rewards === 3 &&
@@ -769,7 +769,7 @@
           pausePanelOpen &&
           pauseReturn.present &&
           pauseReturn.hidden === false &&
-          pauseReturn.href === "showcase.html" &&
+          pauseReturn.href === "showcase.html?v=4.5.0" &&
           gameOverPanelOpen &&
           overReturn.present &&
           overReturn.hidden === true
