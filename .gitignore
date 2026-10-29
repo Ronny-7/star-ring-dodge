@@ -8,3 +8,5 @@ CLAUDE.md
 # Local design/plan artifacts (kept local, not versioned)
 docs/
 .superpowers/
+.playwright-mcp/
+.openidea/

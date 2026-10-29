@@ -62,6 +62,9 @@ function addMesh(parent, geometry, material, position) {
 
 function buildCore(body, materials) {
   addMesh(body, new THREE.CylinderGeometry(1.7, 1.7, 5.6, 6), materials.dark);
+  const cage = addMesh(body, new THREE.TorusGeometry(2.25, 0.16, 6, 12), materials.trim);
+  cage.rotation.x = Math.PI / 2;
+  cage.scale.y = 1.35;
   for (const side of [-1, 1]) {
     addMesh(body, new THREE.CylinderGeometry(2, 2, 0.65, 6), materials.trim, [0, side * 3, 0]);
     addMesh(body, new THREE.CylinderGeometry(1.76, 1.76, 0.15, 6), materials.signal, [0, side * 3.4, 0]);
@@ -101,6 +104,8 @@ function buildShield(body, materials) {
   addMesh(body, panel, materials.signal, [0, 0, 0.65]);
 
   addMesh(body, new THREE.TorusGeometry(4, 0.12, 4, 6), materials.trim);
+  const frame = addMesh(body, new THREE.TorusGeometry(4.25, 0.22, 5, 6), materials.trim);
+  frame.position.z = 0.18;
   for (const side of [-1, 1]) {
     addMesh(body, new THREE.BoxGeometry(0.17, 1.6, 0.12), materials.signal, [side * 2.8, 0, 0.55]);
   }
@@ -125,6 +130,7 @@ function buildDouble(body, materials) {
   }
   for (const side of [-1, 1]) {
     addMesh(body, new THREE.BoxGeometry(3.4, 0.6, 1), materials.paint, [0, side * 1.1, 0]);
+    addMesh(body, new THREE.BoxGeometry(0.34, 1.1, 1.4), materials.trim, [0, side * 1.1, 0.7]);
   }
 }
 
@@ -144,12 +150,19 @@ export function createPickupModel({ kind, type, radius = 14 }) {
   body.updateWorldMatrix(true, true);
   const size = new THREE.Box3().setFromObject(body).getSize(new THREE.Vector3());
   const round2 = (value) => Math.round(value * 100) / 100;
+  const detail = {
+    shell: true,
+    frame: variant === "shield",
+    connectorCount: variant === "double" ? 2 : 0,
+    componentCount: body.children.length
+  };
 
   group.userData.pickup = {
     variant,
     body,
     signalColor,
-    size: { x: round2(size.x), y: round2(size.y), z: round2(size.z) }
+    size: { x: round2(size.x), y: round2(size.y), z: round2(size.z) },
+    detail
   };
   return group;
 }

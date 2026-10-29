@@ -80,7 +80,20 @@ export function createDeltaModel({ color, environment, hullTexture }, flameBuild
   const parts = {};
   const flames = [];
   const navLights = [];
-  group.userData = { materials, hullRoot, parts, flames, navLights, ownTextures: [hullTexture] };
+  const detail = {
+    canopyFrame: false,
+    intakeLouverCount: 0,
+    nozzleCoreCount: 0,
+    panelAccentCount: 0
+  };
+  group.userData = { materials, hullRoot, parts, flames, navLights, detail, ownTextures: [hullTexture] };
+
+  // A shallow ventral body gives the wing a real centre mass instead of a
+  // paper-thin silhouette when the landing model rotates.
+  const ventralFuselage = add(hullRoot, new THREE.CapsuleGeometry(5.2, 30, 4, 12), dark,
+    [0, -1.8, 2], "ventral-fuselage");
+  ventralFuselage.rotation.x = Math.PI / 2;
+  ventralFuselage.scale.z = 1.08;
 
   // Clone the tessellation, then reflect the mesh, preserving every diagonal.
   const wingGeometry = panelGeometry([
@@ -117,10 +130,12 @@ export function createDeltaModel({ color, environment, hullTexture }, flameBuild
     add(hullRoot, panelGeometry([
       [52, -18], [64, -24], [63.2, -25.4], [51.2, -19.4]
     ], 0.05, 0.02), dark, [0, SKIN_Y + 0.01, 0], `${prefix}-outboard-hatch`).scale.x = side;
+    detail.panelAccentCount += 2;
     for (const [sx, sz] of [[26, 14], [38, 2], [50, -10]]) {
       add(hullRoot, panelGeometry([
         [sx, sz], [sx + 3.4, sz - 1.9], [sx + 3.2, sz - 2.4], [sx - 0.2, sz + 0.3]
       ], 0.05, 0.018), edge, [0, SKIN_Y + 0.01, 0], `${prefix}-service-panel`).scale.x = side;
+      detail.panelAccentCount += 1;
     }
 
     // The wing is a solid extrusion, so a bay cannot be cut into it. Instead the
@@ -153,6 +168,13 @@ export function createDeltaModel({ color, environment, hullTexture }, flameBuild
     core.rotation.y = Math.PI;
     core.scale.y = 0.42;
     parts[`${prefix}Engine`] = core;
+    const nozzleLip = add(hullRoot, new THREE.TorusGeometry(2.8, 0.22, 8, 20), edge,
+      [side * 13, SKIN_Y - 0.05, -27.1], `${prefix}-nozzle-lip`);
+    nozzleLip.scale.y = 0.48;
+    const nozzleBaffle = add(hullRoot, new THREE.BoxGeometry(0.5, 2.5, 0.18), lowVis,
+      [side * 13, SKIN_Y - 0.05, -27.18], `${prefix}-nozzle-baffle`);
+    nozzleBaffle.rotation.z = side * 0.3;
+    detail.nozzleCoreCount += 1;
     for (const [radius, length] of [[3.1, 29], [1.5, 18]]) {
       const flame = flameBuilder(group, side * 13, SKIN_Y - 0.05, -27.6, radius, length);
       flame.scale.x = 1.2;
@@ -186,10 +208,15 @@ export function createDeltaModel({ color, environment, hullTexture }, flameBuild
   for (let z = 7.5; z < 14.5; z += 1.9) {
     add(hullRoot, panelGeometry([[-5.0, z], [5.0, z], [5.0, z + 0.3], [-5.0, z + 0.3]],
       0.14, 0.04), edge, [0, 6.55, 0], "intake-louver");
+    detail.intakeLouverCount += 1;
   }
   parts.cockpit = add(hullRoot, new THREE.SphereGeometry(1, 32, 20), canopy,
     [0, 6.1, 25], "blended-low-canopy");
   parts.cockpit.scale.set(6.2, 1.9, 10.5);
+  const canopyFrame = add(hullRoot, new THREE.TorusGeometry(1, 0.16, 8, 24), edge,
+    [0, 6.25, 25], "canopy-frame");
+  canopyFrame.scale.set(6.25, 1.95, 1);
+  detail.canopyFrame = true;
   add(hullRoot, panelGeometry([[-1, 18], [1, 18], [1, 21], [-1, 21]],
     0.1, 0.05), livery, [0, 7.3, 0], "low-vis-livery");
 

@@ -454,6 +454,7 @@ function pickupDebugReport() {
         kind,
         variant: pickup.variant,
         size: pickup.size,
+        detail: pickup.detail || null,
         hasGlow: Boolean(group.userData.glow),
         beamOpacity: pickup.beam?.material.opacity ?? 0
       });
@@ -521,6 +522,7 @@ function getDebugReport() {
       },
       hullColor: "#" + materials.hull.color.getHexString(),
       engineColor: "#" + materials.engine.color.getHexString(),
+      detail: fighter.detail || null,
       flames: flamePositions,
       flameCount: flames.length,
       navLights: navLights || [],
@@ -853,18 +855,80 @@ function disposeGateLabels() {
 }
 
 function disposeGateGroup(group) {
-  const ring = group.children[0];
-  ring.geometry.dispose();
-  ring.material.dispose();
-  group.children[1].material.dispose();
-  // shortcut: shared Sprite geometry is left alive, dispose it if three.js stops sharing it
+  // Several gate meshes share materials; dispose each GPU resource once. The
+  // label texture is cached separately and releaseUnusedGateLabels owns it.
+  const geometries = new Set();
+  const materials = new Set();
+  group.traverse((object) => {
+    if (object.geometry) geometries.add(object.geometry);
+    if (object.material) materials.add(object.material);
+  });
+  geometries.forEach((geometry) => geometry.dispose());
+  materials.forEach((material) => material.dispose());
+}
+
+// A warp gate is a piece of hardware, not a hoop: an armoured outer ring with
+// segment blocks, a rotating inner ring with chevrons, and a faint aperture.
+function createGateVisual() {
+  const group = new THREE.Group();
+  const shell = new THREE.MeshStandardMaterial({ metalness: 0.65, roughness: 0.35, emissiveIntensity: 0.35 });
+  const trim = new THREE.MeshStandardMaterial({ metalness: 0.8, roughness: 0.25 });
+  const glow = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, toneMapped: false });
+  const film = new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0.055, side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false
+  });
+
+  const outer = new THREE.Mesh(new THREE.TorusGeometry(52, 3.6, 8, 48), shell);
+  group.add(outer);
+
+  const segments = new THREE.Group();
+  for (let i = 0; i < 8; i += 1) {
+    const angle = (i / 8) * Math.PI * 2;
+    const segment = new THREE.Mesh(new THREE.BoxGeometry(15, 7.5, 8), shell);
+    segment.position.set(Math.cos(angle) * 52, Math.sin(angle) * 52, 0);
+    segment.rotation.z = angle;
+    segments.add(segment);
+    const vent = new THREE.Mesh(new THREE.BoxGeometry(9, 1.1, 8.4), glow);
+    vent.position.set(Math.cos(angle) * 52, Math.sin(angle) * 52, 0);
+    vent.rotation.z = angle;
+    segments.add(vent);
+  }
+  group.add(segments);
+
+  const inner = new THREE.Group();
+  inner.add(new THREE.Mesh(new THREE.TorusGeometry(41, 1.5, 6, 48), glow));
+  for (let i = 0; i < 4; i += 1) {
+    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.9, 12, 0.9), trim);
+    spoke.position.set(Math.cos(angle) * 47.5, Math.sin(angle) * 47.5, 0);
+    spoke.rotation.z = angle - Math.PI / 2;
+    inner.add(spoke);
+    const chevron = new THREE.Mesh(new THREE.BoxGeometry(7, 1.6, 1.4), glow);
+    chevron.position.set(Math.cos(angle) * 44, Math.sin(angle) * 44, 0);
+    chevron.rotation.z = angle - Math.PI / 2;
+    inner.add(chevron);
+  }
+  group.add(inner);
+
+  const aperture = new THREE.Mesh(new THREE.CircleGeometry(39, 48), film);
+  group.add(aperture);
+
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
+  sprite.position.y = 90;
+  sprite.scale.set(240, 30, 1);
+  group.add(sprite);
+
+  group.userData.gate = { outer, segments, inner, aperture, sprite, shell, trim, glow, film };
+  return group;
 }
 
 function syncGates(gates) {
   lastGates = gates.map((gate) => ({
     regionId: gate.regionId,
     label: gate.label,
-    hasLabel: Boolean(gate.label)
+    hasLabel: Boolean(gate.label),
+    visualLayers: 4
   }));
   while (sceneObjects.gates.children.length > gates.length) {
     const child = sceneObjects.gates.children.pop();
@@ -873,33 +937,27 @@ function syncGates(gates) {
   gates.forEach((gate, index) => {
     let group = sceneObjects.gates.children[index];
     if (!group) {
-      group = new THREE.Group();
-      const material = new THREE.MeshStandardMaterial({
-        emissiveIntensity: 1.6,
-        metalness: 0.4,
-        roughness: 0.3
-      });
-      group.add(new THREE.Mesh(new THREE.TorusGeometry(52, 5, 12, 42), material));
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        transparent: true,
-        depthWrite: false
-      }));
-      sprite.position.y = 90;
-      sprite.scale.set(240, 30, 1);
-      group.add(sprite);
+      group = createGateVisual();
       sceneObjects.gates.add(group);
     }
-    const ring = group.children[0];
-    const sprite = group.children[1];
-    ring.material.color.set(`rgb(${gate.tint})`);
-    ring.material.emissive.set(`rgb(${gate.tint})`);
+    const { segments, inner, aperture, sprite, shell, trim, glow, film } = group.userData.gate;
+    shell.color.set(`rgb(${gate.tint})`);
+    shell.emissive.set(`rgb(${gate.tint})`).multiplyScalar(0.55);
+    trim.color.set(`rgb(${gate.tint})`).lerp(new THREE.Color(0xffffff), 0.45);
+    glow.color.set(`rgb(${gate.tint})`).lerp(new THREE.Color(0xffffff), 0.2);
+    film.color.set(`rgb(${gate.tint})`);
+    // The inner assembly turns; the armoured shell stays put so the gate reads
+    // as a fixed structure you fly through.
+    inner.rotation.z = gate.age || 0;
+    aperture.rotation.z = -(gate.age || 0) * 0.35;
+    film.opacity = 0.045 + Math.sin((gate.age || 0) * 1.6) * 0.012;
+    segments.rotation.z = Math.sin((gate.age || 0) * 0.4) * 0.02;
     const texture = gateLabelTexture(gate);
     if (sprite.material.map !== texture) {
       sprite.material.map = texture;
       sprite.material.needsUpdate = true;
     }
     group.position.set(gate.x, gate.y, gate.z);
-    ring.rotation.y = gate.age || 0;
   });
   releaseUnusedGateLabels(gates);
 }
