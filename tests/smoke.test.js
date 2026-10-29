@@ -14,6 +14,17 @@ const storageModule = require("../storage.js");
 
 const execFileAsync = promisify(execFile);
 
+test("changed 3D child modules carry the current cache key", async () => {
+  const [showcase, world] = await Promise.all([
+    readFile(path.resolve(__dirname, "..", "showcase.js"), "utf8"),
+    readFile(path.resolve(__dirname, "..", "world3d.js"), "utf8")
+  ]);
+  for (const source of [showcase, world]) {
+    assert.match(source, /\.\/delta-model\.js\?v=4\.6\.2/);
+    assert.match(source, /\.\/pickup-models\.js\?v=4\.6\.2/);
+  }
+});
+
 test("browser loads index.html and exercises the real app integration", async (t) => {
   const edgePath = process.env.STAR_RING_EDGE || "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
   if (!existsSync(edgePath)) {
