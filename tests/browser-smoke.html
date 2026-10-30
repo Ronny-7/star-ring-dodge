@@ -59,6 +59,7 @@
       appDocument.getElementById("binding-reset").click();
       check("settings reset restores and persists default bindings", fireBinding.textContent === "J" && JSON.parse(frame.contentWindow.localStorage.getItem("star-ring-dodge-profile-3d")).bindings.fire === "j");
       appDocument.getElementById("settings-close-button").click();
+      api.setLanguage("zh");
       api.endGame();
       check("endGame ends the real app", api.getState().gameOver === true && api.getState().running === false);
       const routeOverlay = frame.contentDocument.getElementById("overlay-route");
