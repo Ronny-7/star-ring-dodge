@@ -22,6 +22,19 @@
     document.body.textContent = text;
     document.title = text;
   };
+  const settleGpu = async (api) => {
+    let previous = null;
+    let stableFrames = 0;
+    for (let frame = 0; frame < 30 && stableFrames < 4; frame += 1) {
+      api.renderWorld();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const current = api.getWorldDebug().gpu;
+      stableFrames = previous && current.geometries === previous.geometries && current.textures === previous.textures &&
+        current.programs === previous.programs ? stableFrames + 1 : 0;
+      previous = current;
+    }
+    return previous;
+  };
 
   const frame = document.createElement("iframe");
   frame.src = "../index.html?test=1";
@@ -31,6 +44,17 @@
       const win = frame.contentWindow;
       const api = await waitFor(() => win.starRingTestApi);
       await win.starRingWorldReady;
+      api.startGame();
+      api.setPlayerPosition(86, 86, 86);
+      const originalRandom = win.Math.random;
+      win.Math.random = () => 0.5;
+      api.resolveRouteChoice("vortex");
+      win.Math.random = originalRandom;
+      const boundaryCenters = api.getState().regionMechanic.centers;
+      check("fallback vortex centers stay at least 400 units away in valid inward 3D space", boundaryCenters.length === 3 &&
+        boundaryCenters.every((center) => Math.hypot(center.x - 86, center.y - 86, center.z - 86) >= 400) &&
+        boundaryCenters.every((center) => center.x >= 260 && center.y >= 260 && center.z >= 260) &&
+        boundaryCenters.every((center) => [center.x !== 86, center.y !== 86, center.z !== 86].filter(Boolean).length >= 2));
       api.startGame();
       api.setPlayerPosition(30000, 30000, 30000);
       api.resolveRouteChoice("vortex");
@@ -45,6 +69,22 @@
       api.stepAsteroids(0.5);
       const rocks = api.getScene().asteroids;
       check("vortex bends only nearby asteroids without radial pull", rocks[0].vz !== 0 && rocks[0].vx === 40 && rocks[1].vz === 0);
+      api.clearAsteroids();
+      api.setRegionMechanicCenters([{ x: 30000, y: 30000, z: 30000, spin: 1, axis: { x: 1, y: 0, z: 0 } }]);
+      const parallel = api.spawnAsteroidAt(30100, 30000, 30000, 30);
+      parallel.vx = 40;
+      api.stepAsteroids(0.5);
+      const parallelResult = api.getScene().asteroids[0];
+      check("vortex bends when its configured axis is parallel to the radial vector",
+        parallelResult.vx === 40 && Math.hypot(parallelResult.vy, parallelResult.vz) > 0);
+      api.clearAsteroids();
+      api.setRegionMechanicCenters([{ x: 30000, y: 30000, z: 30000, spin: 1, axis: { x: 0, y: 1, z: 0 } }]);
+      const capped = api.spawnAsteroidAt(30100, 30000, 30000, 30);
+      capped.vx = 125;
+      api.stepAsteroids(0.5);
+      const cappedResult = api.getScene().asteroids[0];
+      check("vortex tangential acceleration respects the regional asteroid speed cap",
+        Math.abs(Math.hypot(cappedResult.vx, cappedResult.vy, cappedResult.vz) - 125) < 1e-9 && cappedResult.vz !== 0);
       api.renderWorld();
       check("vortex structures render and clear on route change", api.getWorldDebug().region.vortices === 1);
       api.resolveRouteChoice("drift");
@@ -63,6 +103,12 @@
       api.renderWorld();
       const nebulaFog = api.getWorldDebug().environment.fogDensity;
       const nebulaVignette = api.getState().vignetteStrength;
+      api.resolveRouteChoice("drift");
+      api.renderWorld();
+      check("leaving nebula restores fog and vignette exactly without restart",
+        api.getWorldDebug().environment.fogDensity === baselineFog && api.getState().vignetteStrength === baselineVignette);
+      api.resolveRouteChoice("nebula");
+      api.renderWorld();
       api.startGame();
       api.renderWorld();
       check("nebula haze and vignette rise then return exactly to baseline", nebulaFog > baselineFog &&
@@ -86,6 +132,12 @@
       check("aurora pulse slows nearby ordinary rocks once with elite and far immunity", auroraRocks[0].vx === 82 &&
         auroraRocks[1].vx === 100 && auroraRocks[2].vx === 100 && api.getState().regionMechanic.pulseCount === 1 &&
         api.getWorldDebug().region.pulse > 0);
+      api.clearAsteroids();
+      const auroraFloor = api.spawnAsteroidAt(30100, 30000, 30000, 30);
+      auroraFloor.vx = 56;
+      api.stepRegionMechanic(8);
+      api.stepRegionMechanic(8);
+      check("repeated aurora pulses stop at the 55 unit speed floor", api.getScene().asteroids[0].vx === 55);
       api.startGame();
       api.renderWorld();
       check("restart clears aurora pulse state and visual", api.getState().regionMechanic.type === null &&
@@ -105,12 +157,33 @@
       forgeElite.elite = true;
       api.stepRegionMechanic(6);
       const warned = api.getState().regionMechanic.warning;
+      api.resolveRouteChoice("drift");
+      api.renderWorld();
+      const forgeWarningRouteClean = api.getState().regionMechanic.type === null &&
+        api.getState().regionMechanic.timer === 0 && api.getState().regionMechanic.warning === false &&
+        api.getWorldDebug().region.pulse === 0;
+      check("leaving forge clears its warning immediately", forgeWarningRouteClean);
+      api.resolveRouteChoice("forge");
+      api.clearAsteroids();
+      const forgePulseNear = api.spawnAsteroidAt(30100, 30000, 30000, 30);
+      const forgePulseFar = api.spawnAsteroidAt(31500, 30000, 30000, 30);
+      const forgePulseElite = api.spawnAsteroidAt(30200, 30000, 30000, 60);
+      forgePulseNear.vx = forgePulseFar.vx = 100;
+      forgePulseElite.vx = 250;
+      forgePulseElite.elite = true;
       api.stepRegionMechanic(1);
+      api.stepRegionMechanic(6);
       api.renderWorld();
       const forgeRocks = api.getScene().asteroids;
       check("forge warns then accelerates nearby ordinary and elite rocks with cap", warned && Math.abs(forgeRocks[0].vx - 112) < 1e-9 &&
         forgeRocks[1].vx === 100 && forgeRocks[2].vx === 260 && api.getState().regionMechanic.pulseCount === 1 &&
         api.getWorldDebug().region.pulse > 0);
+      api.resolveRouteChoice("drift");
+      api.renderWorld();
+      const forgeFlashRouteClean = api.getState().regionMechanic.type === null &&
+        api.getState().regionMechanic.timer === 0 && api.getState().regionMechanic.warning === false &&
+        api.getState().regionMechanic.pulseCount === 0 && api.getWorldDebug().region.pulse === 0;
+      check("leaving forge clears its pulse flash immediately", forgeFlashRouteClean);
       api.startGame();
       api.renderWorld();
       const forgeReset = api.getState().regionMechanic;
@@ -145,8 +218,17 @@
       api.renderWorld();
       api.resolveRouteChoice("drift");
       api.renderWorld();
+      const routePrunedElite = api.getWorldDebug();
+      check("route-pruned elite visuals are gone before restart", routePrunedElite.elite.active === 0 &&
+        routePrunedElite.elite.trails === 0);
       api.startGame();
       api.renderWorld();
+      api.clearAsteroids();
+      api.pauseGame();
+      api.spawnEliteAsteroid();
+      api.renderWorld();
+      api.clearAsteroids();
+      const eliteGpuBaseline = await settleGpu(api);
       for (let cycle = 0; cycle < 4; cycle += 1) {
         api.spawnEliteAsteroid();
         api.renderWorld();
@@ -154,6 +236,11 @@
         api.renderWorld();
       }
       const eliteClean = api.getWorldDebug().elite;
+      const eliteGpuFinal = await settleGpu(api);
+      check("repeated elite spawn and removal keeps renderer GPU counters flat",
+        eliteGpuBaseline.geometries > 40 && eliteGpuBaseline.textures > 4 && eliteGpuBaseline.programs > 0 &&
+        eliteGpuFinal.geometries === eliteGpuBaseline.geometries && eliteGpuFinal.textures === eliteGpuBaseline.textures &&
+        eliteGpuFinal.programs === eliteGpuBaseline.programs);
       check("elite visuals release on route prune and restart", Boolean(prunedElite) && eliteClean.active === 0 &&
         eliteClean.trails === 0 && eliteClean.stats.disposedGeometries === eliteClean.stats.createdGeometries &&
         eliteClean.stats.disposedMaterials === eliteClean.stats.createdMaterials);

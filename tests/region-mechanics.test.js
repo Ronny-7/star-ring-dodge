@@ -47,7 +47,7 @@ test("browser applies and clears deterministic 3D region mechanics", async (t) =
     assert.notEqual(markerIndex, -1, "region mechanics page did not publish a result");
     const result = JSON.parse(browser.stdout.slice(markerIndex + marker.length).trim().split("</body>")[0]);
     assert.equal(result.error, null, result.error || "region mechanics browser test failed");
-    assert.equal(result.checks.length, 17);
+    assert.equal(result.checks.length, 26);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(resultDir, { recursive: true, force: true });

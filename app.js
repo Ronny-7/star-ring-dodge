@@ -501,16 +501,25 @@ function initRegionMechanic(region) {
       };
       if (Math.hypot(center.x - state.player.x, center.y - state.player.y, center.z - state.player.z) >= 400) next.centers.push(center);
     }
+    let fallbackAttempt = 0;
     while (next.centers.length < desired) {
-      const offset = 500 + next.centers.length * 260;
-      const direction = state.player.x < state.world.width / 2 ? 1 : -1;
-      next.centers.push({
-        x: clamp(state.player.x + direction * offset, margin, state.world.width - margin),
-        y: state.player.y,
-        z: state.player.z,
-        spin: next.centers.length % 2 ? -1 : 1,
+      const inward = {
+        x: Math.sign(state.world.width / 2 - state.player.x) || 1,
+        y: Math.sign(state.world.height / 2 - state.player.y) || 1,
+        z: Math.sign(state.world.depth / 2 - state.player.z) || 1
+      };
+      const offset = 700 + fallbackAttempt * 260;
+      const candidate = {
+        x: clamp(state.player.x + inward.x * offset / Math.sqrt(3), margin, state.world.width - margin),
+        y: clamp(state.player.y + inward.y * offset / Math.sqrt(3), margin, state.world.height - margin),
+        z: clamp(state.player.z + inward.z * offset / Math.sqrt(3), margin, state.world.depth - margin),
+        spin: fallbackAttempt % 2 ? -1 : 1,
         axis: { x: 0, y: 1, z: 0 }
-      });
+      };
+      fallbackAttempt += 1;
+      if (Math.hypot(candidate.x - state.player.x, candidate.y - state.player.y, candidate.z - state.player.z) >= 400) {
+        next.centers.push(candidate);
+      }
     }
   }
   state.regionMechanic = next;
@@ -1478,10 +1487,14 @@ function applyVortexForce(asteroid, dt) {
     let tz = axis.x * ny - axis.y * nx;
     let tangentLength = Math.hypot(tx, ty, tz);
     if (tangentLength < 0.001) {
-      tx = 0;
-      ty = nz;
-      tz = -ny;
-      tangentLength = Math.hypot(ty, tz) || 1;
+      const abs = [Math.abs(nx), Math.abs(ny), Math.abs(nz)];
+      const basis = abs[0] <= abs[1] && abs[0] <= abs[2]
+        ? { x: 1, y: 0, z: 0 }
+        : abs[1] <= abs[2] ? { x: 0, y: 1, z: 0 } : { x: 0, y: 0, z: 1 };
+      tx = basis.y * nz - basis.z * ny;
+      ty = basis.z * nx - basis.x * nz;
+      tz = basis.x * ny - basis.y * nx;
+      tangentLength = Math.hypot(tx, ty, tz);
     }
     const acceleration = mechanic.strength * (1 - distance / mechanic.radius) * center.spin * dt / tangentLength;
     asteroid.vx += tx * acceleration;
