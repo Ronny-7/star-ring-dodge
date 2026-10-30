@@ -137,10 +137,18 @@ function applyLanguageToDOM() {
 function syncWorldFailureCopy() {
   if (!worldFailed) return;
   const bootError = document.getElementById("boot-error");
-  bootError.textContent = state.lang === "en"
+  const copy = state.lang === "en"
     ? "3D rendering failed. Please refresh and confirm that your browser and device support WebGL."
     : "3D 渲染失败。请刷新页面重试，并确认浏览器和设备支持 WebGL。";
+  bootError.textContent = copy;
   bootError.hidden = false;
+  overlayMode = "failure";
+  overlayTitle.textContent = state.lang === "en" ? "3D rendering failed" : "3D 渲染失败";
+  overlayText.textContent = copy;
+  hideOverlayStats();
+  startButton.hidden = true;
+  backHomeButton.hidden = false;
+  overlay.classList.remove("hidden");
 }
 
 let activeSkin = "default";
@@ -340,6 +348,7 @@ function showOverlay(mode, title, text, buttonText) {
 }
 
 function hideOverlay() {
+  if (worldFailed) return;
   overlay.classList.add("hidden");
   if (backHomeButton) backHomeButton.hidden = true;
 }

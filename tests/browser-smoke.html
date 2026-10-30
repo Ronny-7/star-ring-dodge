@@ -84,7 +84,7 @@
 
       const failedFrame = document.createElement("iframe");
       failedFrame.src = "../index.html?test=1&failWorld=1";
-      failedFrame.style.display = "none";
+      failedFrame.style.cssText = "position:absolute;left:-10000px;width:1280px;height:900px";
       await new Promise((resolve, reject) => {
         failedFrame.onload = resolve;
         failedFrame.onerror = () => reject(new Error("failed to load WebGL fallback fixture"));
@@ -103,7 +103,16 @@
       check("WebGL failure remains a stable stopped state", failedApi.getState().running === false && failedDocument.querySelectorAll("#boot-error").length === 1);
       failedDocument.getElementById("settings-button").click();
       check("settings remain reachable after WebGL failure", !failedDocument.getElementById("settings-overlay").classList.contains("hidden"));
-      failedDocument.getElementById("back-home").click();
+      failedDocument.getElementById("settings-close-button").click();
+      const homeButton = failedDocument.getElementById("back-home");
+      let homeAncestorsVisible = true;
+      for (let current = homeButton; current; current = current.parentElement) {
+        const style = failedWindow.getComputedStyle(current);
+        if (current.hidden || style.display === "none" || style.visibility === "hidden") homeAncestorsVisible = false;
+      }
+      homeButton.focus();
+      check("WebGL failure exposes a visible keyboard-focusable Home action", homeAncestorsVisible && homeButton.getClientRects().length > 0 && failedDocument.activeElement === homeButton);
+      homeButton.click();
       check("home remains reachable after WebGL failure", failedDocument.getElementById("landing").hidden === false);
     } catch (error) {
       result.error = error.message;
