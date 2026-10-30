@@ -5,6 +5,7 @@ const { bestKey, profileKey, tuning, uiText, regions, achievements, profileUi, i
 const audioController = window.starRingAudio.createAudioController({ windowObject: window, navigatorObject: navigator });
 const storageController = window.starRingStorage;
 const projection = window.starRingProjection;
+const difficulty = window.starRingDifficulty;
 let world3d = null;
 
 const startMusic = () => audioController.startMusic();
@@ -344,6 +345,7 @@ const state = {
   health: 3,
   speedScale: 1,
   spawnInterval: tuning.baseSpawnInterval,
+  spawnRelief: 0,
   flashTimer: 0,
   invulnerabilityTimer: 0,
   screenShakeTimer: 0,
@@ -419,7 +421,7 @@ function getRegionMultiplier(region, name) {
 
 function getRouteAdjustedSpawnInterval(region) {
   const slowdown = state.routeChoice.active ? tuning.routeChoiceSpawnSlowdown : 1;
-  return state.spawnInterval * getRegionMultiplier(region, "asteroidSpawnMultiplier") * slowdown;
+  return (state.spawnInterval + state.spawnRelief) * getRegionMultiplier(region, "asteroidSpawnMultiplier") * slowdown;
 }
 
 function triggerScreenShake(duration, strength) {
@@ -446,6 +448,7 @@ function resetGame() {
   state.health = 3;
   state.speedScale = 1;
   state.spawnInterval = tuning.baseSpawnInterval;
+  state.spawnRelief = 0;
   state.flashTimer = 0;
   state.invulnerabilityTimer = 0;
   state.screenShakeTimer = 0;
@@ -1055,6 +1058,14 @@ function update(dt) {
     state.speedScale = Math.min(tuning.maxSpeedScale, state.speedScale + tuning.asteroidSpeedStep);
     state.spawnInterval = Math.max(tuning.minSpawnInterval, state.spawnInterval - tuning.spawnIntervalStep);
   }
+
+  state.spawnRelief = difficulty.updateSpawnRelief({
+    asteroidCount: state.asteroids.length,
+    maxAsteroids: getTuningValue("maxAsteroids", 30),
+    spawnInterval: state.spawnInterval,
+    previousRelief: state.spawnRelief,
+    deltaSeconds: dt
+  });
 
   if (state.spawnTimer >= getRouteAdjustedSpawnInterval(region)) {
     state.spawnTimer = 0;
