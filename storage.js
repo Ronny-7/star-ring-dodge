@@ -1,16 +1,17 @@
 (function (root, factory) {
   if (typeof module === "object" && module.exports) {
-    module.exports = factory();
+    module.exports = factory(require("./bindings.js"));
   } else {
-    root.starRingStorage = factory();
+    root.starRingStorage = factory(root.starRingBindings);
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (bindingModule) {
   function createDefaultProfile() {
     return {
       version: 1,
       lang: "zh",
       skin: "default",
       color: "blue",
+      bindings: { ...bindingModule.DEFAULT_BINDINGS },
       totals: {
         runs: 0,
         destroyedAsteroids: 0,
@@ -35,6 +36,7 @@
       lang: raw.lang === "en" ? "en" : "zh",
       skin: raw.skin === "delta" || raw.skin === "saucer" ? raw.skin : "default",
       color: raw.color === "red" || raw.color === "green" ? raw.color : "blue",
+      bindings: bindingModule.normalizeBindings(raw.bindings),
       totals: {
         runs: num(totals.runs),
         destroyedAsteroids: num(totals.destroyedAsteroids),

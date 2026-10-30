@@ -1,10 +1,11 @@
 ﻿(function (root, factory) {
   if (typeof module === "object" && module.exports) {
-    module.exports = factory();
+    module.exports = factory(require("./bindings.js"));
   } else {
-    root.starRingInput = factory();
+    root.starRingInput = factory(root.starRingBindings);
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (bindingModule) {
+  const { DEFAULT_BINDINGS, normalizeBindingKey, normalizeBindings } = bindingModule;
   // Hysteresis: engage only near the stick edge, release only well below it,
   // so a stick hovering around the threshold does not flutter the boost.
   function nextBoostState(previous, magnitude, on, off) {
@@ -16,6 +17,7 @@
     windowObject,
     documentObject,
     getState,
+    getBindings = () => DEFAULT_BINDINGS,
     fireLaser,
     startGame,
     togglePause,
@@ -32,13 +34,14 @@
     toggleSfx,
     selectSkin,
     selectColor,
+    startBindingCapture,
+    resetBindings,
     getCanvas,
     tuning = {}
   } = {}) {
     const inputWindow = windowObject || (typeof window !== "undefined" ? window : null);
     const inputDocument = documentObject || (typeof document !== "undefined" ? document : null);
     const keys = new Set();
-    const fireKeys = new Set(["j", "J"]);
     let fireHeld = false;
     const gestureMovement = { active: false, pointerId: null, startX: 0, startY: 0, dx: 0, dy: 0, boost: false };
     // Chromium pointer lock occasionally reports a bogus 300-600 px step
@@ -53,19 +56,19 @@
     let pointerLocked = false;
 
     function getKeyboardMovement() {
+      const bindings = normalizeBindings(getBindings());
+      const assigned = new Set(Object.values(bindings));
       let forward = 0;
       let strafe = 0;
-      if (keys.has("ArrowUp") || keys.has("w")) forward += 1;
-      if (keys.has("ArrowDown") || keys.has("s")) forward -= 1;
-      if (keys.has("a")) strafe -= 1;
-      if (keys.has("d")) strafe += 1;
-      if (keys.has("ArrowLeft")) strafe -= 1;
-      if (keys.has("ArrowRight")) strafe += 1;
+      if (keys.has(bindings.forward) || (!assigned.has("ArrowUp") && keys.has("ArrowUp"))) forward += 1;
+      if (keys.has(bindings.backward) || (!assigned.has("ArrowDown") && keys.has("ArrowDown"))) forward -= 1;
+      if (keys.has(bindings.left) || (!assigned.has("ArrowLeft") && keys.has("ArrowLeft"))) strafe -= 1;
+      if (keys.has(bindings.right) || (!assigned.has("ArrowRight") && keys.has("ArrowRight"))) strafe += 1;
       return { forward, strafe };
     }
 
     function isBoostKeyDown() {
-      return keys.has("Shift") || keys.has("ShiftLeft") || keys.has("ShiftRight");
+      return keys.has(normalizeBindings(getBindings()).boost);
     }
 
     function isBoosting() {
@@ -191,19 +194,20 @@
       if (handleSettingsKeydown?.(event)) return;
       // One page holds both views: a hidden game must not eat keys.
       if (!isGameViewActive()) return;
-      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      const key = normalizeBindingKey(event.key) || event.key;
+      const bindings = normalizeBindings(getBindings());
       const state = getState?.() || {};
       if (event.code === "Space") {
         event.preventDefault();
         if (!state.running || state.gameOver) startGame?.();
         return;
       }
-      if (key === "p" || key === "Escape") {
+      if (key === bindings.pause || key === "Escape") {
         event.preventDefault();
         togglePause?.();
         return;
       }
-      if (fireKeys.has(event.key)) {
+      if (key === bindings.fire) {
         event.preventDefault();
         fireHeld = true;
         fireLaser?.();
@@ -218,10 +222,10 @@
     }
 
     function handleKeyUp(event) {
-      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      const key = normalizeBindingKey(event.key) || event.key;
       keys.delete(key);
       if (event.code) keys.delete(event.code);
-      if (fireKeys.has(event.key)) fireHeld = false;
+      if (key === normalizeBindings(getBindings()).fire) fireHeld = false;
     }
 
     function bind() {
@@ -370,6 +374,8 @@
       inputDocument.getElementById("settings-sfx-btn")?.addEventListener("click", toggleSfx);
       inputDocument.querySelectorAll("[data-skin]").forEach((button) => button.addEventListener("click", () => selectSkin?.(button.dataset.skin)));
       inputDocument.querySelectorAll("[data-color]").forEach((button) => button.addEventListener("click", () => selectColor?.(button.dataset.color)));
+      inputDocument.querySelectorAll("[data-binding]").forEach((button) => button.addEventListener("click", () => startBindingCapture?.(button.dataset.binding)));
+      inputDocument.getElementById("binding-reset")?.addEventListener("click", resetBindings);
       inputWindow.addEventListener("keydown", handleKeyDown);
       inputWindow.addEventListener("keyup", handleKeyUp);
       inputWindow.addEventListener("blur", () => {
@@ -398,5 +404,11 @@
     };
   }
 
-  return { createInputController, nextBoostState };
+  return {
+    createInputController,
+    nextBoostState,
+    DEFAULT_BINDINGS,
+    normalizeBindingKey,
+    normalizeBindings
+  };
 });

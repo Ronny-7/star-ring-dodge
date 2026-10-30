@@ -11,6 +11,7 @@
   // Bump these queries with the build tag so browsers skip stale copies.
   const GAME_SCRIPTS = [
     "config.js?v=4.6.4",
+    "bindings.js?v=4.6.4",
     "storage.js?v=4.6.4",
     "audio.js?v=4.6.4",
     "projection.js?v=4.6.4",

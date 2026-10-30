@@ -1029,6 +1029,53 @@ body.force-landscape .overlay-panel > button {
   filter: none;
 }
 
+.binding-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 7px 12px;
+  color: #c8e8f8;
+  font-size: 0.84rem;
+}
+
+.binding-key,
+.binding-reset {
+  min-width: 74px;
+  height: 30px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 201, 255, 0.25);
+  border-radius: 7px;
+  background: rgba(8, 17, 32, 0.8);
+  color: #dff7ff;
+  font-size: 0.75rem;
+  box-shadow: none;
+}
+
+.binding-key.is-capturing {
+  border-color: #8affd1;
+  color: #8affd1;
+  box-shadow: 0 0 12px rgba(138, 255, 209, 0.18);
+}
+
+.binding-status {
+  min-height: 1.2em;
+  margin: 9px 0 6px;
+  color: #ff9caf;
+  font-size: 0.72rem;
+}
+
+.binding-reset {
+  width: 100%;
+  color: #a8d8f0;
+}
+
+.binding-key:hover,
+.binding-reset:hover {
+  transform: none;
+  filter: none;
+}
+
 .skin-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

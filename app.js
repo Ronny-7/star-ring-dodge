@@ -110,7 +110,17 @@ function applyLanguageToDOM() {
   set("skin-saucer", L("saucer"));
   set("back-home", ui.homeReturn);
   set("settings-color-title", L("shipColor"));
+  set("settings-controls-title", L("controls"));
+  set("binding-forward-label", L("forward"));
+  set("binding-backward-label", L("backward"));
+  set("binding-left-label", L("left"));
+  set("binding-right-label", L("right"));
+  set("binding-boost-label", L("boost"));
+  set("binding-fire-label", L("fire"));
+  set("binding-pause-label", L("pauseAction"));
+  set("binding-reset", L("resetBindings"));
   set("settings-language-title", L("language"));
+  syncBindingsUi();
   syncToggleButton(musicBtn, audioController.isMusicEnabled());
   syncToggleButton(sfxBtn, audioController.isSfxEnabled());
   document.querySelectorAll(".skin-card").forEach((el) => {
@@ -531,6 +541,51 @@ function syncHud() {
 const settingsOverlay = document.getElementById("settings-overlay");
 let pausedBeforeSettings = false;
 let settingsReturnFocus = null;
+let bindingCaptureAction = null;
+
+function bindingActionLabel(action) {
+  return L(action === "pause" ? "pauseAction" : action);
+}
+
+function displayBindingKey(key) {
+  const arrows = { ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→" };
+  return key.length === 1 ? key.toUpperCase() : (arrows[key] || key);
+}
+
+function syncBindingsUi() {
+  if (typeof profile === "undefined" || !profile?.bindings) return;
+  document.querySelectorAll("[data-binding]").forEach((button) => {
+    const action = button.dataset.binding;
+    button.textContent = bindingCaptureAction === action ? L("pressKey") : displayBindingKey(profile.bindings[action]);
+    button.classList.toggle("is-capturing", bindingCaptureAction === action);
+    button.setAttribute("aria-label", `${bindingActionLabel(action)}: ${displayBindingKey(profile.bindings[action])}`);
+  });
+}
+
+function setBindingStatus(message = "") {
+  const status = document.getElementById("binding-status");
+  if (status) status.textContent = message;
+}
+
+function startBindingCapture(action) {
+  if (!window.starRingBindings.BINDING_ACTIONS.includes(action)) return;
+  bindingCaptureAction = action;
+  setBindingStatus(L("pressKey"));
+  syncBindingsUi();
+}
+
+function cancelBindingCapture(clearStatus = true) {
+  bindingCaptureAction = null;
+  if (clearStatus) setBindingStatus();
+  syncBindingsUi();
+}
+
+function resetBindings() {
+  profile.bindings = { ...window.starRingBindings.DEFAULT_BINDINGS };
+  storageController.saveProfile(localStorage, profileKey, profile);
+  cancelBindingCapture(false);
+  setBindingStatus(L("bindingsReset"));
+}
 
 function getSettingsFocusableElements() {
   return Array.from(settingsOverlay.querySelectorAll("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex=\"-1\"])"))
@@ -539,6 +594,28 @@ function getSettingsFocusableElements() {
 
 function handleSettingsKeydown(event) {
   if (settingsOverlay.classList.contains("hidden")) return false;
+  if (bindingCaptureAction) {
+    event.preventDefault();
+    if (event.key === "Escape") {
+      cancelBindingCapture();
+      return true;
+    }
+    const key = window.starRingBindings.normalizeBindingKey(event.key);
+    if (!key) {
+      setBindingStatus(L("invalidBinding"));
+      return true;
+    }
+    const conflict = window.starRingBindings.BINDING_ACTIONS.find((action) => action !== bindingCaptureAction && profile.bindings[action] === key);
+    if (conflict) {
+      setBindingStatus(L("bindingConflict", bindingActionLabel(conflict)));
+      return true;
+    }
+    profile.bindings = { ...profile.bindings, [bindingCaptureAction]: key };
+    storageController.saveProfile(localStorage, profileKey, profile);
+    cancelBindingCapture();
+    inputController.clearAll();
+    return true;
+  }
   if (event.key === "Escape") {
     event.preventDefault();
     closeSettings();
@@ -580,6 +657,7 @@ function openSettings() {
 function closeSettings() {
   if (settingsOverlay.classList.contains("hidden")) return;
   settingsOverlay.classList.add("hidden");
+  cancelBindingCapture();
   settingsOverlay.setAttribute("aria-hidden", "true");
   settingsButton.setAttribute("aria-expanded", "false");
   if (state.running && state.paused && !state.gameOver && !pausedBeforeSettings) {
@@ -1804,6 +1882,7 @@ inputController = window.starRingInput.createInputController({
   windowObject: window,
   documentObject: document,
   getState: () => state,
+  getBindings: () => profile.bindings,
   tuning,
   fireLaser,
   startGame,
@@ -1820,7 +1899,9 @@ inputController = window.starRingInput.createInputController({
   toggleMusic,
   toggleSfx,
   selectSkin,
-  selectColor
+  selectColor,
+  startBindingCapture,
+  resetBindings
 });
 gestureMovement = inputController.gestureMovement;
 inputController.bind();

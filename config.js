@@ -312,6 +312,8 @@ window.starRingConfig = {
       settings: "设置", close: "关闭", audio: "音频", music: "背景音乐", sfx: "音效",
       ship: "飞船外形", fighter: "战斗机", delta: "三角翼", saucer: "飞碟",
       shipColor: "飞船颜色", language: "语言", on: "开", off: "关", exit: "退出", landscape: "横屏", orientationHint: "横屏游玩视野更宽",
+      controls: "键盘操作", forward: "前进", backward: "后退", left: "左移", right: "右移", boost: "加力", fire: "开火", pauseAction: "暂停",
+      resetBindings: "恢复默认", pressKey: "请按新按键（Esc 取消）", invalidBinding: "该按键不可用", bindingConflict: (action) => `该按键已用于${action}`, bindingsReset: "已恢复默认键位",
       gameTitle: "星环闪避", gameSubtitle: "在流动星域中机动穿梭，规避陨石流，回收高能核心，并选择跃迁门探索下一片区域。",
       scoreLabel: "分数", healthLabel: "生命", bestLabel: "最高",
       touchDrag: "拖动移动", touchFire: "开火", touchPause: "暂停", newRecord: "新纪录已建立"
@@ -331,6 +333,8 @@ window.starRingConfig = {
       settings: "SETTINGS", close: "Close", audio: "Audio", music: "Music", sfx: "SFX",
       ship: "Ship", fighter: "Fighter", delta: "Delta", saucer: "Saucer",
       shipColor: "Ship Color", language: "Language", on: "ON", off: "OFF", exit: "Exit", landscape: "Landscape", orientationHint: "Landscape gives a wider view",
+      controls: "Keyboard Controls", forward: "Forward", backward: "Backward", left: "Left", right: "Right", boost: "Boost", fire: "Fire", pauseAction: "Pause",
+      resetBindings: "Reset to defaults", pressKey: "Press a new key (Esc to cancel)", invalidBinding: "That key cannot be used", bindingConflict: (action) => `That key is already used for ${action}`, bindingsReset: "Default bindings restored",
       gameTitle: "Star Ring Dodge",
       scoreLabel: "Score", healthLabel: "Health", bestLabel: "Best",
       touchDrag: "Drag to move", touchFire: "Fire", touchPause: "Pause", newRecord: "New Record"

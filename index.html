@@ -187,6 +187,21 @@
       </div>
 
       <div class="settings-section">
+        <p class="settings-section-title" id="settings-controls-title">键盘操作</p>
+        <div class="binding-grid">
+          <span id="binding-forward-label">前进</span><button class="binding-key" data-binding="forward" type="button">W</button>
+          <span id="binding-backward-label">后退</span><button class="binding-key" data-binding="backward" type="button">S</button>
+          <span id="binding-left-label">左移</span><button class="binding-key" data-binding="left" type="button">A</button>
+          <span id="binding-right-label">右移</span><button class="binding-key" data-binding="right" type="button">D</button>
+          <span id="binding-boost-label">加力</span><button class="binding-key" data-binding="boost" type="button">SHIFT</button>
+          <span id="binding-fire-label">开火</span><button class="binding-key" data-binding="fire" type="button">J</button>
+          <span id="binding-pause-label">暂停</span><button class="binding-key" data-binding="pause" type="button">P</button>
+        </div>
+        <p class="binding-status" id="binding-status" aria-live="polite"></p>
+        <button class="binding-reset" id="binding-reset" type="button">恢复默认</button>
+      </div>
+
+      <div class="settings-section">
         <p class="settings-section-title" id="settings-language-title">语言</p>
         <div class="settings-row">
           <button class="lang-card active" data-lang="zh" type="button" aria-pressed="true">中文</button>

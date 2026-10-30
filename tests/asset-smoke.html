@@ -848,7 +848,7 @@
       const settingsLayered = Boolean(settingsPanel && settingsStyle) &&
         Number.parseFloat(settingsStyle.borderRadius) >= 16 &&
         settingsStyle.boxShadow !== "none" &&
-        landingDoc.querySelectorAll(".settings-section").length === 4 &&
+        landingDoc.querySelectorAll(".settings-section").length === 5 &&
         landingDoc.querySelector(".toggle-btn.active")?.getAttribute("aria-pressed") === "true";
       check(
         "settings panel has a layered HUD treatment",
