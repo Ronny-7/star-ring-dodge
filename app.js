@@ -399,6 +399,7 @@ const state = {
   regionJunctions: 0,
   achievementTimer: 0,
   eliteTimer: 0,
+  regionMechanic: { type: null, timer: 0, pulseCount: 0, pulseVisual: 0, warning: false, centers: [] },
   routeChoice: { active: false, timer: 0, bannerTimer: 0, gates: [] },
   shipColor: COLORS[activeColor] || COLORS.blue,
   stats: {
@@ -463,6 +464,87 @@ function getRegionMultiplier(region, name) {
 function getRouteAdjustedSpawnInterval(region) {
   const slowdown = state.routeChoice.active ? tuning.routeChoiceSpawnSlowdown : 1;
   return (state.spawnInterval + state.spawnRelief) * getRegionMultiplier(region, "asteroidSpawnMultiplier") * slowdown;
+}
+
+function initRegionMechanic(region) {
+  const mechanic = region?.mechanic;
+  const next = {
+    type: mechanic?.type || null,
+    timer: 0,
+    pulseCount: 0,
+    pulseVisual: 0,
+    warning: false,
+    centers: [],
+    hazeBoost: mechanic?.hazeBoost || 0,
+    vignetteBoost: mechanic?.vignetteBoost || 0,
+    pulseInterval: mechanic?.pulseInterval || 0,
+    velocityScale: mechanic?.velocityScale || 1,
+    radius: mechanic?.radius || 0,
+    maxSpeed: mechanic?.maxSpeed || 0
+  };
+  if (mechanic?.type === "vortex") {
+    const desired = Math.max(1, Math.floor(mechanic.centers || 1));
+    const margin = getTuningValue("boundaryPadding", 60) + mechanic.radius;
+    for (let attempt = 0; next.centers.length < desired && attempt < desired * 10; attempt += 1) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const distance = 500 + Math.random() * 800;
+      const axisTheta = Math.random() * Math.PI * 2;
+      const axisY = Math.random() * 2 - 1;
+      const axisRadius = Math.sqrt(1 - axisY * axisY);
+      const center = {
+        x: clamp(state.player.x + Math.cos(theta) * Math.sin(phi) * distance, margin, state.world.width - margin),
+        y: clamp(state.player.y + Math.cos(phi) * distance, margin, state.world.height - margin),
+        z: clamp(state.player.z + Math.sin(theta) * Math.sin(phi) * distance, margin, state.world.depth - margin),
+        spin: Math.random() < 0.5 ? -1 : 1,
+        axis: { x: Math.cos(axisTheta) * axisRadius, y: axisY, z: Math.sin(axisTheta) * axisRadius }
+      };
+      if (Math.hypot(center.x - state.player.x, center.y - state.player.y, center.z - state.player.z) >= 400) next.centers.push(center);
+    }
+    while (next.centers.length < desired) {
+      const offset = 500 + next.centers.length * 260;
+      const direction = state.player.x < state.world.width / 2 ? 1 : -1;
+      next.centers.push({
+        x: clamp(state.player.x + direction * offset, margin, state.world.width - margin),
+        y: state.player.y,
+        z: state.player.z,
+        spin: next.centers.length % 2 ? -1 : 1,
+        axis: { x: 0, y: 1, z: 0 }
+      });
+    }
+  }
+  state.regionMechanic = next;
+}
+
+function updateRegionMechanic(dt) {
+  const active = state.regionMechanic;
+  active.pulseVisual = Math.max(0, active.pulseVisual - dt * 2.5);
+  if (active.type !== "aurora" && active.type !== "forge") return;
+  active.timer += dt;
+  active.warning = active.type === "forge" && active.timer >= active.pulseInterval - 1;
+  while (active.timer >= active.pulseInterval) {
+    active.timer -= active.pulseInterval;
+    active.pulseCount += 1;
+    active.pulseVisual = 1;
+    active.warning = false;
+    applyRegionPulse(active);
+  }
+}
+
+function applyRegionPulse(mechanic) {
+  for (const asteroid of state.asteroids) {
+    if (mechanic.type === "aurora" && asteroid.elite) continue;
+    if (Math.hypot(asteroid.x - state.player.x, asteroid.y - state.player.y, asteroid.z - state.player.z) > mechanic.radius) continue;
+    const speed = Math.hypot(asteroid.vx, asteroid.vy, asteroid.vz);
+    if (speed <= 0) continue;
+    const targetSpeed = mechanic.type === "aurora"
+      ? (speed <= 55 ? speed : Math.max(55, speed * mechanic.velocityScale))
+      : Math.min(mechanic.maxSpeed, speed * mechanic.velocityScale);
+    const scale = targetSpeed / speed;
+    asteroid.vx *= scale;
+    asteroid.vy *= scale;
+    asteroid.vz *= scale;
+  }
 }
 
 function triggerScreenShake(duration, strength) {
@@ -539,6 +621,7 @@ function resetGame() {
   state.warpFlash.duration = 0;
   state.warpFlash.tint = regions[DEFAULT_REGION_ID].tint;
   state.warpFlash.secondaryTint = regions[DEFAULT_REGION_ID].secondaryTint;
+  initRegionMechanic(regions[DEFAULT_REGION_ID]);
 
   syncHud();
   hideOverlay();
@@ -1045,6 +1128,7 @@ function resolveRouteChoice(regionId) {
   if (!regions[regionId]) return;
   const region = regions[regionId];
   state.regionId = regionId;
+  initRegionMechanic(region);
   if (state.routeHistory.length < MAX_ROUTE_HISTORY) state.routeHistory.push(regionId);
   state.regionJunctions += 1;
   state.regionTimer = 0;
@@ -1162,6 +1246,7 @@ function update(dt) {
 
   updateRegionFlow(dt);
   const region = getCurrentRegion();
+  updateRegionMechanic(dt);
   updateEliteFlow(dt, region);
 
   state.spawnTimer += dt;
@@ -1348,6 +1433,7 @@ function moveAsteroids(dt) {
   let alive = 0;
   for (const asteroid of state.asteroids) {
     if (asteroid.elite) steerEliteAsteroid(asteroid, dt);
+    applyVortexForce(asteroid, dt);
     asteroid.x += asteroid.vx * dt;
     asteroid.y += asteroid.vy * dt;
     asteroid.z += asteroid.vz * dt;
@@ -1372,6 +1458,45 @@ function moveAsteroids(dt) {
     state.asteroids[alive++] = asteroid;
   }
   state.asteroids.length = alive;
+}
+
+function applyVortexForce(asteroid, dt) {
+  const mechanic = getCurrentRegion().mechanic;
+  if (mechanic?.type !== "vortex") return;
+  for (const center of state.regionMechanic.centers) {
+    const rx = asteroid.x - center.x;
+    const ry = asteroid.y - center.y;
+    const rz = asteroid.z - center.z;
+    const distance = Math.hypot(rx, ry, rz);
+    if (distance < 0.001 || distance >= mechanic.radius) continue;
+    const nx = rx / distance;
+    const ny = ry / distance;
+    const nz = rz / distance;
+    const axis = center.axis || { x: 0, y: 1, z: 0 };
+    let tx = axis.y * nz - axis.z * ny;
+    let ty = axis.z * nx - axis.x * nz;
+    let tz = axis.x * ny - axis.y * nx;
+    let tangentLength = Math.hypot(tx, ty, tz);
+    if (tangentLength < 0.001) {
+      tx = 0;
+      ty = nz;
+      tz = -ny;
+      tangentLength = Math.hypot(ty, tz) || 1;
+    }
+    const acceleration = mechanic.strength * (1 - distance / mechanic.radius) * center.spin * dt / tangentLength;
+    asteroid.vx += tx * acceleration;
+    asteroid.vy += ty * acceleration;
+    asteroid.vz += tz * acceleration;
+    const speed = Math.hypot(asteroid.vx, asteroid.vy, asteroid.vz);
+    const maxSpeed = asteroid.elite && asteroid.maxSpeed
+      ? asteroid.maxSpeed
+      : (getTuningValue("asteroidSpeed3d", 70) + getTuningValue("asteroidSpeedRange3d", 55)) * state.speedScale * getRegionMultiplier(getCurrentRegion(), "asteroidSpeedMultiplier");
+    if (speed > maxSpeed) {
+      asteroid.vx *= maxSpeed / speed;
+      asteroid.vy *= maxSpeed / speed;
+      asteroid.vz *= maxSpeed / speed;
+    }
+  }
 }
 
 function moveLasers(dt) {
@@ -1866,7 +1991,7 @@ function drawHudOverlay(region) {
 function drawVignette() {
   const gradient = ctx.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.35, cw / 2, ch / 2, Math.max(cw, ch) * 0.78);
   gradient.addColorStop(0, "rgba(0,0,0,0)");
-  gradient.addColorStop(1, `rgba(0,4,12,${getTuningValue("visualVignetteTint", 0.16) + 0.22})`);
+  gradient.addColorStop(1, `rgba(0,4,12,${getVignetteStrength()})`);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, cw, ch);
 
@@ -1874,6 +1999,26 @@ function drawVignette() {
     ctx.fillStyle = `rgba(255,90,110,${0.28 * (state.flashTimer / tuning.hitFlashDuration)})`;
     ctx.fillRect(0, 0, cw, ch);
   }
+
+  if (state.regionMechanic.type === "forge" && state.regionMechanic.warning) {
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(255,190,132,0.96)";
+    ctx.shadowColor = "rgba(0,0,0,0.72)";
+    ctx.shadowBlur = 8;
+    ctx.font = '700 14px "Segoe UI", sans-serif';
+    ctx.fillText(L("forgeWarning"), cw / 2, Math.min(ch * 0.3, 200));
+    ctx.restore();
+  }
+  if (state.regionMechanic.pulseVisual > 0) {
+    const color = state.regionMechanic.type === "forge" ? "255,132,54" : "122,126,255";
+    ctx.fillStyle = `rgba(${color},${state.regionMechanic.pulseVisual * 0.14})`;
+    ctx.fillRect(0, 0, cw, ch);
+  }
+}
+
+function getVignetteStrength() {
+  return getTuningValue("visualVignetteTint", 0.16) + 0.22 + (state.regionMechanic.vignetteBoost || 0);
 }
 
 function drawWarpFlash() {
@@ -2004,7 +2149,7 @@ function startLoop() {
 const testParams = new URLSearchParams(window.location.search);
 const worldModule = testParams.has("test") && testParams.has("failWorld")
   ? Promise.reject(new Error("Forced WebGL world failure"))
-  : import("./world3d.js?v=4.6.5");
+  : import("./world3d.js?v=4.7.0");
 
 window.starRingWorldReady = worldModule
   .then((mod) => {
@@ -2045,12 +2190,14 @@ window.starRingGame = {
 if (new URLSearchParams(window.location.search).has("test")) {
   window.starRingTestApi = {
     getWorldDebug: () => world3d?.getDebugReport?.() ?? null,
+    renderWorld: () => world3d?.render(state, state.camera, 0),
     disposeWorld: () => {
       const world = world3d;
       state.running = false;
       world3d = null;
       world.dispose();
-      return world.getDebugReport().fx;
+      const report = world.getDebugReport();
+      return { ...report.fx, elite: report.elite };
     },
     getState: () => ({
       running: state.running,
@@ -2065,6 +2212,11 @@ if (new URLSearchParams(window.location.search).has("test")) {
       powerUpCount: state.powerUps.length,
       gates: state.routeChoice.gates.map((gate) => ({ x: gate.x, y: gate.y, z: gate.z, regionId: gate.regionId })),
       bannerTimer: state.routeChoice.bannerTimer,
+      vignetteStrength: getVignetteStrength(),
+      regionMechanic: {
+        ...state.regionMechanic,
+        centers: state.regionMechanic.centers.map((center) => ({ ...center, axis: { ...center.axis } }))
+      },
       maxAsteroids: getTuningValue("maxAsteroids", 30),
       world: { ...state.world },
       language: state.lang,
@@ -2107,6 +2259,11 @@ if (new URLSearchParams(window.location.search).has("test")) {
     clearAsteroids: () => {
       state.asteroids = [];
     },
+    setRegionMechanicCenters: (centers) => {
+      state.regionMechanic.centers = centers.map((center) => ({ ...center, axis: { ...(center.axis || { x: 0, y: 1, z: 0 }) } }));
+    },
+    stepAsteroids: moveAsteroids,
+    stepRegionMechanic: updateRegionMechanic,
     spawnCoreAt: (x, y, z) => {
       const core = { x, y, z, radius: getTuningValue("coreRadius3d", 16) * getGameplayScale(), pulse: Math.random() * Math.PI * 2 };
       state.cores.push(core);
@@ -2142,7 +2299,7 @@ if (new URLSearchParams(window.location.search).has("test")) {
       requestAnimationFrame(step);
     }),
     getScene: () => ({
-      asteroids: state.asteroids.map((a) => ({ x: a.x, y: a.y, z: a.z, radius: a.radius })),
+      asteroids: state.asteroids.map((a) => ({ x: a.x, y: a.y, z: a.z, radius: a.radius, vx: a.vx, vy: a.vy, vz: a.vz, elite: a.elite, hp: a.hp, maxHp: a.maxHp, maxSpeed: a.maxSpeed })),
       player: { x: state.player.x, y: state.player.y, z: state.player.z, yaw: state.player.yaw, pitch: state.player.pitch, boost: state.player.boost === true, thrust: state.player.thrust },
       camera: { x: state.camera.x, y: state.camera.y, z: state.camera.z, yaw: state.camera.yaw, pitch: state.camera.pitch },
       health: state.health,

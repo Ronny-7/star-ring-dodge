@@ -1,13 +1,13 @@
 // WebGL renderer for the 3D room. Loaded as a module so three.js can be
 // imported; the rest of the game stays classic scripts on window.
 import * as THREE from "three";
-import { createFighterModel, createStudioEnvironment } from "./fighter-model.js";
-import { createPickupModel } from "./pickup-models.js?v=4.6.5";
-import { createRockSet } from "./rock-models.js";
-import { createSpaceEnvironment } from "./space-environment.js";
-import { createShipMaterials } from "./ship-materials.js";
-import { createDeltaModel } from "./delta-model.js?v=4.6.5";
-import { createSaucerModel } from "./saucer-model.js";
+import { createFighterModel, createStudioEnvironment } from "./fighter-model.js?v=4.7.0";
+import { createPickupModel } from "./pickup-models.js?v=4.7.0";
+import { createRockSet } from "./rock-models.js?v=4.7.0";
+import { createSpaceEnvironment } from "./space-environment.js?v=4.7.0";
+import { createShipMaterials } from "./ship-materials.js?v=4.7.0";
+import { createDeltaModel } from "./delta-model.js?v=4.7.0";
+import { createSaucerModel } from "./saucer-model.js?v=4.7.0";
 
 const sceneObjects = {
   rocks: new Map(),
@@ -15,6 +15,7 @@ const sceneObjects = {
   powerUps: new Map(),
   lasers: new Map(),
   gates: new THREE.Group(),
+  region: new THREE.Group(),
   ship: null,
   stars: null
 };
@@ -38,6 +39,7 @@ const gateLabelCache = new Map();
 const fxPool = { debris: [], flashes: [], rings: [], sparks: [] };
 const fxKinds = ["debris", "flashes", "rings", "sparks"];
 const fxStats = { createdMaterials: 0, disposedMaterials: 0, createdGeometries: 0, disposedGeometries: 0, disposedRingGeometries: 0, sharedGeometryDisposals: 0 };
+const eliteStats = { createdMaterials: 0, disposedMaterials: 0, createdGeometries: 0, disposedGeometries: 0 };
 // Observe Three's actual dispose events, not removal from our live pools.
 const onFxMaterialDispose = () => { fxStats.disposedMaterials += 1; };
 const onFxGeometryDispose = () => { fxStats.disposedGeometries += 1; };
@@ -47,6 +49,9 @@ let fxState = null;
 let fxTuning = null;
 let fxSource = null;
 let fxRingGeometry = null;
+let regionMechanicSource = null;
+let baseFogDensity = 0;
+let regionPulseLight = null;
 
 function releaseFx(effect) {
   for (const mesh of effect.objects) {
@@ -367,8 +372,68 @@ function syncRock(entry) {
   mesh.scale.setScalar(a.radius);
   mesh.rotation.set(a.rotation * 0.37, a.rotation, a.rotation * 0.61);
   mesh.material.emissiveIntensity = a.hitFlash > 0 ? a.hitFlash * 0.8 : (a.elite ? 0.18 : 0);
+  if (a.elite) syncEliteVisual(mesh, a);
+  else releaseEliteVisual(mesh);
 
   return mesh;
+}
+
+function syncEliteVisual(mesh, asteroid) {
+  let visual = mesh.userData.eliteVisual;
+  if (!visual) {
+    const haloGeometry = new THREE.TorusGeometry(1.28, 0.045, 8, 40);
+    const haloMaterial = new THREE.MeshBasicMaterial({ color: 0xffb56d, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
+    const halo = new THREE.Mesh(haloGeometry, haloMaterial);
+    halo.rotation.x = Math.PI / 2;
+    mesh.add(halo);
+
+    const trailGeometry = new THREE.BufferGeometry();
+    trailGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(24), 3));
+    const trailMaterial = new THREE.LineBasicMaterial({ color: 0xff9b64, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+    const trail = new THREE.Line(trailGeometry, trailMaterial);
+    trail.frustumCulled = false;
+    scene.add(trail);
+    for (const resource of [haloGeometry, trailGeometry]) {
+      eliteStats.createdGeometries += 1;
+      resource.addEventListener("dispose", () => { eliteStats.disposedGeometries += 1; });
+    }
+    for (const resource of [haloMaterial, trailMaterial]) {
+      eliteStats.createdMaterials += 1;
+      resource.addEventListener("dispose", () => { eliteStats.disposedMaterials += 1; });
+    }
+    visual = { halo, trail, history: [] };
+    mesh.userData.eliteVisual = visual;
+  }
+
+  const point = new THREE.Vector3(asteroid.x, asteroid.y, asteroid.z);
+  if (!visual.history.length || visual.history[visual.history.length - 1].distanceToSquared(point) > 4) {
+    visual.history.push(point);
+    if (visual.history.length > 8) visual.history.shift();
+  }
+  const position = visual.trail.geometry.attributes.position;
+  visual.history.forEach((item, index) => item.toArray(position.array, index * 3));
+  position.needsUpdate = true;
+  visual.trail.geometry.setDrawRange(0, visual.history.length);
+  visual.halo.rotation.z += 0.02;
+}
+
+function releaseEliteVisual(mesh) {
+  const visual = mesh.userData.eliteVisual;
+  if (!visual) return;
+  mesh.remove(visual.halo);
+  scene.remove(visual.trail);
+  visual.halo.geometry.dispose();
+  visual.halo.material.dispose();
+  visual.trail.geometry.dispose();
+  visual.trail.material.dispose();
+  delete mesh.userData.eliteVisual;
+}
+
+function releaseRock(asteroid, mesh) {
+  releaseEliteVisual(mesh);
+  scene.remove(mesh);
+  mesh.material.dispose();
+  sceneObjects.rocks.delete(asteroid);
 }
 
 function roundVector(vector) {
@@ -465,6 +530,21 @@ function pickupDebugReport() {
   return { active: items.length, items };
 }
 
+function eliteDebugReport() {
+  const items = [];
+  for (const [asteroid, mesh] of sceneObjects.rocks) {
+    const visual = mesh.userData.eliteVisual;
+    if (!visual) continue;
+    items.push({
+      halo: true,
+      trailPoints: visual.history.length,
+      hitFlash: asteroid.hitFlash > 0,
+      emissiveIntensity: mesh.material.emissiveIntensity
+    });
+  }
+  return { active: items.length, trails: items.length, items, stats: { ...eliteStats } };
+}
+
 function getDebugReport() {
   if (fxState) syncFx(fxState);
   const lights = scene.children.filter((child) => child.isLight).length;
@@ -490,11 +570,17 @@ function getDebugReport() {
       lights
     },
     rocks,
+    elite: eliteDebugReport(),
     pickups: pickupDebugReport(),
     world: worldSize ? { ...worldSize } : null,
     fence: false,
-    environment: spaceEnvironment?.getDebugReport() ?? null,
-    gates: lastGates
+    environment: spaceEnvironment ? {
+      ...spaceEnvironment.getDebugReport(),
+      fogDensity: scene.fog.density,
+      hazeBoost: regionMechanicSource?.hazeBoost || 0
+    } : null,
+    gates: lastGates,
+    region: { vortices: sceneObjects.region.children.length, pulse: regionPulseLight?.intensity || 0 }
   };
   const fighter = shipGroup?.userData;
   if (!fighter || !fighter.hullRoot) return base;
@@ -546,7 +632,8 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
   fighterEnvironment = createStudioEnvironment(renderer);
 
   scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x03060f, tuning.fogDensity3d || 0.00016);
+  baseFogDensity = tuning.fogDensity3d || 0.00016;
+  scene.fog = new THREE.FogExp2(0x03060f, baseFogDensity);
 
   camera = new THREE.PerspectiveCamera(tuning.fovDegrees || 62, 1, 1, 6000);
 
@@ -576,6 +663,8 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
   scene.add(fill);
 
   scene.add(new THREE.AmbientLight(0x3a4a70, 1.8));
+  regionPulseLight = new THREE.PointLight(0x7a7eff, 0, 1200, 2);
+  scene.add(regionPulseLight);
 
   rockSet = createRockSet({ anisotropy: renderer.capabilities.getMaxAnisotropy() });
   for (const form of rockSet.forms) form.geometry.addEventListener("dispose", onSharedGeometryDispose);
@@ -597,6 +686,7 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
   scene.add(shipGroup);
 
   scene.add(sceneObjects.gates);
+  scene.add(sceneObjects.region);
 
   return {
     resize(width, height) {
@@ -666,6 +756,7 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
         state.player.y + basis.forward.y * 520,
         state.player.z + basis.forward.z * 520
       );
+      regionPulseLight.position.copy(camera.position);
 
       spaceEnvironment?.update(camera, state.player, dt);
       starField.position.copy(camera.position);
@@ -674,6 +765,7 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       sunLight.target.updateMatrixWorld();
 
       syncDynamic(state);
+      syncRegionMechanic(state.regionMechanic);
 
       renderer.render(scene, camera);
     },
@@ -683,6 +775,8 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       fxState = null;
       fxSource = null;
       disposeGateLabels();
+      clearRegionMechanic();
+      for (const [asteroid, mesh] of [...sceneObjects.rocks]) releaseRock(asteroid, mesh);
       disposeObject(scene);
       starField?.material?.map?.dispose();
       spaceEnvironment?.dispose();
@@ -700,6 +794,41 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       renderer.dispose();
     }
   };
+}
+
+function clearRegionMechanic() {
+  for (const child of [...sceneObjects.region.children]) {
+    sceneObjects.region.remove(child);
+    disposeObject(child);
+  }
+  regionMechanicSource = null;
+  if (scene?.fog) scene.fog.density = baseFogDensity;
+  if (regionPulseLight) regionPulseLight.intensity = 0;
+}
+
+function syncRegionMechanic(mechanic) {
+  if (mechanic !== regionMechanicSource) {
+    clearRegionMechanic();
+    regionMechanicSource = mechanic;
+    scene.fog.density = baseFogDensity * (1 + (mechanic?.hazeBoost || 0) * 4);
+    if (mechanic?.type === "vortex") {
+      for (const center of mechanic.centers) {
+        const group = new THREE.Group();
+        for (const scale of [0.45, 0.72, 1]) {
+          const material = new THREE.MeshBasicMaterial({ color: 0x72f0ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
+          const ring = new THREE.Mesh(new THREE.TorusGeometry((mechanic.radius || 200) * scale, 1.5, 6, 48), material);
+          ring.rotation.x = Math.PI / 2;
+          group.add(ring);
+        }
+        group.position.set(center.x, center.y, center.z);
+        sceneObjects.region.add(group);
+      }
+    }
+  }
+  if (regionPulseLight) {
+    regionPulseLight.color.setHex(mechanic?.type === "forge" ? 0xff8436 : 0x7a7eff);
+    regionPulseLight.intensity = (mechanic?.pulseVisual || 0) * 24;
+  }
 }
 
 function shipBasis(yaw, pitch) {
@@ -723,10 +852,8 @@ function syncDynamic(state) {
   }
   for (const [asteroid, mesh] of sceneObjects.rocks) {
     if (seenRocks.has(asteroid)) continue;
-    scene.remove(mesh);
     // Geometry and maps are shared by the whole set; only the clone is ours.
-    mesh.material.dispose();
-    sceneObjects.rocks.delete(asteroid);
+    releaseRock(asteroid, mesh);
   }
 
   syncPickups(state.cores, sceneObjects.cores, "core");

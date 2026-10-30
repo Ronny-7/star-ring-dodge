@@ -15,25 +15,29 @@ const storageModule = require("../storage.js");
 const execFileAsync = promisify(execFile);
 
 test("runtime references carry the current cache key", async () => {
-  const [index, views, app, showcase, world] = await Promise.all([
+  const [index, views, app, showcase, world, delta, saucer] = await Promise.all([
     readFile(path.resolve(__dirname, "..", "index.html"), "utf8"),
     readFile(path.resolve(__dirname, "..", "views.js"), "utf8"),
     readFile(path.resolve(__dirname, "..", "app.js"), "utf8"),
     readFile(path.resolve(__dirname, "..", "showcase.js"), "utf8"),
-    readFile(path.resolve(__dirname, "..", "world3d.js"), "utf8")
+    readFile(path.resolve(__dirname, "..", "world3d.js"), "utf8"),
+    readFile(path.resolve(__dirname, "..", "delta-model.js"), "utf8"),
+    readFile(path.resolve(__dirname, "..", "saucer-model.js"), "utf8")
   ]);
-  assert.match(index, /styles\.css\?v=4\.6\.5/);
-  assert.match(index, /showcase\.css\?v=4\.6\.5/);
-  assert.match(index, /showcase\.js\?v=4\.6\.5/);
-  assert.match(index, /views\.js\?v=4\.6\.5/);
-  for (const script of ["config", "storage", "audio", "projection", "edge-warning", "renderer", "input", "app"]) {
-    assert.match(views, new RegExp(`${script}\\.js\\?v=4\\.6\\.5`));
+  for (const asset of ["styles.css", "showcase.css", "showcase.js", "difficulty.js", "views.js"]) {
+    assert.match(index, new RegExp(`${asset.replace(".", "\\.")}\\?v=4\\.7\\.0`));
   }
-  assert.match(app, /world3d\.js\?v=4\.6\.5/);
-  for (const source of [showcase, world]) {
-    assert.match(source, /\.\/delta-model\.js\?v=4\.6\.5/);
-    assert.match(source, /\.\/pickup-models\.js\?v=4\.6\.5/);
+  for (const script of ["config", "bindings", "storage", "audio", "projection", "edge-warning", "renderer", "input", "app"]) {
+    assert.match(views, new RegExp(`${script}\\.js\\?v=4\\.7\\.0`));
   }
+  assert.match(app, /world3d\.js\?v=4\.7\.0/);
+  for (const module of ["fighter-model", "delta-model", "saucer-model", "rock-models", "pickup-models"]) {
+    assert.match(showcase, new RegExp(`\\./${module}\\.js\\?v=4\\.7\\.0`));
+  }
+  for (const module of ["fighter-model", "pickup-models", "rock-models", "space-environment", "ship-materials", "delta-model", "saucer-model"]) {
+    assert.match(world, new RegExp(`\\./${module}\\.js\\?v=4\\.7\\.0`));
+  }
+  for (const source of [delta, saucer]) assert.match(source, /\.\/ship-materials\.js\?v=4\.7\.0/);
 });
 
 test("browser loads index.html and exercises the real app integration", async (t) => {

@@ -224,7 +224,8 @@ window.starRingConfig = {
       asteroidSpeedMultiplier: 0.95,
       coreIntervalMultiplier: 1,
       powerUpIntervalMultiplier: 1.05,
-      eliteChance: 0.2
+      eliteChance: 0.2,
+      mechanic: { type: "aurora", pulseInterval: 8, velocityScale: 0.82, radius: 1200 }
     },
     forge: {
       name: "恒星熔炉",
@@ -238,7 +239,8 @@ window.starRingConfig = {
       asteroidSpeedMultiplier: 1.18,
       coreIntervalMultiplier: 1,
       powerUpIntervalMultiplier: 1,
-      eliteChance: 0.5
+      eliteChance: 0.5,
+      mechanic: { type: "forge", pulseInterval: 7, velocityScale: 1.12, radius: 1400, maxSpeed: 260 }
     }
   },
 
@@ -304,6 +306,7 @@ window.starRingConfig = {
       chooseGate: "选择跃迁门",
       chooseGateHint: "穿过任意跃迁门选择下一片星域",
       eliteApproach: "精英陨石接近",
+      forgeWarning: "恒星脉冲即将爆发",
       eliteBreak: (n) => `精英击破 +${n}`,
       shieldMinus: "护盾 -1", hullMinus: "船体 -1", corePlus: "核心 +25",
       shieldReady: "护盾就绪", doubleFire: "双发火力",
@@ -325,6 +328,7 @@ window.starRingConfig = {
       chooseGate: "Choose a warp gate",
       chooseGateHint: "Cross any warp gate to pick the next sector",
       eliteApproach: "Elite asteroid near",
+      forgeWarning: "Stellar pulse incoming",
       eliteBreak: (n) => `Elite down +${n}`,
       shieldMinus: "SHIELD -1", hullMinus: "HULL -1", corePlus: "CORE +25",
       shieldReady: "SHIELD READY", doubleFire: "DOUBLE FIRE",
