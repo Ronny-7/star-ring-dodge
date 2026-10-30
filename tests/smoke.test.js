@@ -14,14 +14,25 @@ const storageModule = require("../storage.js");
 
 const execFileAsync = promisify(execFile);
 
-test("changed 3D child modules carry the current cache key", async () => {
-  const [showcase, world] = await Promise.all([
+test("runtime references carry the current cache key", async () => {
+  const [index, views, app, showcase, world] = await Promise.all([
+    readFile(path.resolve(__dirname, "..", "index.html"), "utf8"),
+    readFile(path.resolve(__dirname, "..", "views.js"), "utf8"),
+    readFile(path.resolve(__dirname, "..", "app.js"), "utf8"),
     readFile(path.resolve(__dirname, "..", "showcase.js"), "utf8"),
     readFile(path.resolve(__dirname, "..", "world3d.js"), "utf8")
   ]);
+  assert.match(index, /styles\.css\?v=4\.6\.5/);
+  assert.match(index, /showcase\.css\?v=4\.6\.5/);
+  assert.match(index, /showcase\.js\?v=4\.6\.5/);
+  assert.match(index, /views\.js\?v=4\.6\.5/);
+  for (const script of ["config", "storage", "audio", "projection", "edge-warning", "renderer", "input", "app"]) {
+    assert.match(views, new RegExp(`${script}\\.js\\?v=4\\.6\\.5`));
+  }
+  assert.match(app, /world3d\.js\?v=4\.6\.5/);
   for (const source of [showcase, world]) {
-    assert.match(source, /\.\/delta-model\.js\?v=4\.6\.4/);
-    assert.match(source, /\.\/pickup-models\.js\?v=4\.6\.4/);
+    assert.match(source, /\.\/delta-model\.js\?v=4\.6\.5/);
+    assert.match(source, /\.\/pickup-models\.js\?v=4\.6\.5/);
   }
 });
 

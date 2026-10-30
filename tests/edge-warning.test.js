@@ -22,13 +22,17 @@ test("selects an off-screen approaching asteroid and preserves its edge directio
   assert.ok(warning.direction.x < 0, "indicator direction points toward threat");
 });
 
-test("does not warn for visible or distant asteroids", () => {
+test("does not warn for a visible approaching asteroid", () => {
   assert.deepEqual(selectEdgeWarnings({
     ...defaults,
-    asteroids: [
-      { id: "visible", x: 0, y: 0, z: 400, vx: 0, vy: 0, vz: 0, radius: 30 },
-      { id: "distant", x: 900, y: 0, z: 900, vx: -1, vy: 0, vz: -1, radius: 30 }
-    ]
+    asteroids: [{ id: "visible", x: 0, y: 0, z: 400, vx: 0, vy: 0, vz: -100, radius: 30 }]
+  }), []);
+});
+
+test("does not warn for a distant approaching asteroid", () => {
+  assert.deepEqual(selectEdgeWarnings({
+    ...defaults,
+    asteroids: [{ id: "distant", x: 900, y: 0, z: 900, vx: -100, vy: 0, vz: -100, radius: 30 }]
   }), []);
 });
 
@@ -42,16 +46,16 @@ test("clamps an off-screen warning to the safe viewport inset", () => {
   assert.equal(warning.y, 24);
 });
 
-test("caps warnings in nearest then highest-threat deterministic order", () => {
+test("caps three eligible warnings in nearest then highest-threat deterministic order", () => {
   const warnings = selectEdgeWarnings({
     ...defaults,
     maxWarnings: 2,
     asteroids: [
-      { id: "far-elite", x: -500, y: 0, z: 500, vx: 0, vy: 0, vz: 0, radius: 30, elite: true },
-      { id: "near", x: 500, y: 0, z: 250, vx: -10, vy: 0, vz: -10, radius: 30 },
-      { id: "tie", x: 500, y: 0, z: 250, vx: -10, vy: 0, vz: -10, radius: 30 }
+      { id: "third", x: 500, y: 0, z: 400, vx: -20, vy: 0, vz: -20, radius: 30 },
+      { id: "first", x: 500, y: 0, z: 200, vx: -80, vy: 0, vz: -30, radius: 30 },
+      { id: "second", x: -500, y: 0, z: 300, vx: 50, vy: 0, vz: -20, radius: 30 }
     ]
   });
 
-  assert.deepEqual(warnings.map(({ id }) => id), ["near", "tie"]);
+  assert.deepEqual(warnings.map(({ id }) => id), ["first", "second"]);
 });
