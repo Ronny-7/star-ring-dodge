@@ -17,6 +17,9 @@ let ui = (window.starRingConfig.uiText && window.starRingConfig.uiText.zh) || {}
 const overlayStats = document.getElementById("overlay-stats");
 const overlayStatGrid = document.getElementById("overlay-stat-grid");
 const overlayRecord = document.getElementById("overlay-record");
+const overlayRoute = document.getElementById("overlay-route");
+const overlayRouteLabel = document.getElementById("overlay-route-label");
+const overlayRouteHistory = document.getElementById("overlay-route-history");
 const startButton = document.getElementById("start-button");
 const backHomeButton = document.getElementById("back-home");
 const playfieldEl = canvas.parentElement;
@@ -64,6 +67,7 @@ function setLanguage(lang) {
     if (overlayMode === "pause") {
       showOverlay("pause", ui.pauseTitle, ui.pauseText, ui.pauseButton);
     } else if (overlayMode === "gameover") {
+      renderRouteHistory();
       showOverlay(
         "gameover",
         lastGameOver.newBest ? ui.recordTitle : ui.gameOverTitle,
@@ -121,6 +125,7 @@ let activeSkin = "default";
 let activeColor = "blue";
 
 const DEFAULT_REGION_ID = "drift";
+const MAX_ROUTE_HISTORY = 64;
 
 const COLORS = {
   blue: makeColor(98, 228, 255),
@@ -292,7 +297,14 @@ function renderOverlayStats(stats, isRecord) {
 function hideOverlayStats() {
   overlayStats.classList.add("hidden");
   overlayRecord.classList.add("hidden");
+  overlayRoute.classList.add("hidden");
   overlayStatGrid.replaceChildren();
+}
+
+function renderRouteHistory() {
+  overlayRouteLabel.textContent = L("routeHistory");
+  overlayRouteHistory.textContent = state.routeHistory.map((id) => regionDisplayName(regions[id])).join(" → ");
+  overlayRoute.classList.remove("hidden");
 }
 
 function showOverlay(mode, title, text, buttonText) {
@@ -354,6 +366,7 @@ const state = {
   shieldCharges: 0,
   doubleShotTimer: 0,
   regionId: DEFAULT_REGION_ID,
+  routeHistory: [DEFAULT_REGION_ID],
   regionTimer: 0,
   regionJunctions: 0,
   achievementTimer: 0,
@@ -457,6 +470,7 @@ function resetGame() {
   state.shieldCharges = 0;
   state.doubleShotTimer = 0;
   state.regionId = DEFAULT_REGION_ID;
+  state.routeHistory = [DEFAULT_REGION_ID];
   world3d?.setRegionTint(regions[DEFAULT_REGION_ID].tint);
   state.regionTimer = 0;
   state.regionJunctions = 0;
@@ -500,6 +514,7 @@ function resetGame() {
 
   syncHud();
   hideOverlay();
+  hideOverlayStats();
 }
 
 function syncHud() {
@@ -930,6 +945,7 @@ function resolveRouteChoice(regionId) {
   if (!regions[regionId]) return;
   const region = regions[regionId];
   state.regionId = regionId;
+  if (state.routeHistory.length < MAX_ROUTE_HISTORY) state.routeHistory.push(regionId);
   state.regionJunctions += 1;
   state.regionTimer = 0;
   state.routeChoice.active = false;
@@ -1532,6 +1548,7 @@ function endGame() {
   }
 
   renderOverlayStats(overlayStatList, state.stats.newBest);
+  renderRouteHistory();
 
   showOverlay(
     "gameover",
@@ -1886,6 +1903,7 @@ if (new URLSearchParams(window.location.search).has("test")) {
       paused: state.paused,
       gameOver: state.gameOver,
       regionId: state.regionId,
+      routeHistory: [...state.routeHistory],
       regionJunctions: state.regionJunctions,
       eliteCount: state.asteroids.filter((asteroid) => asteroid.elite).length,
       asteroidCount: state.asteroids.length,

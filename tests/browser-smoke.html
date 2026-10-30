@@ -24,25 +24,36 @@
 
       api.startGame();
       check("startGame starts the real app", api.getState().running === true && api.getState().gameOver === false);
+      check("fresh run seeds route history", JSON.stringify(api.getState().routeHistory) === JSON.stringify(["drift"]));
+      check("route history is hidden while playing", frame.contentDocument.getElementById("overlay-route").classList.contains("hidden"));
       const world = api.getState().world;
       check("world uses x/height/depth axes", world.width === 60000 && world.height === 60000 && world.depth === 60000);
       api.pauseGame();
       check("pauseGame pauses the real app", api.getState().paused === true);
+      check("pause overlay hides route history", frame.contentDocument.getElementById("overlay-route").classList.contains("hidden"));
       api.resumeGame();
       check("resumeGame resumes the real app", api.getState().paused === false);
 
       api.resolveRouteChoice("belt");
       check("resolveRouteChoice changes region", api.getState().regionId === "belt" && api.getState().regionJunctions === 1);
+      api.resolveRouteChoice("forge");
+      check("resolved routes append once in order", JSON.stringify(api.getState().routeHistory) === JSON.stringify(["drift", "belt", "forge"]));
       api.spawnEliteAsteroid();
       check("spawnEliteAsteroid creates an elite", api.getState().eliteCount === 1);
-      api.setLanguage("en");
-      check("setLanguage updates app state and title", api.getState().language === "en" && api.getState().title === "Star Ring Dodge");
       api.endGame();
       check("endGame ends the real app", api.getState().gameOver === true && api.getState().running === false);
+      const routeOverlay = frame.contentDocument.getElementById("overlay-route");
+      check("game over shows localized Chinese route", !routeOverlay.classList.contains("hidden") && routeOverlay.textContent.includes("安定漂流区 → 密集陨带 → 恒星熔炉"));
+      api.setLanguage("en");
+      check("setLanguage updates app state and title", api.getState().language === "en" && api.getState().title === "Star Ring Dodge");
+      check("game over route switches to English", routeOverlay.textContent.includes("Stable Drift → Dense Asteroid Belt → Stellar Forge"));
       api.startGame();
       const restarted = api.getState();
-      check("restart resets region and warp count", restarted.regionId === "drift" && restarted.regionJunctions === 0);
+      check("restart resets region, warp count, and route history", restarted.regionId === "drift" && restarted.regionJunctions === 0 && JSON.stringify(restarted.routeHistory) === JSON.stringify(["drift"]));
+      check("restart hides route history", routeOverlay.classList.contains("hidden"));
       check("restart clears elite asteroids", restarted.eliteCount === 0);
+      for (let i = 0; i < 80; i += 1) api.resolveRouteChoice(i % 2 ? "belt" : "forge");
+      check("route history stays bounded", api.getState().routeHistory.length === 64);
       for (let i = api.getState().asteroidCount; i < restarted.maxAsteroids; i += 1) {
         api.spawnAsteroidAt(0, 0, 0, 12);
       }
