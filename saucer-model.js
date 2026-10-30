@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { createShipMaterials } from "./ship-materials.js?v=4.7.0";
+import { createShipMaterials } from "./ship-materials.js?v=4.7.1";
 
 export function createSaucerModel({ color, environment, hullTexture }) {
   const group = new THREE.Group();

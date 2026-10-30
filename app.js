@@ -652,6 +652,7 @@ const settingsOverlay = document.getElementById("settings-overlay");
 let pausedBeforeSettings = false;
 let settingsReturnFocus = null;
 let bindingCaptureAction = null;
+let bindingStatus = { key: "", action: null };
 
 function bindingActionLabel(action) {
   return L(action === "pause" ? "pauseAction" : action);
@@ -670,17 +671,19 @@ function syncBindingsUi() {
     button.classList.toggle("is-capturing", bindingCaptureAction === action);
     button.setAttribute("aria-label", `${bindingActionLabel(action)}: ${displayBindingKey(profile.bindings[action])}`);
   });
+  setBindingStatus(bindingStatus.key, bindingStatus.action);
 }
 
-function setBindingStatus(message = "") {
+function setBindingStatus(key = "", action = null) {
+  bindingStatus = { key, action };
   const status = document.getElementById("binding-status");
-  if (status) status.textContent = message;
+  if (status) status.textContent = key ? L(key, action ? bindingActionLabel(action) : "") : "";
 }
 
 function startBindingCapture(action) {
   if (!window.starRingBindings.BINDING_ACTIONS.includes(action)) return;
   bindingCaptureAction = action;
-  setBindingStatus(L("pressKey"));
+  setBindingStatus("pressKey");
   syncBindingsUi();
 }
 
@@ -694,7 +697,7 @@ function resetBindings() {
   profile.bindings = { ...window.starRingBindings.DEFAULT_BINDINGS };
   storageController.saveProfile(localStorage, profileKey, profile);
   cancelBindingCapture(false);
-  setBindingStatus(L("bindingsReset"));
+  setBindingStatus("bindingsReset");
 }
 
 function getSettingsFocusableElements() {
@@ -712,12 +715,12 @@ function handleSettingsKeydown(event) {
     }
     const key = window.starRingBindings.normalizeBindingKey(event.key);
     if (!key) {
-      setBindingStatus(L("invalidBinding"));
+      setBindingStatus("invalidBinding");
       return true;
     }
     const conflict = window.starRingBindings.BINDING_ACTIONS.find((action) => action !== bindingCaptureAction && profile.bindings[action] === key);
     if (conflict) {
-      setBindingStatus(L("bindingConflict", bindingActionLabel(conflict)));
+      setBindingStatus("bindingConflict", conflict);
       return true;
     }
     profile.bindings = { ...profile.bindings, [bindingCaptureAction]: key };
@@ -1138,7 +1141,8 @@ function resolveRouteChoice(regionId) {
   const region = regions[regionId];
   state.regionId = regionId;
   initRegionMechanic(region);
-  if (state.routeHistory.length < MAX_ROUTE_HISTORY) state.routeHistory.push(regionId);
+  state.routeHistory.push(regionId);
+  if (state.routeHistory.length > MAX_ROUTE_HISTORY) state.routeHistory.splice(1, 1);
   state.regionJunctions += 1;
   state.regionTimer = 0;
   state.routeChoice.active = false;
@@ -2162,7 +2166,7 @@ function startLoop() {
 const testParams = new URLSearchParams(window.location.search);
 const worldModule = testParams.has("test") && testParams.has("failWorld")
   ? Promise.reject(new Error("Forced WebGL world failure"))
-  : import("./world3d.js?v=4.7.0");
+  : import("./world3d.js?v=4.7.1");
 
 window.starRingWorldReady = worldModule
   .then((mod) => {

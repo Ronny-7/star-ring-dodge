@@ -25,19 +25,19 @@ test("runtime references carry the current cache key", async () => {
     readFile(path.resolve(__dirname, "..", "saucer-model.js"), "utf8")
   ]);
   for (const asset of ["styles.css", "showcase.css", "showcase.js", "difficulty.js", "views.js"]) {
-    assert.match(index, new RegExp(`${asset.replace(".", "\\.")}\\?v=4\\.7\\.0`));
+    assert.match(index, new RegExp(`${asset.replace(".", "\\.")}\\?v=4\\.7\\.1`));
   }
   for (const script of ["config", "bindings", "storage", "audio", "projection", "edge-warning", "renderer", "input", "app"]) {
-    assert.match(views, new RegExp(`${script}\\.js\\?v=4\\.7\\.0`));
+    assert.match(views, new RegExp(`${script}\\.js\\?v=4\\.7\\.1`));
   }
-  assert.match(app, /world3d\.js\?v=4\.7\.0/);
+  assert.match(app, /world3d\.js\?v=4\.7\.1/);
   for (const module of ["fighter-model", "delta-model", "saucer-model", "rock-models", "pickup-models"]) {
-    assert.match(showcase, new RegExp(`\\./${module}\\.js\\?v=4\\.7\\.0`));
+    assert.match(showcase, new RegExp(`\\./${module}\\.js\\?v=4\\.7\\.1`));
   }
   for (const module of ["fighter-model", "pickup-models", "rock-models", "space-environment", "ship-materials", "delta-model", "saucer-model"]) {
-    assert.match(world, new RegExp(`\\./${module}\\.js\\?v=4\\.7\\.0`));
+    assert.match(world, new RegExp(`\\./${module}\\.js\\?v=4\\.7\\.1`));
   }
-  for (const source of [delta, saucer]) assert.match(source, /\.\/ship-materials\.js\?v=4\.7\.0/);
+  for (const source of [delta, saucer]) assert.match(source, /\.\/ship-materials\.js\?v=4\.7\.1/);
 });
 
 test("browser loads index.html and exercises the real app integration", async (t) => {
@@ -92,7 +92,7 @@ test("browser loads index.html and exercises the real app integration", async (t
     assert.notEqual(markerIndex, -1, "browser smoke page did not publish a result");
     const result = JSON.parse(browser.stdout.slice(markerIndex + marker.length).trim().split("</body>")[0]);
     assert.equal(result.error, null, result.error || "browser integration smoke test failed");
-    assert.equal(result.checks.length, 34);
+    assert.equal(result.checks.length, 46);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(resultDir, { recursive: true, force: true });

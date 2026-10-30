@@ -10,15 +10,15 @@
 
   // Bump these queries with the build tag so browsers skip stale copies.
   const GAME_SCRIPTS = [
-    "config.js?v=4.7.0",
-    "bindings.js?v=4.7.0",
-    "storage.js?v=4.7.0",
-    "audio.js?v=4.7.0",
-    "projection.js?v=4.7.0",
-    "edge-warning.js?v=4.7.0",
-    "renderer.js?v=4.7.0",
-    "input.js?v=4.7.0",
-    "app.js?v=4.7.0"
+    "config.js?v=4.7.1",
+    "bindings.js?v=4.7.1",
+    "storage.js?v=4.7.1",
+    "audio.js?v=4.7.1",
+    "projection.js?v=4.7.1",
+    "edge-warning.js?v=4.7.1",
+    "renderer.js?v=4.7.1",
+    "input.js?v=4.7.1",
+    "app.js?v=4.7.1"
   ];
 
   let booting = null;

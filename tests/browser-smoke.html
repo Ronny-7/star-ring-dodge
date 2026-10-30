@@ -45,19 +45,43 @@
       const appDocument = frame.contentDocument;
       appDocument.getElementById("settings-button").click();
       const fireBinding = appDocument.querySelector('[data-binding="fire"]');
+      const bindingStatus = appDocument.getElementById("binding-status");
       check("settings localizes binding actions and shows current keys", fireBinding.previousElementSibling.textContent === "Fire" && fireBinding.textContent === "J");
       fireBinding.click();
+      api.setLanguage("zh");
+      check("active binding capture switches its prompt to Chinese without cancelling capture",
+        bindingStatus.textContent === "请按新按键（Esc 取消）" && fireBinding.classList.contains("is-capturing"));
+      api.setLanguage("en");
+      check("active binding capture switches its prompt back to English",
+        bindingStatus.textContent === "Press a new key (Esc to cancel)" && fireBinding.classList.contains("is-capturing"));
       frame.contentWindow.dispatchEvent(new KeyboardEvent("keydown", { key: "f" }));
       const savedProfile = JSON.parse(frame.contentWindow.localStorage.getItem("star-ring-dodge-profile-3d"));
       check("settings captures and persists a custom binding", fireBinding.textContent === "F" && savedProfile.bindings.fire === "f");
       const pauseBinding = appDocument.querySelector('[data-binding="pause"]');
       pauseBinding.click();
       frame.contentWindow.dispatchEvent(new KeyboardEvent("keydown", { key: "f" }));
-      check("settings rejects conflicting bindings with a clear status", appDocument.getElementById("binding-status").textContent.length > 0 && pauseBinding.classList.contains("is-capturing"));
+      check("settings rejects conflicting bindings with the specific action in its status",
+        bindingStatus.textContent === "That key is already used for Fire" && pauseBinding.classList.contains("is-capturing"));
+      api.setLanguage("zh");
+      check("binding conflict status follows Chinese action labels on language change",
+        bindingStatus.textContent === "该按键已用于开火" && pauseBinding.classList.contains("is-capturing"));
+      api.setLanguage("en");
+      check("binding conflict status follows English action labels on language change",
+        bindingStatus.textContent === "That key is already used for Fire" && pauseBinding.classList.contains("is-capturing"));
+      frame.contentWindow.dispatchEvent(new KeyboardEvent("keydown", { key: "Control" }));
+      api.setLanguage("zh");
+      check("invalid binding status switches language while capture remains active",
+        bindingStatus.textContent === "该按键不可用" && pauseBinding.classList.contains("is-capturing"));
       frame.contentWindow.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
       check("Escape cancels capture without closing settings", !pauseBinding.classList.contains("is-capturing") && !appDocument.getElementById("settings-overlay").classList.contains("hidden"));
+      api.setLanguage("en");
+      check("cancelled binding capture leaves no stale status after switching language", bindingStatus.textContent === "");
       appDocument.getElementById("binding-reset").click();
       check("settings reset restores and persists default bindings", fireBinding.textContent === "J" && JSON.parse(frame.contentWindow.localStorage.getItem("star-ring-dodge-profile-3d")).bindings.fire === "j");
+      api.setLanguage("zh");
+      check("binding reset confirmation follows Chinese language", bindingStatus.textContent === "已恢复默认键位");
+      api.setLanguage("en");
+      check("binding reset confirmation follows English language", bindingStatus.textContent === "Default bindings restored");
       appDocument.getElementById("settings-close-button").click();
       api.setLanguage("zh");
       api.endGame();
@@ -72,8 +96,20 @@
       check("restart resets region, warp count, and route history", restarted.regionId === "drift" && restarted.regionJunctions === 0 && JSON.stringify(restarted.routeHistory) === JSON.stringify(["drift"]));
       check("restart hides route history", routeOverlay.classList.contains("hidden"));
       check("restart clears elite asteroids", restarted.eliteCount === 0);
-      for (let i = 0; i < 80; i += 1) api.resolveRouteChoice(i % 2 ? "belt" : "forge");
+      const routeChoices = [];
+      for (let i = 0; i < 80; i += 1) {
+        const region = i % 2 ? "belt" : "forge";
+        routeChoices.push(region);
+        api.resolveRouteChoice(region);
+        if (i === 62) check("route history retains all entries up to its bound",
+          JSON.stringify(api.getState().routeHistory) === JSON.stringify(["drift", ...routeChoices]));
+        if (i === 63) check("first route history overflow retains the start and latest 63 regions",
+          JSON.stringify(api.getState().routeHistory) === JSON.stringify(["drift", ...routeChoices.slice(1)]));
+      }
+      const recentRoute = ["drift", ...routeChoices.slice(-63)];
       check("route history stays bounded", api.getState().routeHistory.length === 64);
+      check("repeated route history overflow preserves exact recent order and the starting region",
+        JSON.stringify(api.getState().routeHistory) === JSON.stringify(recentRoute) && api.getState().regionJunctions === 80);
       for (let i = api.getState().asteroidCount; i < restarted.maxAsteroids; i += 1) {
         api.spawnAsteroidAt(0, 0, 0, 12);
       }
@@ -81,6 +117,9 @@
       api.spawnAsteroid();
       api.spawnEliteAsteroid();
       check("asteroid spawn stops at the cap", capped.asteroidCount === capped.maxAsteroids && api.getState().asteroidCount === capped.maxAsteroids);
+      api.endGame();
+      check("long-run result ends with the latest visited region",
+        routeOverlay.textContent.includes(recentRoute.map((region) => ({ drift: "Stable Drift", belt: "Dense Asteroid Belt", forge: "Stellar Forge" })[region]).join(" → ")));
 
       const failedFrame = document.createElement("iframe");
       failedFrame.src = "../index.html?test=1&failWorld=1";

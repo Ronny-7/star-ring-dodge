@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { createShipMaterials } from "./ship-materials.js?v=4.7.0";
+import { createShipMaterials } from "./ship-materials.js?v=4.7.1";
 
 function add(parent, geometry, material, position, name) {
   const mesh = new THREE.Mesh(geometry, material);

@@ -1,13 +1,13 @@
 // WebGL renderer for the 3D room. Loaded as a module so three.js can be
 // imported; the rest of the game stays classic scripts on window.
 import * as THREE from "three";
-import { createFighterModel, createStudioEnvironment } from "./fighter-model.js?v=4.7.0";
-import { createPickupModel } from "./pickup-models.js?v=4.7.0";
-import { createRockSet } from "./rock-models.js?v=4.7.0";
-import { createSpaceEnvironment } from "./space-environment.js?v=4.7.0";
-import { createShipMaterials } from "./ship-materials.js?v=4.7.0";
-import { createDeltaModel } from "./delta-model.js?v=4.7.0";
-import { createSaucerModel } from "./saucer-model.js?v=4.7.0";
+import { createFighterModel, createStudioEnvironment } from "./fighter-model.js?v=4.7.1";
+import { createPickupModel } from "./pickup-models.js?v=4.7.1";
+import { createRockSet } from "./rock-models.js?v=4.7.1";
+import { createSpaceEnvironment } from "./space-environment.js?v=4.7.1";
+import { createShipMaterials } from "./ship-materials.js?v=4.7.1";
+import { createDeltaModel } from "./delta-model.js?v=4.7.1";
+import { createSaucerModel } from "./saucer-model.js?v=4.7.1";
 
 const sceneObjects = {
   rocks: new Map(),
@@ -580,7 +580,12 @@ function getDebugReport() {
       hazeBoost: regionMechanicSource?.hazeBoost || 0
     } : null,
     gates: lastGates,
-    region: { vortices: sceneObjects.region.children.length, pulse: regionPulseLight?.intensity || 0 }
+    region: {
+      vortices: sceneObjects.region.children.length,
+      vortexNormals: sceneObjects.region.children.map((group) => new THREE.Vector3(0, 0, 1)
+        .applyQuaternion(group.children[0].getWorldQuaternion(new THREE.Quaternion())).toArray()),
+      pulse: regionPulseLight?.intensity || 0
+    }
   };
   const fighter = shipGroup?.userData;
   if (!fighter || !fighter.hullRoot) return base;
@@ -814,10 +819,11 @@ function syncRegionMechanic(mechanic) {
     if (mechanic?.type === "vortex") {
       for (const center of mechanic.centers) {
         const group = new THREE.Group();
+        const axis = center.axis || { x: 0, y: 1, z: 0 };
+        group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(axis.x, axis.y, axis.z).normalize());
         for (const scale of [0.45, 0.72, 1]) {
           const material = new THREE.MeshBasicMaterial({ color: 0x72f0ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
           const ring = new THREE.Mesh(new THREE.TorusGeometry((mechanic.radius || 200) * scale, 1.5, 6, 48), material);
-          ring.rotation.x = Math.PI / 2;
           group.add(ring);
         }
         group.position.set(center.x, center.y, center.z);

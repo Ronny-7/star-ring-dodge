@@ -10,11 +10,30 @@ const { promisify } = require("node:util");
 
 const execFileAsync = promisify(execFile);
 
+test("missing Edge fails unless explicitly opted out", async () => {
+  const env = { ...process.env, STAR_RING_EDGE: path.join(__filename, "missing-edge.exe") };
+  // This child must run independently, not inherit the parent test worker context.
+  delete env.NODE_TEST_CONTEXT;
+  const run = (skip) => execFileAsync(process.execPath, [
+    "--test", "--test-name-pattern=^browser applies", __filename
+  ], {
+    env: { ...env, STAR_RING_SKIP_EDGE: skip },
+    windowsHide: true,
+    timeout: 10000
+  });
+  await assert.rejects(run("0"), (error) => error.code === 1 && /Set STAR_RING_EDGE/.test(error.stdout));
+  const skipped = await run("1");
+  assert.match(skipped.stdout, /skipped 1/);
+});
+
 test("browser applies and clears deterministic 3D region mechanics", async (t) => {
   const edgePath = process.env.STAR_RING_EDGE || "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
   if (!existsSync(edgePath)) {
-    t.skip(`Edge was not found at ${edgePath}`);
-    return;
+    if (process.env.STAR_RING_SKIP_EDGE === "1") {
+      t.skip(`Edge was explicitly skipped because it was not found at ${edgePath}`);
+      return;
+    }
+    assert.fail(`Edge was not found at ${edgePath}. Set STAR_RING_EDGE to its executable or STAR_RING_SKIP_EDGE=1 to opt out.`);
   }
   const projectRoot = path.resolve(__dirname, "..");
   const resultDir = await mkdtemp(path.join(tmpdir(), "star-ring-regions-"));
@@ -47,7 +66,7 @@ test("browser applies and clears deterministic 3D region mechanics", async (t) =
     assert.notEqual(markerIndex, -1, "region mechanics page did not publish a result");
     const result = JSON.parse(browser.stdout.slice(markerIndex + marker.length).trim().split("</body>")[0]);
     assert.equal(result.error, null, result.error || "region mechanics browser test failed");
-    assert.equal(result.checks.length, 26);
+    assert.equal(result.checks.length, 27);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(resultDir, { recursive: true, force: true });
