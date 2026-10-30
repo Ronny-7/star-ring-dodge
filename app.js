@@ -669,7 +669,11 @@ function openSettings() {
     state.paused = true;
     inputController.clearAll();
   }
-  window.requestAnimationFrame(() => settingsCloseButton?.focus());
+  const focusSettingsClose = () => {
+    if (!settingsOverlay.classList.contains("hidden")) settingsCloseButton?.focus();
+  };
+  settingsOverlay.addEventListener("transitionend", focusSettingsClose, { once: true });
+  window.setTimeout(focusSettingsClose, 300);
 }
 
 function closeSettings() {
@@ -2069,6 +2073,17 @@ if (new URLSearchParams(window.location.search).has("test")) {
     startGame,
     pauseGame,
     resumeGame,
+    setForceLandscape: (forced) => {
+      document.body.classList.toggle("force-landscape", forced);
+      syncLandscapeUi();
+      refreshCanvasSoon();
+    },
+    getInputDebug: () => ({
+      move: inputController.getMoveInput(),
+      look: { ...inputController.lookDelta },
+      fireHeld: inputController.isFireHeld(),
+      boosting: inputController.isBoosting()
+    }),
     resolveRouteChoice,
     spawnEliteAsteroid,
     setLanguage,
@@ -2136,4 +2151,5 @@ if (new URLSearchParams(window.location.search).has("test")) {
       shotsFired: state.stats.shotsFired
     })
   };
+  if (new URLSearchParams(window.location.search).has("mobileTest")) import("./tests/mobile-smoke.js");
 }
