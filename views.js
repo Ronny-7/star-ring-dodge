@@ -15,6 +15,7 @@
     "storage.js?v=4.6.4",
     "audio.js?v=4.6.4",
     "projection.js?v=4.6.4",
+    "edge-warning.js?v=4.6.4",
     "renderer.js?v=4.6.4",
     "input.js?v=4.6.4",
     "app.js?v=4.6.4"

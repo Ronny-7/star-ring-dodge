@@ -6,6 +6,7 @@ const audioController = window.starRingAudio.createAudioController({ windowObjec
 const storageController = window.starRingStorage;
 const projection = window.starRingProjection;
 const difficulty = window.starRingDifficulty;
+const edgeWarning = window.starRingEdgeWarning;
 let world3d = null;
 
 const startMusic = () => audioController.startMusic();
@@ -1653,6 +1654,7 @@ function draw(worldDt = 0.016) {
     drawHudOverlay(region);
     drawVignette();
     drawWarpFlash();
+    drawEdgeWarnings();
     drawCrosshair();
     return;
   }
@@ -1661,6 +1663,42 @@ function draw(worldDt = 0.016) {
   drawLaneRadar();
   drawHudOverlay(region);
   drawCrosshair();
+}
+
+function drawEdgeWarnings() {
+  if (!state.running || state.paused || state.gameOver) return;
+  const warnings = edgeWarning.selectEdgeWarnings({
+    asteroids: state.asteroids,
+    player: state.player,
+    camera: getActiveCamera(),
+    width: cw,
+    height: ch,
+    inset: Math.max(28, Math.min(cw, ch) * 0.07),
+    nearDistance: 850,
+    dangerDistance: 260,
+    maxWarnings: 3
+  });
+
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.shadowBlur = 8;
+  for (const warning of warnings) {
+    const angle = Math.atan2(warning.direction.y, warning.direction.x);
+    ctx.save();
+    ctx.translate(warning.x, warning.y);
+    ctx.rotate(angle);
+    ctx.strokeStyle = warning.elite ? "rgba(255,181,158,0.98)" : "rgba(255,211,126,0.92)";
+    ctx.shadowColor = warning.elite ? "#ff896f" : "#ffbf55";
+    ctx.beginPath();
+    ctx.moveTo(10, 0);
+    ctx.lineTo(-6, -7);
+    ctx.lineTo(-2, 0);
+    ctx.lineTo(-6, 7);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 function drawCrosshair() {
