@@ -95,10 +95,12 @@
       const failedDocument = failedWindow.document;
       const failedApi = failedWindow.starRingTestApi;
       const bootError = failedDocument.getElementById("boot-error");
+      const failureOverlay = failedDocument.getElementById("overlay");
       failedApi.setLanguage("zh");
-      check("WebGL failure shows explicit Chinese recovery copy", !bootError.hidden && bootError.textContent.includes("3D") && bootError.textContent.includes("WebGL") && bootError.textContent.includes("刷新"));
+      check("WebGL failure shows explicit Chinese recovery copy", !failureOverlay.classList.contains("hidden") && failureOverlay.textContent.includes("3D") && failureOverlay.textContent.includes("WebGL") && failureOverlay.textContent.includes("刷新"));
+      check("WebGL failure uses one visible failure surface", bootError.hidden && !failureOverlay.classList.contains("hidden"));
       failedApi.setLanguage("en");
-      check("WebGL failure shows explicit English recovery copy", bootError.textContent.includes("3D rendering failed") && bootError.textContent.includes("refresh") && bootError.textContent.includes("WebGL"));
+      check("WebGL failure shows explicit English recovery copy", failureOverlay.textContent.includes("3D rendering failed") && failureOverlay.textContent.includes("refresh") && failureOverlay.textContent.includes("WebGL"));
       failedApi.startGame();
       check("WebGL failure remains a stable stopped state", failedApi.getState().running === false && failedDocument.querySelectorAll("#boot-error").length === 1);
       failedDocument.getElementById("settings-button").click();
