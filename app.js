@@ -8,6 +8,7 @@ const projection = window.starRingProjection;
 const difficulty = window.starRingDifficulty;
 const edgeWarning = window.starRingEdgeWarning;
 let world3d = null;
+let worldFailed = false;
 
 const startMusic = () => audioController.startMusic();
 const stopMusic = () => audioController.stopMusic();
@@ -130,6 +131,16 @@ function applyLanguageToDOM() {
   document.querySelectorAll(".color-swatch").forEach((el) => {
     el.setAttribute("aria-pressed", String(el.dataset.color === activeColor));
   });
+  syncWorldFailureCopy();
+}
+
+function syncWorldFailureCopy() {
+  if (!worldFailed) return;
+  const bootError = document.getElementById("boot-error");
+  bootError.textContent = state.lang === "en"
+    ? "3D rendering failed. Please refresh and confirm that your browser and device support WebGL."
+    : "3D 渲染失败。请刷新页面重试，并确认浏览器和设备支持 WebGL。";
+  bootError.hidden = false;
 }
 
 let activeSkin = "default";
@@ -1872,6 +1883,7 @@ function drawWarpFlash() {
 /* ---------- 启动 ---------- */
 
 function startGame() {
+  if (worldFailed) return;
   resetGame();
 }
 
@@ -1979,15 +1991,28 @@ function startLoop() {
 
 // three.js is an ES module; the world boots asynchronously and the HUD-only
 // fallback covers the gap.
-window.starRingWorldReady = import("./world3d.js?v=4.6.5")
+const testParams = new URLSearchParams(window.location.search);
+const worldModule = testParams.has("test") && testParams.has("failWorld")
+  ? Promise.reject(new Error("Forced WebGL world failure"))
+  : import("./world3d.js?v=4.6.5");
+
+window.starRingWorldReady = worldModule
   .then((mod) => {
     world3d = mod.createWorld({ world: state.world, tuning, skin: activeSkin, color: state.shipColor.mid });
     world3d.resize(cw, ch);
     startLoop();
+    return true;
   })
   .catch((error) => {
-    console.error("WebGL world failed to load, running HUD-only:", error);
-    startLoop();
+    worldFailed = true;
+    state.running = false;
+    state.paused = false;
+    state.lastTime = 0;
+    inputController.clearAll();
+    stopMusic();
+    syncWorldFailureCopy();
+    console.error("WebGL world failed to load:", error);
+    return false;
   });
 
 // The page shell (views.js) owns navigation; this is the only handle it needs.

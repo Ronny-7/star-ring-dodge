@@ -16,7 +16,7 @@
   const frame = document.createElement("iframe");
   frame.src = "../index.html?test=1";
   frame.style.display = "none";
-  frame.onload = () => {
+  frame.onload = async () => {
     try {
       const api = frame.contentWindow.starRingTestApi;
       check("page exposes integration test API", Boolean(api));
@@ -81,6 +81,30 @@
       api.spawnAsteroid();
       api.spawnEliteAsteroid();
       check("asteroid spawn stops at the cap", capped.asteroidCount === capped.maxAsteroids && api.getState().asteroidCount === capped.maxAsteroids);
+
+      const failedFrame = document.createElement("iframe");
+      failedFrame.src = "../index.html?test=1&failWorld=1";
+      failedFrame.style.display = "none";
+      await new Promise((resolve, reject) => {
+        failedFrame.onload = resolve;
+        failedFrame.onerror = () => reject(new Error("failed to load WebGL fallback fixture"));
+        document.body.append(failedFrame);
+      });
+      await failedFrame.contentWindow.starRingWorldReady.catch(() => {});
+      const failedWindow = failedFrame.contentWindow;
+      const failedDocument = failedWindow.document;
+      const failedApi = failedWindow.starRingTestApi;
+      const bootError = failedDocument.getElementById("boot-error");
+      failedApi.setLanguage("zh");
+      check("WebGL failure shows explicit Chinese recovery copy", !bootError.hidden && bootError.textContent.includes("3D") && bootError.textContent.includes("WebGL") && bootError.textContent.includes("刷新"));
+      failedApi.setLanguage("en");
+      check("WebGL failure shows explicit English recovery copy", bootError.textContent.includes("3D rendering failed") && bootError.textContent.includes("refresh") && bootError.textContent.includes("WebGL"));
+      failedApi.startGame();
+      check("WebGL failure remains a stable stopped state", failedApi.getState().running === false && failedDocument.querySelectorAll("#boot-error").length === 1);
+      failedDocument.getElementById("settings-button").click();
+      check("settings remain reachable after WebGL failure", !failedDocument.getElementById("settings-overlay").classList.contains("hidden"));
+      failedDocument.getElementById("back-home").click();
+      check("home remains reachable after WebGL failure", failedDocument.getElementById("landing").hidden === false);
     } catch (error) {
       result.error = error.message;
     }

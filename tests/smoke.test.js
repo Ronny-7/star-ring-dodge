@@ -88,7 +88,7 @@ test("browser loads index.html and exercises the real app integration", async (t
     assert.notEqual(markerIndex, -1, "browser smoke page did not publish a result");
     const result = JSON.parse(browser.stdout.slice(markerIndex + marker.length).trim().split("</body>")[0]);
     assert.equal(result.error, null, result.error || "browser integration smoke test failed");
-    assert.equal(result.checks.length, 27);
+    assert.equal(result.checks.length, 34);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(resultDir, { recursive: true, force: true });

@@ -82,7 +82,7 @@
     opening = (async () => {
       try {
         await bootGame();
-        await window.starRingWorldReady;
+        if (!await window.starRingWorldReady) return;
         window.starRingGame.start();
         bootError.hidden = true;
       } catch (error) {
