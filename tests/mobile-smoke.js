@@ -29,6 +29,23 @@ const pointer = (target, type, options) => target.dispatchEvent(new PointerEvent
   ...options
 }));
 
+const tap = (target, pointerId) => {
+  const events = [];
+  for (const type of ["pointerdown", "pointerup", "click"]) {
+    target.addEventListener(type, () => events.push(type), { once: true });
+  }
+  pointer(target, "pointerdown", { pointerId });
+  pointer(target, "pointerup", { pointerId });
+  target.dispatchEvent(new PointerEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    pointerId,
+    pointerType: "touch",
+    isPrimary: true
+  }));
+  check(`touch tap completes pointer lifecycle for ${target.id}`, events.join(",") === "pointerdown,pointerup,click");
+};
+
 try {
   const api = window.starRingTestApi;
   await window.starRingWorldReady;
@@ -64,6 +81,7 @@ try {
   pointer(fireButton, "pointerdown", { pointerId: 3 });
   check("touch fire shoots and holds fire", api.getScene().shotsFired === shotsBefore + 1 && api.getInputDebug().fireHeld);
   pointer(fireButton, "pointerup", { pointerId: 3 });
+  check("touch fire release clears held fire", api.getInputDebug().fireHeld === false);
 
   pointer(pauseButton, "pointerdown", { pointerId: 4 });
   pointer(pauseButton, "pointerup", { pointerId: 4 });
@@ -73,19 +91,19 @@ try {
 
   const settingsButton = document.getElementById("settings-button");
   settingsButton.focus();
-  settingsButton.click();
+  tap(settingsButton, 7);
   const settingsOverlay = document.getElementById("settings-overlay");
   const settingsCloseButton = document.getElementById("settings-close-button");
   await waitFor(() => document.activeElement === settingsCloseButton);
   check("settings opens, pauses, and focuses its close button", !settingsOverlay.classList.contains("hidden") && api.getState().paused);
   dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }));
   check("settings traps keyboard focus inside the dialog", document.activeElement === document.querySelector('[data-lang="en"]'));
-  settingsCloseButton.click();
+  tap(settingsCloseButton, 8);
   check("settings closes, resumes, and restores focus", settingsOverlay.classList.contains("hidden") && !api.getState().paused && document.activeElement === settingsButton);
 
   pointer(pauseButton, "pointerdown", { pointerId: 6 });
   pointer(pauseButton, "pointerup", { pointerId: 6 });
-  document.getElementById("back-home").click();
+  tap(document.getElementById("back-home"), 9);
   check("pause return goes back to the landing view", document.body.dataset.view === "landing" && !document.getElementById("landing").hidden && document.getElementById("game-view").hidden);
 } catch (error) {
   result.error = error.message;

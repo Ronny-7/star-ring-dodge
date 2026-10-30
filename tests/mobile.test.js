@@ -46,8 +46,11 @@ async function connectCdp(url) {
 test("mobile viewport and PointerEvents exercise the real game controls", async (t) => {
   const edgePath = process.env.STAR_RING_EDGE || "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
   if (!existsSync(edgePath)) {
-    t.skip(`Edge was not found at ${edgePath}`);
-    return;
+    if (process.env.STAR_RING_SKIP_EDGE === "1") {
+      t.skip(`Edge was explicitly skipped because it was not found at ${edgePath}`);
+      return;
+    }
+    assert.fail(`Edge was not found at ${edgePath}. Set STAR_RING_EDGE to its executable or STAR_RING_SKIP_EDGE=1 to opt out.`);
   }
   const projectRoot = path.resolve(__dirname, "..");
   const resultDir = await mkdtemp(path.join(tmpdir(), "star-ring-mobile-"));
@@ -114,7 +117,7 @@ test("mobile viewport and PointerEvents exercise the real game controls", async 
     assert.notEqual(markerIndex, -1, "mobile smoke page did not publish a result");
     const result = JSON.parse(text.slice(markerIndex + marker.length));
     assert.equal(result.error, null, result.error || "mobile browser test failed");
-    assert.equal(result.checks.length, 11);
+    assert.equal(result.checks.length, 15);
   } finally {
     cdp?.socket.close();
     browserCdp?.send("Browser.close").catch(() => {});
