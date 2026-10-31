@@ -1,13 +1,13 @@
 // WebGL renderer for the 3D room. Loaded as a module so three.js can be
 // imported; the rest of the game stays classic scripts on window.
 import * as THREE from "three";
-import { createFighterModel, createStudioEnvironment } from "./fighter-model.js?v=4.7.1";
-import { createPickupModel } from "./pickup-models.js?v=4.7.1";
-import { createRockSet } from "./rock-models.js?v=4.7.1";
-import { createSpaceEnvironment } from "./space-environment.js?v=4.7.1";
-import { createShipMaterials } from "./ship-materials.js?v=4.7.1";
-import { createDeltaModel } from "./delta-model.js?v=4.7.1";
-import { createSaucerModel } from "./saucer-model.js?v=4.7.1";
+import { createFighterModel, createStudioEnvironment } from "./fighter-model.js?v=4.7.2";
+import { createPickupModel } from "./pickup-models.js?v=4.7.2";
+import { createRockSet } from "./rock-models.js?v=4.7.2";
+import { createSpaceEnvironment } from "./space-environment.js?v=4.7.2";
+import { createShipMaterials } from "./ship-materials.js?v=4.7.2";
+import { createDeltaModel } from "./delta-model.js?v=4.7.2";
+import { createSaucerModel } from "./saucer-model.js?v=4.7.2";
 
 const sceneObjects = {
   rocks: new Map(),

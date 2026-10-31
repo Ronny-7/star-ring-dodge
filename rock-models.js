@@ -1,19 +1,9 @@
-// Procedural asteroid forms. Ported from the approved asset study, scaled to
-// 256px maps so the whole set stays cheap to build while keeping the same
-// strata and crater scale.
+// Procedural asteroid forms ported from the approved asset study.
+// Shared 256px spherical maps keep strata and relief aligned without a UV seam.
 
 import * as THREE from "three";
 
 const TEXTURE_SIZE = 256;
-const TEXTURE_SCALE = TEXTURE_SIZE / 512;
-
-function createRandom(seed) {
-  let s = seed >>> 0;
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-}
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -53,87 +43,62 @@ function fbm3(x, y, z) {
   return total;
 }
 
-function makeRockTexture(seedOffset, palette, anisotropy) {
+function makeRockMaps(definition, anisotropy) {
   const size = TEXTURE_SIZE;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const g = canvas.getContext("2d");
-  const image = g.createImageData(size, size);
+  const canvases = [document.createElement("canvas"), document.createElement("canvas")];
+  canvases.forEach((canvas) => { canvas.width = size; canvas.height = size; });
+  const [colorContext, reliefContext] = canvases.map((canvas) => canvas.getContext("2d"));
+  const colorData = colorContext.createImageData(size, size), relief = reliefContext.createImageData(size, size);
+  const seed = definition.seed;
+  const mineralTint = [12, 9, 5];
+  const dents = definition.dents.map((dent) => ({ ...dent, direction: new THREE.Vector3(...dent.direction).normalize() }));
   for (let y = 0; y < size; y += 1) {
+    const latitude = y * Math.PI / (size - 1), ring = Math.sin(latitude), py = Math.cos(latitude);
     for (let x = 0; x < size; x += 1) {
-      const u = x / size;
-      const v = y / size;
-      const broad = fbm3(u * 7 + seedOffset, v * 6 - seedOffset, seedOffset * 0.17);
-      const strata = Math.sin((v * 7 + broad * 0.7 + Math.sin(u * 4 + seedOffset) * 0.08) * Math.PI * 2);
-      const grain = fbm3(u * 62 + seedOffset, v * 57 + seedOffset * 2, seedOffset * 0.3);
-      const mineral = fbm3(u * 19, v * 23, seedOffset);
-      const value = 0.5 + broad * 0.2 + strata * 0.075 + grain * 0.095 + mineral * 0.055;
+      const longitude = x * Math.PI * 2 / (size - 1);
+      const px = ring * Math.cos(longitude), pz = -ring * Math.sin(longitude);
+      const broad = fbm3(px * 3.5 + seed, py * 3.5, pz * 3.5 - seed);
+      const grain = fbm3(px * 54 + seed, py * 51 - seed, pz * 57);
+      const mineral = fbm3(px * 15 - seed, py * 17, pz * 14 + seed);
+      const strata = Math.sin((py * 8 + px * 0.65 + broad * 0.65) * Math.PI);
+      const crack = Math.max(0, 1 - Math.abs(noise3(px * 12 + seed, py * 12, pz * 12 - seed) - 0.5) * 60);
+      let height = 0.5 + broad * 0.22 + strata * 0.045 + grain * 0.065 - crack * 0.075;
+      let value = 0.57 + broad * 0.19 + strata * 0.055 + grain * 0.08 - crack * 0.095;
+      for (const dent of dents) {
+        const angular = 1 - (px * dent.direction.x + py * dent.direction.y + pz * dent.direction.z);
+        const pit = Math.exp(-angular * angular / (dent.width * dent.width));
+        const rim = Math.exp(-(((angular - dent.width * 1.9) / (dent.width * 0.55)) ** 2));
+        height += (-pit + rim * 0.23) * dent.depth * 0.55;
+        value += (-pit * 0.12 + rim * 0.04) * dent.depth;
+      }
       const p = (y * size + x) * 4;
-      image.data[p] = Math.max(15, Math.min(255, palette[0] * value));
-      image.data[p + 1] = Math.max(15, Math.min(255, palette[1] * value));
-      image.data[p + 2] = Math.max(15, Math.min(255, palette[2] * value));
-      image.data[p + 3] = 255;
+      for (let channel = 0; channel < 3; channel++) {
+        colorData.data[p + channel] = THREE.MathUtils.clamp(definition.palette[channel] * value + mineral * mineralTint[channel], 15, 255);
+      }
+      const roughness = THREE.MathUtils.clamp(0.9 + grain * 0.09 + crack * 0.035 - Math.abs(mineral) * 0.08, 0.72, 0.98);
+      // Three reads bump height from R and roughness from G; no third map is needed.
+      relief.data[p] = relief.data[p + 2] = THREE.MathUtils.clamp(height * 255, 0, 255);
+      relief.data[p + 1] = roughness * 255;
+      colorData.data[p + 3] = relief.data[p + 3] = 255;
     }
   }
-  g.putImageData(image, 0, 0);
-
-  const rand = createRandom(Math.round(seedOffset * 1000003));
-  for (let i = 0; i < 42; i += 1) {
-    const x = rand() * size;
-    const y = rand() * size;
-    const r = (4 + rand() * 25) * TEXTURE_SCALE;
-    const grad = g.createRadialGradient(x - r * 0.25, y - r * 0.3, r * 0.08, x, y, r);
-    grad.addColorStop(0, "rgba(35,36,35,.8)");
-    grad.addColorStop(0.65, "rgba(75,74,68,.36)");
-    grad.addColorStop(1, "rgba(205,198,178,.18)");
-    g.fillStyle = grad;
-    g.beginPath();
-    g.ellipse(x, y, r, r * (0.55 + rand() * 0.65), rand() * Math.PI, 0, Math.PI * 2);
-    g.fill();
+  colorContext.putImageData(colorData, 0, 0); reliefContext.putImageData(relief, 0, 0);
+  const colorMap = new THREE.CanvasTexture(canvases[0]), bumpMap = new THREE.CanvasTexture(canvases[1]);
+  colorMap.colorSpace = THREE.SRGBColorSpace; bumpMap.colorSpace = THREE.NoColorSpace;
+  for (const texture of [colorMap, bumpMap]) {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.anisotropy = Math.min(8, Math.max(1, anisotropy));
   }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = Math.min(8, Math.max(1, anisotropy));
-  return texture;
-}
-
-function makeRockBump(seedOffset, anisotropy) {
-  const size = TEXTURE_SIZE;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const g = canvas.getContext("2d");
-  const image = g.createImageData(size, size);
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const n = fbm3((x / 38) * TEXTURE_SCALE + seedOffset, (y / 42) * TEXTURE_SCALE - seedOffset, seedOffset * 0.3);
-      const grain = fbm3((x / 7) * TEXTURE_SCALE, (y / 8) * TEXTURE_SCALE, seedOffset * 2);
-      const band = Math.sin(((y / 48) * TEXTURE_SCALE + n * 3 + Math.sin((x / 73) * TEXTURE_SCALE) * 0.18) * Math.PI * 2) * 0.5;
-      const pits = Math.pow(
-        Math.max(0, noise3((x / 21) * TEXTURE_SCALE + seedOffset, (y / 23) * TEXTURE_SCALE, seedOffset) - 0.73),
-        1.6
-      ) * -0.65;
-      const value = Math.max(0, Math.min(255, 132 + n * 72 + grain * 35 + band * 25 + pits * 180));
-      const p = (y * size + x) * 4;
-      image.data[p] = value;
-      image.data[p + 1] = value;
-      image.data[p + 2] = value;
-      image.data[p + 3] = 255;
-    }
-  }
-  g.putImageData(image, 0, 0);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.NoColorSpace;
-  texture.anisotropy = Math.min(8, Math.max(1, anisotropy));
-  return texture;
+  return { colorMap, bumpMap };
 }
 
 function makeRockGeometry(id, stretch, seedOffset, dents) {
-  const geometry = new THREE.IcosahedronGeometry(1, 16);
+  const geometry = new THREE.IcosahedronGeometry(1, 12);
   const position = geometry.attributes.position;
+  const planes = [[1, 0.2, 0.3, 0.85], [-0.7, 0.4, 0.1, 0.91], [0.2, -0.8, 0.5, 0.9], [0.2, 0.2, -1, 0.86]]
+    .map(([x, y, z, offset]) => ({ normal: new THREE.Vector3(x, y, z).normalize(), offset }));
+  const preparedDents = dents.map((dent) => ({ ...dent, direction: new THREE.Vector3(...dent.direction).normalize() }));
+  const fractureNormal = new THREE.Vector3(0.35, 0.1, 1).normalize();
   for (let i = 0; i < position.count; i += 1) {
     const original = new THREE.Vector3().fromBufferAttribute(position, i).normalize();
     const macro = fbm3(original.x * 3.5 + seedOffset, original.y * 3.5, original.z * 3.5 - seedOffset);
@@ -141,15 +106,13 @@ function makeRockGeometry(id, stretch, seedOffset, dents) {
     const fine = fbm3(original.x * 35 + seedOffset, original.y * 33, original.z * 37);
     let radius = 1 + macro * 0.27 + mid * 0.055 + fine * 0.012;
     if (id === "angular") {
-      for (const [x, y, z, offset] of [[1, 0.2, 0.3, 0.85], [-0.7, 0.4, 0.1, 0.91], [0.2, -0.8, 0.5, 0.9], [0.2, 0.2, -1, 0.86]]) {
-        const normal = new THREE.Vector3(x, y, z).normalize();
-        const dot = original.dot(normal);
-        if (dot > 0) radius = Math.min(radius, offset / dot);
+      for (const plane of planes) {
+        const dot = original.dot(plane.normal);
+        if (dot > 0) radius = Math.min(radius, plane.offset / dot);
       }
     }
-    for (const dent of dents) {
-      const direction = new THREE.Vector3(...dent.direction).normalize();
-      const angular = 1 - original.dot(direction);
+    for (const dent of preparedDents) {
+      const angular = 1 - original.dot(dent.direction);
       const pit = Math.exp(-angular * angular / (dent.width * dent.width));
       const rim = Math.exp(-((angular - dent.width * 1.9) ** 2) / (dent.width * 0.55) ** 2);
       radius -= pit * dent.depth;
@@ -157,6 +120,10 @@ function makeRockGeometry(id, stretch, seedOffset, dents) {
     }
     const ridge = Math.sin((original.x * 2.5 + original.y * 1.2 + original.z * 3.1 + seedOffset) * 5.4 + macro * 1.8);
     radius += Math.pow(Math.max(0, ridge), 5) * 0.023;
+    if (id === "fractured") {
+      const dot = original.dot(fractureNormal);
+      if (dot > 0) radius = Math.min(radius, (0.38 + mid * 0.01) / dot);
+    }
     position.setXYZ(i, original.x * radius * stretch[0], original.y * radius * stretch[1], original.z * radius * stretch[2]);
   }
 
@@ -223,7 +190,7 @@ const rockDefinitions = [
   },
   {
     id: "fractured",
-    stretch: [1.2, 0.82, 0.75],
+    stretch: [1.2, 0.82, 0.85],
     seed: 12.7,
     palette: [137, 132, 124],
     dents: [
@@ -237,13 +204,12 @@ const rockDefinitions = [
 
 export function createRockSet({ anisotropy = 1 } = {}) {
   const forms = rockDefinitions.map((definition) => {
-    const colorMap = makeRockTexture(definition.seed, definition.palette, anisotropy);
-    const bumpMap = makeRockBump(definition.seed, anisotropy);
+    const { colorMap, bumpMap } = makeRockMaps(definition, anisotropy);
     const material = new THREE.MeshStandardMaterial({
       color: 0xe6e3db,
       map: colorMap,
       bumpMap,
-      bumpScale: 0.065,
+      bumpScale: 0.045,
       roughnessMap: bumpMap,
       roughness: 1,
       metalness: 0,

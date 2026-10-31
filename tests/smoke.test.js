@@ -25,19 +25,19 @@ test("runtime references carry the current cache key", async () => {
     readFile(path.resolve(__dirname, "..", "saucer-model.js"), "utf8")
   ]);
   for (const asset of ["styles.css", "showcase.css", "showcase.js", "difficulty.js", "views.js"]) {
-    assert.match(index, new RegExp(`${asset.replace(".", "\\.")}\\?v=4\\.7\\.1`));
+    assert.match(index, new RegExp(`${asset.replace(".", "\\.")}\\?v=4\\.7\\.2`));
   }
   for (const script of ["config", "bindings", "storage", "audio", "projection", "edge-warning", "renderer", "input", "app"]) {
-    assert.match(views, new RegExp(`${script}\\.js\\?v=4\\.7\\.1`));
+    assert.match(views, new RegExp(`${script}\\.js\\?v=4\\.7\\.2`));
   }
-  assert.match(app, /world3d\.js\?v=4\.7\.1/);
+  assert.match(app, /world3d\.js\?v=4\.7\.2/);
   for (const module of ["fighter-model", "delta-model", "saucer-model", "rock-models", "pickup-models"]) {
-    assert.match(showcase, new RegExp(`\\./${module}\\.js\\?v=4\\.7\\.1`));
+    assert.match(showcase, new RegExp(`\\./${module}\\.js\\?v=4\\.7\\.2`));
   }
   for (const module of ["fighter-model", "pickup-models", "rock-models", "space-environment", "ship-materials", "delta-model", "saucer-model"]) {
-    assert.match(world, new RegExp(`\\./${module}\\.js\\?v=4\\.7\\.1`));
+    assert.match(world, new RegExp(`\\./${module}\\.js\\?v=4\\.7\\.2`));
   }
-  for (const source of [delta, saucer]) assert.match(source, /\.\/ship-materials\.js\?v=4\.7\.1/);
+  for (const source of [delta, saucer]) assert.match(source, /\.\/ship-materials\.js\?v=4\.7\.2/);
 });
 
 test("browser loads index.html and exercises the real app integration", async (t) => {

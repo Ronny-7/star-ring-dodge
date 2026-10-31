@@ -24,8 +24,12 @@ function addAsymmetricPanel(parent, outline, depth, material, y, name, bevel = 0
     []
   );
   const vertices = [];
+  const uvs = [];
   for (const faceY of [-depth / 2, depth / 2]) {
-    for (const [x, z] of outline) vertices.push(x, faceY, z);
+    for (const [x, z] of outline) {
+      vertices.push(x, faceY, z);
+      uvs.push((Math.abs(x) + 16) / 32, (z + 18) / 32);
+    }
   }
   const indices = [];
   const ccw = outline.reduce((sum, [x, z], i) => {
@@ -59,6 +63,7 @@ function addAsymmetricPanel(parent, outline, depth, material, y, name, bevel = 0
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
@@ -276,8 +281,8 @@ export function createFighterModel({ environment, color }) {
   const hull = new THREE.MeshStandardMaterial({
     color: 0xd7d9d2,
     map: hullMap,
-    metalness: 0.36,
-    roughness: 0.64,
+    metalness: 0.42,
+    roughness: 0.58,
     envMap: environment,
     envMapIntensity: 0.48
   });
@@ -370,6 +375,16 @@ export function createFighterModel({ environment, color }) {
     const mirrored = wingOutline.map(([x, z]) => [side * x, z]);
     const wing = addAsymmetricPanel(native, mirrored, 0.82, hull, -0.34, `${prefix}-main-wing`, 0.19);
     part(`${prefix}Wing`, wing);
+    const shoulder = addAsymmetricPanel(native,
+      [[1.15, -7], [2.7, -3], [4, 2], [4.8, 5], [2.9, 8], [1.6, 8]].map(([x, z]) => [side * x, z]),
+      0.18, hull, 0, `${prefix}-wing-root-fairing`);
+    const shoulderPosition = shoulder.geometry.attributes.position;
+    for (let i = 0; i < shoulderPosition.count; i++) {
+      const weight = THREE.MathUtils.clamp((4.8 - Math.abs(shoulderPosition.getX(i))) / 3.65, 0, 1);
+      shoulderPosition.setY(i, shoulderPosition.getY(i) > 0 ? 0.07 + Math.pow(weight, 1.3) * 1.2 : -0.1);
+    }
+    shoulder.geometry.computeVertexNormals();
+    shoulder.geometry.computeBoundingBox();
     plate(native, [[side * 2.05, -4.9], [side * 3.13, -2.2], [side * 11.2, 6.1], [side * 13.0, 8.9], [side * 11.1, 9.1], [side * 5.3, 4.7]], 0.15, edge, 0.29, `${prefix}-wing-skin`, 0.075);
     plate(native, [[side * 5.05, 3.9], [side * 9.15, 7.1], [side * 11.25, 8.6], [side * 10.35, 9.02], [side * 5.15, 4.7]], 0.13, edge, 0.31, `${prefix}-outboard-control-surface`, 0.055);
     plate(native, [[side * 2.2, -8.2], [side * 3.55, -5.0], [side * 2.42, -2.0], [side * 1.62, -2.85]], 0.18, hull, 0.32, `${prefix}-chine`, 0.05);
@@ -399,6 +414,12 @@ export function createFighterModel({ environment, color }) {
     const enginePod = add(native, new THREE.CylinderGeometry(0.94, 1.22, 8.9, 20, 1, false), dark, [side * 1.42, -0.56, 7.45], `${prefix}-engine-pod`);
     enginePod.rotation.x = Math.PI / 2;
     enginePod.rotation.z = side * -0.035;
+    const engineFairing = fuselage(native, [
+      [2.6, 0.22, 1.0, -0.2], [4.4, 0.94, 1.2, -1.1], [8.2, 1.1, 1.03, -1.28],
+      [10.8, 0.98, 0.67, -1.2], [12.0, 0.82, 0.28, -1.08]
+    ], hull, `${prefix}-engine-fairing`);
+    engineFairing.position.x = side * 1.42;
+    engineFairing.scale.x = side;
     const nozzle = add(native, new THREE.CylinderGeometry(0.82, 1.0, 1.55, 24, 1, true), edge, [side * 1.42, -0.56, 12.45], `${prefix}-nozzle`);
     nozzle.rotation.x = Math.PI / 2;
     const innerNozzle = add(native, new THREE.CylinderGeometry(0.68, 0.74, 0.18, 24), dark, [side * 1.42, -0.56, 13.26], `${prefix}-nozzle-inner`);

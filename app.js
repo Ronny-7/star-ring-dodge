@@ -2166,7 +2166,7 @@ function startLoop() {
 const testParams = new URLSearchParams(window.location.search);
 const worldModule = testParams.has("test") && testParams.has("failWorld")
   ? Promise.reject(new Error("Forced WebGL world failure"))
-  : import("./world3d.js?v=4.7.1");
+  : import("./world3d.js?v=4.7.2");
 
 window.starRingWorldReady = worldModule
   .then((mod) => {

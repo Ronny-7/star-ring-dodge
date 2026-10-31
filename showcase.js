@@ -1,9 +1,9 @@
 import * as THREE from "three";
-import { createFighterModel, createStudioEnvironment } from "./fighter-model.js?v=4.7.1";
-import { createDeltaModel } from "./delta-model.js?v=4.7.1";
-import { createSaucerModel } from "./saucer-model.js?v=4.7.1";
-import { createRockSet } from "./rock-models.js?v=4.7.1";
-import { createPickupModel } from "./pickup-models.js?v=4.7.1";
+import { createFighterModel, createStudioEnvironment } from "./fighter-model.js?v=4.7.2";
+import { createDeltaModel } from "./delta-model.js?v=4.7.2";
+import { createSaucerModel } from "./saucer-model.js?v=4.7.2";
+import { createRockSet } from "./rock-models.js?v=4.7.2";
+import { createPickupModel } from "./pickup-models.js?v=4.7.2";
 
 const canvas = document.getElementById("showcase-canvas");
 const stage = document.getElementById("stage");

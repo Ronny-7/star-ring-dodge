@@ -1,21 +1,35 @@
 import * as THREE from "three";
-import { createShipMaterials } from "./ship-materials.js?v=4.7.1";
+import { createShipMaterials } from "./ship-materials.js?v=4.7.2";
 
 export function createSaucerModel({ color, environment, hullTexture }) {
   const group = new THREE.Group();
   const hullRoot = new THREE.Group();
   group.add(hullRoot);
   const materials = createShipMaterials({ color, environment, hullTexture });
+  materials.edge = materials.hull.clone();
+  materials.canopy.dispose();
+  materials.canopy = new THREE.MeshPhysicalMaterial({
+    color: 0x132733, metalness: 0.18, roughness: 0.22,
+    clearcoat: 0.8, clearcoatRoughness: 0.18, envMap: environment, envMapIntensity: 0.7
+  });
+  materials.glass = materials.canopy;
   const { hull, dark, edge, canopy, engine, navRed, navGreen } = materials;
   hull.color.set(0x87919b);
   hull.emissive.set(0x000000);
+  hull.metalness = 0.48;
+  hull.roughness = 0.58;
   dark.color.set(0x202833);
   dark.emissive.set(0x000000);
+  dark.metalness = 0.38;
+  dark.roughness = 0.66;
   edge.color.set(0x52606b);
+  edge.metalness = 0.62;
+  edge.roughness = 0.46;
   edge.emissiveIntensity = 0;
-  canopy.color.set(0x132733);
-  canopy.emissive.set(0x000000);
-  for (const material of [hull, dark, edge, canopy]) material.envMap = environment;
+  for (const material of [hull, dark, edge]) {
+    material.envMap = environment;
+    material.envMapIntensity = 0.5;
+  }
 
   const parts = {};
   const navLights = [];
@@ -34,32 +48,39 @@ export function createSaucerModel({ color, environment, hullTexture }) {
   };
 
   // Reuse one tessellation, rotated by pi, for exactly mirrored half shells.
+  const upperProfile = [[55.4, 1.2], [54, 2.1], [50, 5], [43, 8], [35, 9.9], [27, 10.5], [19, 11], [0, 11]]
+    .map(([radius, height]) => new THREE.Vector2(radius, height));
+  const lowerProfile = [[0, -8], [18, -8], [30, -7], [41, -5], [50, -2.5], [55.4, 1.2]]
+    .map(([radius, height]) => new THREE.Vector2(radius, height));
   for (const side of [-1, 1]) {
-    const upper = new THREE.CylinderGeometry(34, 54, 8, 40, 1, false, 0, Math.PI);
+    const upper = new THREE.LatheGeometry(upperProfile, 40, 0, Math.PI);
     upper.translate(-27, 0, 0);
-    const wing = add(hullRoot, upper, hull, side * 27, 6);
+    const wing = add(hullRoot, upper, hull, side * 27, 0);
     if (side < 0) wing.rotation.y = Math.PI;
     parts[side < 0 ? "leftWing" : "rightWing"] = wing;
-    const lower = add(hullRoot, new THREE.CylinderGeometry(50, 30, 6, 40, 1, false, 0, Math.PI), dark, 0, -5);
+    const lower = add(hullRoot, new THREE.LatheGeometry(lowerProfile, 40, 0, Math.PI), dark);
     if (side < 0) lower.rotation.y = Math.PI;
   }
   ring(28, 0.45, 10.3, dark);
-  ring(44, 0.5, 6.5, edge);
+  ring(44, 0.5, 7.9, edge);
   ring(51, 1.1, 0, dark);
   // Outer armour band: ties the eight nacelle collars into one continuous rim.
   ring(55.5, 1.6, 1.2, hull);
-  ring(55.5, 0.3, 4.6, edge);
+  ring(54.6, 0.3, 2.0, edge);
 
   // Nacelles sit in the rim rather than on spokes: each is short, mostly buried
   // in the hull, with a blister collar blending it into the disc face. All eight
   // are identical, so one set of geometries is built and reused eight times.
-  const collarGeometry = new THREE.CylinderGeometry(8.6, 10.4, 5.5, 14, 1, false);
+  const collarGeometry = new THREE.LatheGeometry(
+    [[0, -4.5], [10.4, -4.5], [10.2, -3.2], [8.8, -1], [7.1, 2], [6.3, 3.2], [0, 3.2]]
+      .map(([radius, depth]) => new THREE.Vector2(radius, depth)), 16);
   const nacelleGeometry = new THREE.CylinderGeometry(5.4, 6.4, 12.5, 12, 1, true);
   const nacelleDuctGeometry = new THREE.CylinderGeometry(4.4, 4.4, 11.6, 12);
   const nacelleLipGeometry = new THREE.TorusGeometry(5.0, 0.75, 6, 12);
   const nacelleCoreGeometry = new THREE.CylinderGeometry(3.4, 3.4, 0.5, 12);
   const nacelleGrilleGeometry = new THREE.BoxGeometry(0.6, 0.8, 6);
-  const jointGeometry = new THREE.BoxGeometry(0.45, 0.3, 17);
+  const jointGeometry = new THREE.LatheGeometry(upperProfile.filter((point) => point.x >= 27), 1, -0.005, 0.01);
+  jointGeometry.translate(0, 0.06, 0);
   const panelGeometry = new THREE.BoxGeometry(7, 0.6, 5);
   const panelGrooveGeometry = new THREE.BoxGeometry(0.5, 0.3, 4);
   for (let i = 0; i < 8; i += 1) {
@@ -83,19 +104,20 @@ export function createSaucerModel({ color, environment, hullTexture }) {
     if (i === 4) parts.leftTail = nacelle;
 
     // Narrow radial joints and inset inspection panels break up the armour face.
-    const joint = add(hullRoot, jointGeometry, dark, x * 43, 6.5, z * 43);
-    joint.rotation.set(0.38, angle, 0, "YXZ");
-    const panel = add(hullRoot, panelGeometry, dark, x * 27, 10.3, z * 27);
+    const joint = add(hullRoot, jointGeometry, dark);
+    joint.name = `armour-joint-${i}`;
+    joint.rotation.y = angle;
+    const panel = add(hullRoot, panelGeometry, dark, x * 27, 10.6, z * 27);
     panel.rotation.y = angle;
     for (const offset of [-2, 0, 2]) {
       add(panel, panelGrooveGeometry, edge, offset, 0.4);
     }
   }
 
-  parts.cockpit = add(hullRoot, new THREE.SphereGeometry(19, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), canopy, 0, 10);
+  parts.cockpit = add(hullRoot, new THREE.SphereGeometry(19, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), canopy, 0, 11);
   parts.cockpit.scale.y = 0.6;
-  ring(19.4, 1.1, 10, dark);
-  ring(19.5, 0.35, 11, engine);
+  ring(19.4, 1.1, 11, dark);
+  ring(19.5, 0.35, 11.7, engine);
   const gearGeometry = new THREE.BoxGeometry(4, 3, 11);
   for (let i = 0; i < 3; i += 1) {
     const angle = i * Math.PI * 2 / 3;
