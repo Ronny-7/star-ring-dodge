@@ -238,19 +238,26 @@
       api.renderWorld();
       api.clearAsteroids();
       api.pauseGame();
-      api.spawnEliteAsteroid();
-      api.renderWorld();
-      api.clearAsteroids();
+      // Warm every shared form in view; random first uploads are not leaks.
+      for (const { id } of api.getWorldDebug().rocks.forms) {
+        const warmElite = api.spawnEliteAsteroid();
+        warmElite.form = id;
+        warmElite.x = 30000; warmElite.y = 30000; warmElite.z = 30200;
+        api.renderWorld();
+        api.clearAsteroids();
+        api.renderWorld();
+      }
       const eliteGpuBaseline = await settleGpu(api);
       for (let cycle = 0; cycle < 4; cycle += 1) {
-        api.spawnEliteAsteroid();
+        const repeatedElite = api.spawnEliteAsteroid();
+        repeatedElite.x = 30000; repeatedElite.y = 30000; repeatedElite.z = 30200;
         api.renderWorld();
         api.clearAsteroids();
         api.renderWorld();
       }
       const eliteClean = api.getWorldDebug().elite;
       const eliteGpuFinal = await settleGpu(api);
-      check("repeated elite spawn and removal keeps renderer GPU counters flat",
+      check(`repeated elite spawn and removal keeps renderer GPU counters flat: baseline=${JSON.stringify(eliteGpuBaseline)} final=${JSON.stringify(eliteGpuFinal)}`,
         eliteGpuBaseline.geometries > 40 && eliteGpuBaseline.textures > 4 && eliteGpuBaseline.programs > 0 &&
         eliteGpuFinal.geometries === eliteGpuBaseline.geometries && eliteGpuFinal.textures === eliteGpuBaseline.textures &&
         eliteGpuFinal.programs === eliteGpuBaseline.programs);

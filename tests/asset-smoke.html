@@ -701,9 +701,17 @@
       api.clearAsteroids();
       const flightStart = api.getScene().player;
       win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "w" }));
+      let flightFinite = true;
+      // Controlled navigation, not random-hazard survival or device FPS.
       for (let i = 0; i < 3600; i += 1) {
         api.clearAsteroids();
         api.tick(1 / 60);
+        if (i % 60 === 59) {
+          api.renderWorld();
+          const { player, camera } = api.getScene();
+          flightFinite &&= [player.x, player.y, player.z, camera.x, camera.y, camera.z].every(Number.isFinite) &&
+            api.getState().running && !api.getState().paused;
+        }
       }
       win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "w" }));
       const flightEnd = api.getScene().player;
@@ -714,7 +722,7 @@
       );
       check(
         "sixty seconds of forward flight stays inside the open arena",
-        travelled > 19000 && travelled < 20500 &&
+        flightFinite && travelled > 19000 && travelled < 20500 &&
           flightEnd.z > 49000 && flightEnd.z < 50500
       );
 
@@ -958,37 +966,122 @@
       api.startGame();
       await nextFrames(win, 2);
 
+      // Machine prerequisites only: these do not establish physical-device feel.
+      for (const axis of ["x", "y", "z"]) {
+        for (const side of ["lower", "upper"]) {
+          api.startGame();
+          api.clearAsteroids();
+          const position = { x: 30000, y: 30000, z: 30000 };
+          position[axis] = side === "lower" ? 0 : 60000;
+          api.setPlayerPosition(position.x, position.y, position.z, 0, 0);
+          api.tick(0);
+          const pushed = api.getScene().player;
+          const pushCorrect = Math.abs(pushed[axis] - (side === "lower" ? 55.9 : 59944.1)) < 1e-8 &&
+            ["x", "y", "z"].filter((other) => other !== axis).every((other) => pushed[other] === 30000);
+
+          const yaw = axis === "x" ? (side === "lower" ? Math.PI / 2 : -Math.PI / 2)
+            : axis === "z" && side === "lower" ? Math.PI : 0;
+          const pitch = axis === "y" ? (side === "lower" ? -1.15 : 1.15) : 0;
+          position[axis] = side === "lower" ? 85 : 59915;
+          api.setPlayerPosition(position.x, position.y, position.z, yaw, pitch);
+          win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "w", code: "KeyW" }));
+          api.tick(1 / 60);
+          win.dispatchEvent(new win.KeyboardEvent("keyup", { key: "w", code: "KeyW" }));
+          for (let tick = 0; tick < 30; tick += 1) api.tick(1 / 60);
+          const coasted = api.getScene().player;
+          check(`${axis} ${side} soft boundary pushes inward without wrapping and reverses outward momentum`,
+            pushCorrect && (side === "lower" ? coasted[axis] > 86 && coasted[axis] < 100
+              : coasted[axis] < 59914 && coasted[axis] > 59900));
+
+          api.startGame();
+          api.clearAsteroids();
+          position[axis] = side === "lower" ? 1000 : 59000;
+          api.setPlayerPosition(position.x, position.y, position.z, 0, 0);
+          position[axis] = side === "lower" ? 61 : 59939;
+          const rock = api.spawnAsteroidAt(position.x, position.y, position.z, 30, "angular");
+          rock[`v${axis}`] = side === "lower" ? -100 : 100;
+          api.stepAsteroids(0.02);
+          const bounced = api.getScene().asteroids[0];
+          api.stepAsteroids(0.02);
+          const inward = api.getScene().asteroids[0];
+          check(`${axis} ${side} asteroid wall bounce clamps once and keeps moving inward`,
+            bounced?.[axis] === (side === "lower" ? 60 : 59940) &&
+            bounced?.[`v${axis}`] === (side === "lower" ? 85 : -85) &&
+            Math.abs((inward?.[axis] ?? NaN) - (side === "lower" ? 61.7 : 59938.3)) < 1e-8 &&
+            ["x", "y", "z"].filter((other) => other !== axis).every((other) => inward[other] === 30000));
+
+          api.startGame();
+          api.clearAsteroids();
+          position[axis] = side === "lower" ? 85 : 59915;
+          api.setPlayerPosition(position.x, position.y, position.z, 0, 0);
+          position[axis] += side === "lower" ? -50 : 50;
+          const eliteContact = api.spawnAsteroidAt(position.x, position.y, position.z, 60, "angular");
+          eliteContact.elite = true;
+          api.handleCollisions();
+          api.tick(1 / 60);
+          const repelled = api.getScene().player;
+          check(`${axis} ${side} boundary preserves inward knockback from an elite collision`,
+            side === "lower" ? repelled[axis] > 86 && repelled[axis] < 100
+              : repelled[axis] < 59914 && repelled[axis] > 59900);
+        }
+      }
+
+      for (const [elite, limit] of [[false, 2600], [true, 3200]]) {
+        api.startGame();
+        api.clearAsteroids();
+        api.setPlayerPosition(30000, 30000, 30000, 0, 0);
+        const atLimit = api.spawnAsteroidAt(30000 + limit, 30000, 30000, 30, "angular");
+        const beyond = api.spawnAsteroidAt(30001 + limit, 30000, 30000, 30, "angular");
+        atLimit.elite = beyond.elite = elite;
+        api.stepAsteroids(0);
+        const retained = api.getScene().asteroids;
+        check(`${elite ? "elite" : "ordinary"} distance recycling retains its radius boundary and removes farther rocks`,
+          retained.length === 1 && retained[0].x === 30000 + limit && retained[0].elite === elite);
+      }
+
       // GPU memory: renderer.info counts what the GPU still holds. Compare two
       // equally-warmed snapshots so transient asteroids cannot skew the result:
       // a leak keeps climbing, a healthy scene returns to the same level.
+      // Exercise the offscreen-rAF failure: GPU checks must drive real renders.
+      const scheduledFrame = win.requestAnimationFrame;
+      win.requestAnimationFrame = () => 0;
       api.startGame();
+      api.pauseGame();
       api.clearAsteroids();
-      await nextFrames(win, 3);
+      api.renderWorld();
       api.selectSkin("delta");
+      api.renderWorld();
       api.selectSkin("saucer");
+      api.renderWorld();
       api.selectSkin("default");
       api.clearAsteroids();
-      await nextFrames(win, 3);
+      api.renderWorld();
       const gpuWarm = api.getWorldDebug().gpu;
       for (let cycle = 0; cycle < 5; cycle += 1) {
         api.selectSkin("delta");
         api.tick(1 / 60);
+        api.renderWorld();
         api.selectSkin("saucer");
         api.tick(1 / 60);
+        api.renderWorld();
         api.selectSkin("default");
         api.tick(1 / 60);
+        api.renderWorld();
       }
       api.clearAsteroids();
-      await nextFrames(win, 3);
+      api.renderWorld();
       const gpuSkins = api.getWorldDebug().gpu;
       for (let cycle = 0; cycle < 5; cycle += 1) {
         api.startGame();
+        api.pauseGame();
         api.clearAsteroids();
         api.tick(1 / 60);
+        api.renderWorld();
       }
       api.clearAsteroids();
-      await nextFrames(win, 3);
+      api.renderWorld();
       const gpuRestarts = api.getWorldDebug().gpu;
+      win.requestAnimationFrame = scheduledFrame;
       // A throttled or unpainted frame leaves every counter at its empty level
       // and would make the equality checks pass trivially, so require that the
       // scene actually uploaded its geometry first.
@@ -1009,6 +1102,7 @@
       // GPU counters alone are render-timing dependent, so pair them with the
       // deterministic release accounting: after the effects expire, everything
       // the FX pool created must have been disposed exactly once.
+      api.resumeGame();
       for (let burst = 0; burst < 5; burst += 1) {
         api.destroyAsteroidAt(30200 + burst * 40, 30000, 30200, 30, false);
         for (let frame = 0; frame < 60; frame += 1) api.tick(1 / 60);

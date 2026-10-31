@@ -1391,10 +1391,10 @@ function clampPlayerToWorld() {
     const value = state.player[axis];
     if (value < lo) {
       state.player[axis] = lo + (value - lo) * 0.35;
-      state.player[`v${axis}`] = Math.max(0, state.player[`v${axis}`] * -0.15);
+      if (state.player[`v${axis}`] < 0) state.player[`v${axis}`] *= -0.15;
     } else if (value > hi) {
       state.player[axis] = hi + (value - hi) * 0.35;
-      state.player[`v${axis}`] = Math.min(0, state.player[`v${axis}`] * -0.15);
+      if (state.player[`v${axis}`] > 0) state.player[`v${axis}`] *= -0.15;
     }
   }
 }
