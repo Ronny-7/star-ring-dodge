@@ -2,136 +2,98 @@ import * as THREE from "three";
 
 const NEBULA_RADIUS = 5800;
 const PLANET_DISTANCE = 2600;
-const PLANET_DIRECTION = new THREE.Vector3(0.55, 0.32, 0.77).normalize();
+const PLANET_DIRECTION = new THREE.Vector3(0.42, 0.2, 0.885).normalize();
 const DEFAULT_TINT = "98,228,255";
 const WHITE = new THREE.Color(0xffffff);
 
 /* ---------- 程序化贴图 ---------- */
 
-function makeNebulaTexture() {
-  const width = 1024;
-  const height = 512;
+function noise3(x, y, z) {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  const smooth = (v) => v * v * (3 - 2 * v);
+  const u = smooth(x - ix), v = smooth(y - iy), w = smooth(z - iz);
+  const hash = (a, b, c) => {
+    let n = Math.imul(a, 374761393) + Math.imul(b, 668265263) + Math.imul(c, 2147483647);
+    n = Math.imul(n ^ (n >>> 13), 1274126177);
+    return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+  };
+  const lerp = THREE.MathUtils.lerp;
+  return lerp(
+    lerp(lerp(hash(ix, iy, iz), hash(ix + 1, iy, iz), u), lerp(hash(ix, iy + 1, iz), hash(ix + 1, iy + 1, iz), u), v),
+    lerp(lerp(hash(ix, iy, iz + 1), hash(ix + 1, iy, iz + 1), u), lerp(hash(ix, iy + 1, iz + 1), hash(ix + 1, iy + 1, iz + 1), u), v), w
+  );
+}
+
+function makeSphericalTexture(fillPixel) {
+  const width = 512, height = 256;
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const g = canvas.getContext("2d");
-  g.fillStyle = "#03060f";
-  g.fillRect(0, 0, width, height);
-
-  // Every gradient is drawn at x - width and x + width too, so the left and
-  // right edges agree and the dome has no visible seam.
-  const clouds = [
-    { x: 0.24, y: 0.38, radius: 0.4, color: "38,92,190", alpha: 0.52 },
-    { x: 0.63, y: 0.62, radius: 0.36, color: "186,104,66", alpha: 0.32 },
-    { x: 0.5, y: 0.22, radius: 0.46, color: "104,76,180", alpha: 0.3 }
-  ];
-  for (const cloud of clouds) {
-    const cx = cloud.x * width;
-    const cy = cloud.y * height;
-    const radius = cloud.radius * width;
-    for (const offset of [-width, 0, width]) {
-      const gradient = g.createRadialGradient(cx + offset, cy, 0, cx + offset, cy, radius);
-      gradient.addColorStop(0, `rgba(${cloud.color},${cloud.alpha})`);
-      gradient.addColorStop(0.45, `rgba(${cloud.color},${cloud.alpha * 0.36})`);
-      gradient.addColorStop(1, `rgba(${cloud.color},0)`);
-      g.fillStyle = gradient;
-      g.fillRect(0, 0, width, height);
+  const image = g.createImageData(width, height);
+  for (let y = 0; y < height; y++) {
+    const latitude = y * Math.PI / (height - 1);
+    const ring = y === 0 || y === height - 1 ? 0 : Math.sin(latitude);
+    for (let x = 0; x < width; x++) {
+      // Sample a closed sphere, not UV noise: poles and the repeated seam agree.
+      const longitude = x === width - 1 ? 0 : x * Math.PI * 2 / (width - 1);
+      const offset = (y * width + x) * 4;
+      fillPixel(image.data, offset, ring * Math.cos(longitude), Math.cos(latitude), ring * Math.sin(longitude));
+      image.data[offset + 3] = 255;
     }
   }
-
-  let seed = 20261026;
-  const rand = () => {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    return seed / 4294967296;
-  };
-  for (let i = 0; i < 9000; i += 1) {
-    const x = rand() * width;
-    const y = rand() * height;
-    g.fillStyle = `rgba(${200 + Math.floor(rand() * 55)},${210 + Math.floor(rand() * 45)},255,${0.015 + rand() * 0.04})`;
-    g.fillRect(x, y, 1, 1);
-  }
-
+  g.putImageData(image, 0, 0);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   return texture;
 }
 
-function makePlanetTexture() {
-  const size = 512;
-  const cx = size / 2;
-  const cy = size / 2;
-  const radius = 200;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const g = canvas.getContext("2d");
-
-  const halo = g.createRadialGradient(cx, cy, radius * 0.9, cx, cy, radius * 1.16);
-  halo.addColorStop(0, "rgba(110,190,255,0)");
-  halo.addColorStop(0.5, "rgba(120,200,255,0.4)");
-  halo.addColorStop(1, "rgba(120,200,255,0)");
-  g.fillStyle = halo;
-  g.fillRect(0, 0, size, size);
-
-  g.save();
-  g.beginPath();
-  g.arc(cx, cy, radius, 0, Math.PI * 2);
-  g.clip();
-
-  const base = g.createLinearGradient(0, cy - radius, 0, cy + radius);
-  base.addColorStop(0, "#2c527e");
-  base.addColorStop(0.5, "#4272a4");
-  base.addColorStop(1, "#162944");
-  g.fillStyle = base;
-  g.fillRect(0, 0, size, size);
-
-  const bands = [
-    { y: 0.08, height: 0.05, color: "rgba(218,232,246,0.5)" },
-    { y: 0.2, height: 0.07, color: "rgba(150,190,228,0.4)" },
-    { y: 0.34, height: 0.05, color: "rgba(232,240,250,0.55)" },
-    { y: 0.46, height: 0.09, color: "rgba(124,168,208,0.36)" },
-    { y: 0.62, height: 0.06, color: "rgba(214,229,244,0.42)" },
-    { y: 0.74, height: 0.08, color: "rgba(94,134,176,0.35)" },
-    { y: 0.88, height: 0.05, color: "rgba(200,219,240,0.3)" }
-  ];
-  for (const band of bands) {
-    const y = cy - radius + band.y * radius * 2;
-    g.fillStyle = band.color;
-    g.beginPath();
-    g.moveTo(cx - radius, y);
-    g.bezierCurveTo(cx - radius * 0.35, y - 10, cx + radius * 0.35, y + 12, cx + radius, y - 3);
-    g.lineTo(cx + radius, y + band.height * radius * 2);
-    g.bezierCurveTo(cx + radius * 0.35, y + band.height * radius * 2 + 12, cx - radius * 0.35, y + band.height * radius * 2 - 10, cx - radius, y + band.height * radius * 2);
-    g.closePath();
-    g.fill();
-  }
-
-  const rim = g.createRadialGradient(cx - radius * 0.18, cy - radius * 0.28, radius * 0.6, cx, cy, radius);
-  rim.addColorStop(0.78, "rgba(170,225,255,0)");
-  rim.addColorStop(0.96, "rgba(170,225,255,0.26)");
-  rim.addColorStop(1, "rgba(205,240,255,0.55)");
-  g.fillStyle = rim;
-  g.fillRect(0, 0, size, size);
-
-  const shade = g.createLinearGradient(cx - radius, cy - radius, cx + radius, cy + radius);
-  shade.addColorStop(0, "rgba(2,6,14,0)");
-  shade.addColorStop(0.6, "rgba(2,6,14,0.16)");
-  shade.addColorStop(1, "rgba(2,6,14,0.82)");
-  g.fillStyle = shade;
-  g.fillRect(0, 0, size, size);
-  g.restore();
-
-  g.strokeStyle = "rgba(130,205,255,0.55)";
-  g.lineWidth = 2;
-  g.beginPath();
-  g.arc(cx, cy, radius + 1, 0, Math.PI * 2);
-  g.stroke();
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+function makeNebulaTexture() {
+  return makeSphericalTexture((data, offset, x, y, z) => {
+    const broad = noise3(x * 4 + 18, y * 5, z * 4);
+    const detail = noise3(x * 13, y * 15 + 9, z * 13);
+    const wisps = noise3(x * 38, y * 38, z * 38 + 4);
+    const belt = Math.exp(-(((y + x * 0.32 - Math.sin(z * 3) * 0.17) / 0.28) ** 2));
+    const cloud = belt * Math.max(0, broad * 0.65 + detail * 0.25 + wisps * 0.1 - 0.28) ** 1.5 * 4.5;
+    const warm = noise3(x * 2 - 5, y * 2, z * 2);
+    data[offset] = 3 + cloud * (24 + warm * 35);
+    data[offset + 1] = 5 + cloud * (34 + warm * 8);
+    data[offset + 2] = 11 + cloud * (85 - warm * 40);
+  });
 }
+
+function makePlanetTexture() {
+  return makeSphericalTexture((data, offset, x, y, z) => {
+    const broad = noise3(x * 6 + 5, y * 6, z * 6);
+    const detail = noise3(x * 38, y * 45, z * 38);
+    const jets = noise3(x * 18 + y * 9, y * 4, z * 18);
+    const dx = x - 0.25, dy = (y + 0.23) * 2.4, dz = z - 0.94;
+    const distance = dx * dx + dy * dy + dz * dz;
+    const swirl = Math.atan2(dy, dx) + distance * 32;
+    const storm = Math.exp(-distance * 22);
+    const flow = y * 34 + (broad - 0.5) * 2 + (jets - 0.5) * 1.7 + Math.sin(swirl) * storm * 2;
+    const bands = THREE.MathUtils.clamp(0.5 + Math.sin(flow) * 0.29 + Math.sin(flow * 2.2 + broad) * 0.12 + (jets - 0.5) * 0.22, 0, 1);
+    const spot = storm * (0.42 + Math.sin(swirl * 2) * 0.12);
+    const grain = (detail - 0.5) * 16;
+    data[offset] = THREE.MathUtils.lerp(110 + bands * 85, 155, spot) + grain;
+    data[offset + 1] = THREE.MathUtils.lerp(91 + bands * 91, 90, spot) + grain;
+    data[offset + 2] = THREE.MathUtils.lerp(73 + bands * 90, 54, spot) + grain;
+  });
+}
+
+const PLANET_VERTEX = `
+  varying vec2 vUv;
+  varying vec3 vWorldNormal;
+  varying vec3 vWorldPosition;
+  void main() {
+    vUv = uv;
+    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = worldPosition.xyz;
+    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+  }
+`;
 
 /* ---------- 环境 ---------- */
 
@@ -193,34 +155,66 @@ export function createSpaceEnvironment({ glowTexture, center }) {
   skyDome.renderOrder = -20;
   skyDome.frustumCulled = false;
 
-  const planetMaterial = new THREE.SpriteMaterial({
-    map: planetTexture,
-    transparent: true,
-    depthTest: true,
-    depthWrite: false,
-    fog: false
+  const sunDirection = { value: new THREE.Vector3(-600, 1030, -830).normalize() };
+  const planetMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      map: { value: planetTexture },
+      tint: { value: new THREE.Color() },
+      sunDirection
+    },
+    vertexShader: PLANET_VERTEX,
+    fragmentShader: `
+      uniform sampler2D map;
+      uniform vec3 tint;
+      uniform vec3 sunDirection;
+      varying vec2 vUv;
+      varying vec3 vWorldNormal;
+      void main() {
+        float day = max(dot(normalize(vWorldNormal), sunDirection), 0.0);
+        vec3 surface = texture2D(map, vUv).rgb * tint;
+        gl_FragColor = vec4(surface * (0.012 + pow(day, 0.85) * 1.25), 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `
   });
-  const planet = new THREE.Sprite(planetMaterial);
-  planet.scale.setScalar(700);
-  planet.renderOrder = 1;
+  const planet = new THREE.Mesh(new THREE.SphereGeometry(300, 64, 32), planetMaterial);
+  planet.name = "background-planet";
+  planet.rotation.set(0, 0.35, 0.09);
+  planet.renderOrder = -10;
 
-  const planetGlowMaterial = new THREE.SpriteMaterial({
-    map: glowTexture,
+  const atmosphereMaterial = new THREE.ShaderMaterial({
+    uniforms: { tint: { value: new THREE.Color() }, sunDirection },
+    vertexShader: PLANET_VERTEX,
+    fragmentShader: `
+      uniform vec3 tint;
+      uniform vec3 sunDirection;
+      varying vec3 vWorldNormal;
+      varying vec3 vWorldPosition;
+      void main() {
+        vec3 normal = normalize(vWorldNormal);
+        vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
+        float rim = pow(1.0 - abs(dot(normal, viewDirection)), 2.8);
+        float lit = smoothstep(-0.12, 0.45, dot(normal, sunDirection));
+        gl_FragColor = vec4(tint, rim * lit * 0.45);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+    side: THREE.BackSide,
     transparent: true,
-    opacity: 0.35,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    fog: false
+    depthWrite: false
   });
-  const planetGlow = new THREE.Sprite(planetGlowMaterial);
-  planetGlow.scale.setScalar(1050);
-  planetGlow.renderOrder = 0;
+  const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(300, 64, 32), atmosphereMaterial);
+  atmosphere.name = "planet-atmosphere";
+  atmosphere.scale.setScalar(1.025);
+  atmosphere.renderOrder = 1;
 
   const dustInner = makeDust(700, 160, 3, 0.35, center, glowTexture);
   const dustOuter = makeDust(1600, 320, 2, 0.22, center, glowTexture);
 
   const group = new THREE.Group();
-  group.add(skyDome, planetGlow, planet, dustInner.points, dustOuter.points);
+  group.add(skyDome, planet, atmosphere, dustInner.points, dustOuter.points);
 
   let currentTint = DEFAULT_TINT;
 
@@ -229,23 +223,29 @@ export function createSpaceEnvironment({ glowTexture, center }) {
     skyDome.material.color.copy(tint.clone().lerp(WHITE, 0.55));
     dustInner.points.material.color.copy(tint.clone().lerp(WHITE, 0.35));
     dustOuter.points.material.color.copy(tint.clone().lerp(WHITE, 0.35));
-    planetMaterial.color.copy(tint.clone().lerp(WHITE, 0.8));
-    planetGlowMaterial.color.copy(tint.clone().lerp(WHITE, 0.8));
+    planetMaterial.uniforms.tint.value.copy(tint).lerp(WHITE, 0.86);
+    atmosphereMaterial.uniforms.tint.value.copy(tint).lerp(new THREE.Color(0x78b2e2), 0.75);
     currentTint = rgb;
   }
 
-  function update(camera, player) {
+  function update(camera, player, dt = 0, lightDirection) {
     skyDome.position.copy(camera.position);
     planet.position.copy(camera.position).addScaledVector(PLANET_DIRECTION, PLANET_DISTANCE);
-    planetGlow.position.copy(planet.position);
+    const strength = lightDirection?.lengthSq();
+    if (Number.isFinite(strength) && strength > 0) sunDirection.value.copy(lightDirection).normalize();
+    if (Number.isFinite(dt) && dt > 0) planet.rotation.y += dt * 0.025;
+    atmosphere.position.copy(planet.position);
+    atmosphere.rotation.copy(planet.rotation);
     wrapDust(dustInner, player);
     wrapDust(dustOuter, player);
   }
 
   function getDebugReport() {
     return {
-      nebula: true,
-      planet: true,
+      nebula: skyDome.isMesh,
+      planet: planet.isMesh,
+      planetRotation: planet.rotation.y,
+      sunDirection: sunDirection.value.toArray(),
       dustLayers: 2,
       fence: false,
       tint: currentTint,

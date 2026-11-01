@@ -115,6 +115,135 @@
           arena.environment.fence === false
       );
 
+      {
+        const THREE = await win.Function("return import('three')")();
+        const { createSpaceEnvironment } = await win.Function("return import('/space-environment.js')")();
+        const glow = new THREE.Texture();
+        const environment = createSpaceEnvironment({ glowTexture: glow, center: { x: 0, y: 0, z: 0 } });
+        const owned = new Set(), textures = new Set(), disposed = new Map();
+        let sharedDisposed = 0;
+        glow.addEventListener("dispose", () => { sharedDisposed++; });
+        environment.group.traverse((object) => {
+          if (object.geometry) owned.add(object.geometry);
+          if (object.material) {
+            owned.add(object.material);
+            if (object.material.map && object.material.map !== glow) textures.add(object.material.map);
+            for (const uniform of Object.values(object.material.uniforms || {})) {
+              if (uniform.value?.isTexture && uniform.value !== glow) textures.add(uniform.value);
+            }
+          }
+        });
+        for (const resource of [...owned, ...textures]) {
+          resource.addEventListener("dispose", () => disposed.set(resource, (disposed.get(resource) || 0) + 1));
+        }
+        try {
+          const planet = environment.group.getObjectByName("background-planet");
+          const atmosphere = environment.group.getObjectByName("planet-atmosphere");
+          check("distant planet is a finite low-budget sphere with a separate thin atmosphere",
+            planet?.isMesh && atmosphere?.isMesh && planet.geometry.type === "SphereGeometry" &&
+            planet.geometry.index.count / 3 <= 4096 && atmosphere.geometry.index.count / 3 <= 4096 &&
+            [...planet.geometry.attributes.position.array].every(Number.isFinite) &&
+            !planet.castShadow && !planet.receiveShadow && atmosphere.material.transparent &&
+            atmosphere.scale.x > 1 && atmosphere.scale.x <= 1.04);
+          const maps = [...textures];
+          check("background colour maps keep sRGB and a bounded texture budget",
+            maps.length === 2 && maps.every((map) => map.colorSpace === THREE.SRGBColorSpace &&
+              map.image.width <= 1024 && map.image.height <= 512));
+          let seams = true, poles = true;
+          for (const map of maps) {
+            const { width, height } = map.image;
+            const pixels = map.image.getContext("2d").getImageData(0, 0, width, height).data;
+            for (let y = 0; y < height; y++) for (let c = 0; c < 4; c++) {
+              seams &&= pixels[(y * width) * 4 + c] === pixels[(y * width + width - 1) * 4 + c];
+            }
+            for (const y of [0, height - 1]) for (let x = 1; x < width; x++) for (let c = 0; c < 4; c++) {
+              poles &&= pixels[(y * width + x) * 4 + c] === pixels[(y * width) * 4 + c];
+            }
+          }
+          check("rotating background maps have no longitude seam", seams);
+          check("background maps meet continuously at both poles", poles);
+
+          const camera = new THREE.PerspectiveCamera(62, 1, 1, 6000);
+          const player = { x: 0, y: 0, z: 0 };
+          const sun = new THREE.Vector3(1, 0, 0);
+          const initialRotation = planet.rotation.y;
+          environment.update(camera, player, 1, sun);
+          const rotation = planet.rotation.y;
+          for (const dt of [0, -1, NaN]) environment.update(camera, player, dt, sun);
+          check("planet rotates only with a positive finite simulation time", rotation > initialRotation && planet.rotation.y === rotation);
+          const direction = planet.position.clone().normalize();
+          camera.position.set(1300, -900, 600);
+          camera.rotation.set(0.4, 1.5, 0);
+          environment.update(camera, player, 0, sun);
+          check("planet stays distant under translation and keeps its world direction on turns",
+            Math.abs(planet.position.distanceTo(camera.position) - 2600) < 0.0001 &&
+            planet.position.clone().sub(camera.position).normalize().distanceTo(direction) < 0.0001);
+          for (const invalid of [new THREE.Vector3(), new THREE.Vector3(NaN, 0, 1), new THREE.Vector3(Infinity, 0, 1)]) {
+            environment.update(camera, player, 0, invalid);
+          }
+          const actualSun = planet.material.uniforms.sunDirection.value;
+          check("invalid sunlight cannot corrupt the shared normalized planet and atmosphere direction",
+            actualSun.toArray().every(Number.isFinite) && Math.abs(actualSun.length() - 1) < 0.0001 &&
+            actualSun.distanceTo(sun) < 0.0001 && atmosphere.material.uniforms.sunDirection.value === actualSun);
+          const colourMap = planet.material.uniforms.map.value;
+          const nebula = environment.group.children.find((object) => object.material?.map && object.material.map !== glow);
+          const nebulaMap = nebula.material.map;
+          const tintBefore = planet.material.uniforms.tint.value.clone();
+          environment.setTint("255,166,98");
+          check("region tint updates the planet without rebuilding maps",
+            planet.material.uniforms.map.value === colourMap && nebula.material.map === nebulaMap &&
+            !planet.material.uniforms.tint.value.equals(tintBefore));
+
+          const renderer = new THREE.WebGLRenderer();
+          const target = new THREE.WebGLRenderTarget(64, 64);
+          const renderScene = new THREE.Scene();
+          const body = planet.clone(), air = atmosphere.clone();
+          body.position.set(0, 0, 0); air.position.set(0, 0, 0);
+          renderScene.add(body, air);
+          const view = new THREE.OrthographicCamera(-400, 400, 400, -400, 1, 2000);
+          view.position.set(0, 0, 1000); view.lookAt(0, 0, 0);
+          try {
+            renderer.setRenderTarget(target);
+            renderer.render(renderScene, view);
+            const left = new Uint8Array(4), right = new Uint8Array(4);
+            renderer.readRenderTargetPixels(target, 17, 32, 1, 1, left);
+            renderer.readRenderTargetPixels(target, 46, 32, 1, 1, right);
+            const night = left[0] + left[1] + left[2], day = right[0] + right[1] + right[2];
+            check("real GLSL planet rendering leaves the night side darker than the lit side",
+              night > 0 && day > 30 && day > night * 4);
+          } finally { target.dispose(); renderer.dispose(); }
+        } finally {
+          environment.dispose();
+          owned.forEach((resource) => resource.dispose());
+        }
+        check("background owned resources emit exactly one disposal each",
+          owned.size > 0 && textures.size === 2 && [...owned, ...textures].every((resource) => disposed.get(resource) === 1));
+        check("background disposal leaves the shared glow texture alive", sharedDisposed === 0);
+        glow.dispose();
+      }
+
+      check("game materials share existing environment reflections without adding stars",
+        api.getWorldDebug().lighting?.environment === true &&
+        api.getWorldDebug().lighting.environmentIntensity > 0 && api.getWorldDebug().lighting.starCount === 2600);
+      api.resumeGame();
+      const activeRotation = api.getWorldDebug().environment.planetRotation;
+      win.Function("draw(0.032)")();
+      const advancedRotation = api.getWorldDebug().environment.planetRotation;
+      api.pauseGame();
+      const pausedRotation = api.getWorldDebug().environment.planetRotation;
+      await nextFrames(win, 4);
+      for (let i = 0; i < 4; i++) win.Function("draw(0.032)")();
+      check("active game frames rotate the planet while paused frames freeze it",
+        advancedRotation > activeRotation && api.getWorldDebug().environment.planetRotation === pausedRotation);
+      const originalSun = api.getWorldDebug().environment.sunDirection;
+      api.setPlayerPosition(30000, 30000, 30000, 0.7, 0.18);
+      api.renderWorld();
+      const turnedSun = api.getWorldDebug().environment.sunDirection;
+      check("turning passes the actual finite normalized world sunlight to the distant planet",
+        turnedSun.every(Number.isFinite) && Math.abs(Math.hypot(...turnedSun) - 1) < 0.0001 &&
+        Math.hypot(...turnedSun.map((value, index) => value - originalSun[index])) > 0.01);
+      api.startGame();
+
       api.resolveRouteChoice("forge");
       const forgeTint = api.getWorldDebug().environment.tint;
       api.startGame();
@@ -123,6 +252,68 @@
         "region tint reaches the deep-space environment and resets on restart",
         forgeTint === "255,166,98" && driftTint === "98,228,255"
       );
+
+      {
+        const canvas = win.document.getElementById("game");
+        const copy = win.document.createElement("canvas");
+        copy.width = canvas.width; copy.height = canvas.height;
+        const ctx = copy.getContext("2d");
+        const pixels = () => {
+          ctx.clearRect(0, 0, copy.width, copy.height);
+          ctx.drawImage(canvas, 0, 0);
+          return ctx.getImageData(0, 0, copy.width, copy.height).data;
+        };
+        const changed = (first, second) => {
+          let count = 0;
+          for (let i = 0; i < first.length; i++) if (i % 4 !== 3 && Math.abs(first[i] - second[i]) > 2) count++;
+          return count;
+        };
+        const collectShield = () => {
+          const p = api.getScene().player;
+          api.spawnPowerUpAt(p.x, p.y, p.z, "shield");
+          api.handleCollisions(); api.renderWorld();
+        };
+        api.startGame(); api.pauseGame(); api.clearAsteroids(); api.renderWorld();
+        const before = pixels();
+        collectShield();
+        const protectedPixels = pixels();
+        check("collected shield changes persistent 3D ship rendering, not just HUD text",
+          win.Function("return state.shieldCharges;")() === 1 && api.getState().powerUpCount === 0 &&
+          before.some((value, index) => index % 4 !== 3 && value > 0) && changed(before, protectedPixels) > 64);
+        const protectedHealth = api.getScene().health;
+        const p = api.getScene().player;
+        api.spawnAsteroidAt(p.x, p.y, p.z, 30); api.handleCollisions(); api.renderWorld();
+        check("one shield absorbs a collision and its visual disappears without losing health",
+          api.getScene().health === protectedHealth && win.Function("return state.shieldCharges;")() === 0 &&
+          !api.getWorldDebug().shield.active && changed(before, pixels()) <= 64);
+        const identity = api.getWorldDebug().shield;
+        const gpu = api.getWorldDebug().gpu;
+        let reused = true;
+        for (let i = 0; i < 4; i++) {
+          collectShield();
+          const current = api.getWorldDebug();
+          reused &&= current.shield.geometryId === identity.geometryId && current.shield.materialId === identity.materialId &&
+            current.gpu.geometries === gpu.geometries && current.gpu.textures === gpu.textures;
+        }
+        check("repeated shield pickup reuses the same world-owned visual resources", reused);
+        api.startGame(); api.pauseGame(); api.clearAsteroids(); api.renderWorld();
+        check("restart clears the shield visual along with its existing charge",
+          win.Function("return state.shieldCharges;")() === 0 && !api.getWorldDebug().shield.active);
+        let follows = true;
+        for (const skin of ["default", "delta", "saucer"]) {
+          api.startGame(); api.pauseGame(); api.clearAsteroids();
+          api.selectSkin(skin); api.setPlayerPosition(31000, 30200, 30600, 0.6, 0.25); api.renderWorld();
+          const unprotected = pixels();
+          collectShield();
+          const report = api.getWorldDebug(), player = api.getScene().player;
+          const distance = Math.hypot(report.shield.position[0] - player.x, report.shield.position[1] - player.y, report.shield.position[2] - player.z);
+          follows &&= report.shield.active && Number.isFinite(report.shield.radius) && distance < report.shield.radius &&
+            report.shield.geometryId === identity.geometryId && report.shield.materialId === identity.materialId &&
+            changed(unprotected, pixels()) > 64;
+        }
+        check("shield stays visible and follows all three ship skins after moving and turning", follows);
+        api.selectSkin("default"); api.startGame();
+      }
 
       check("world debug exposes the fighter", typeof api.getWorldDebug === "function" && Boolean(api.getWorldDebug()?.fighter));
       const debug = api.getWorldDebug();
@@ -490,6 +681,130 @@
           crossedAt57.gates.length === 0 &&
           rejectedAt59.gates.length === 2
       );
+      {
+        const matchesNormal = (normal, expected) => Array.isArray(normal) && normal.length === 3 &&
+          normal.every((value, index) => Number.isFinite(value) && Math.abs(value - expected[index]) < 0.000001);
+        const poses = [
+          [0, 0, [0, 0, 1]],
+          [Math.PI / 2, 0, [-1, 0, 0]],
+          [-Math.PI / 2, 0, [1, 0, 0]],
+          [0, Math.PI / 6, [0, 0.5, 0.8660254037844386]],
+          [-Math.PI / 2, -Math.PI / 6, [0.8660254037844386, -0.5, 0]]
+        ];
+        for (const [yaw, pitch, expected] of poses) {
+          api.startGame(); api.pauseGame();
+          api.setPlayerPosition(30000, 30000, 30000, yaw, pitch);
+          api.beginRouteChoice(); api.renderWorld();
+          const gates = api.getWorldDebug().gates;
+          check(`warp gate world normals match spawn yaw ${yaw} pitch ${pitch}`,
+            gates.length === 2 && gates.every((gate) => matchesNormal(gate.normal, expected)));
+        }
+        const fixedNormals = api.getWorldDebug().gates.map((gate) => [...gate.normal]);
+        api.setPlayerPosition(30000, 30000, 30000, 0.2, 0.1);
+        api.renderWorld();
+        check("spawned warp gates do not turn to follow later player or camera motion",
+          api.getWorldDebug().gates.every((gate, index) => matchesNormal(gate.normal, fixedNormals[index])));
+        let safeNormals = true;
+        for (const normal of [undefined, {}, { x: 0, y: 0, z: 0 }, { x: NaN, y: 0, z: 1 }, { x: Infinity, y: 0, z: 1 }]) {
+          api.startGame(); api.pauseGame();
+          api.setPlayerPosition(30000, 30000, 30000, Math.PI / 2, 0);
+          api.beginRouteChoice();
+          win.Function("normal", "state.routeChoice.gates[0].normal = normal;")(normal);
+          api.renderWorld();
+          const gates = api.getWorldDebug().gates;
+          safeNormals &&= matchesNormal(gates[0].normal, [0, 0, 1]) && matchesNormal(gates[1].normal, [-1, 0, 0]);
+        }
+        check("legacy and invalid warp gate normals fall back safely without corrupting the sibling gate", safeNormals);
+      }
+
+      {
+        const THREE = await win.Function("return import('three')")();
+        const { createGateVisual } = await win.Function("return import('/world3d.js')")();
+        const model = createGateVisual();
+        const { aperture, film, sprite } = model.userData.gate;
+        const owned = new Set(), disposed = new Map();
+        let drawNodes = 0;
+        model.traverse((object) => {
+          if (object.isMesh || object.isSprite) drawNodes++;
+          if (object.geometry) owned.add(object.geometry);
+          if (object.material) owned.add(object.material);
+        });
+        owned.forEach((resource) => resource.addEventListener("dispose", () => disposed.set(resource, (disposed.get(resource) || 0) + 1)));
+        try {
+          const bounds = new THREE.Box3();
+          for (const part of model.children.filter((part) => part !== sprite)) bounds.union(new THREE.Box3().setFromObject(part));
+          aperture.geometry.computeBoundingSphere();
+          check("gate hardware keeps its XY envelope opening and draw-node budget",
+            Math.max(Math.abs(bounds.min.x), Math.abs(bounds.max.x), Math.abs(bounds.min.y), Math.abs(bounds.max.y)) <= 60 &&
+            Math.abs(aperture.geometry.boundingSphere.radius - 39) < 0.001 && drawNodes <= 28);
+          check("industrial gate hardware has real axial depth without inflating its radius",
+            bounds.max.z - bounds.min.z >= 12 && bounds.max.z - bounds.min.z <= 20);
+          check("warp entrance uses a lightweight transparent shader instead of a static colour disc",
+            film.isShaderMaterial && film.transparent && film.forceSinglePass && !film.depthWrite && film.side === THREE.DoubleSide &&
+            film.uniforms.time && film.uniforms.opacity && [...owned].filter((resource) => resource.isMaterial).every((material) => !material.map));
+          const renderer = new THREE.WebGLRenderer();
+          const target = new THREE.WebGLRenderTarget(64, 64);
+          const scene = new THREE.Scene();
+          scene.add(aperture.clone());
+          const camera = new THREE.OrthographicCamera(-46, 46, 46, -46, 1, 300);
+          camera.position.z = 100; camera.lookAt(0, 0, 0);
+          const pixelsAt = (time, opacity) => {
+            film.uniforms.time.value = time; film.uniforms.opacity.value = opacity;
+            renderer.setRenderTarget(target); renderer.render(scene, camera);
+            const pixels = new Uint8Array(64 * 64 * 4);
+            renderer.readRenderTargetPixels(target, 0, 0, 64, 64, pixels);
+            return pixels;
+          };
+          try {
+            const first = pixelsAt(0, 0.18), later = pixelsAt(1.7, 0.18);
+            let light = 0, changed = 0;
+            for (let i = 0; i < first.length; i++) if (i % 4 !== 3) {
+              light += first[i];
+              if (Math.abs(first[i] - later[i]) > 1) changed++;
+            }
+            check("advancing only portal shader time changes actual nonempty RGB output", light > 1000 && changed > 32);
+            const clear = pixelsAt(1.7, 0);
+            check("zero portal opacity produces no energy pixels", clear.every((value, index) => index % 4 === 3 || value === 0));
+            scene.fog = new THREE.FogExp2(0x000000, 0.015);
+            const fogged = pixelsAt(0, 0.18);
+            const fogLight = fogged.reduce((sum, value, index) => sum + (index % 4 === 3 ? 0 : value), 0);
+            check("portal energy fades with real scene fog instead of floating beyond the visible hardware",
+              fogLight > 0 && fogLight < light * 0.3);
+          } finally { target.dispose(); renderer.dispose(); }
+        } finally { owned.forEach((resource) => resource.dispose()); }
+        check("gate fixture releases each of its unique hardware and shader resources once",
+          owned.size > 0 && [...owned].every((resource) => disposed.get(resource) === 1));
+      }
+      api.startGame(); api.beginRouteChoice(); api.renderWorld();
+      const initialEnergyTime = api.getWorldDebug().gates[0].energyTime;
+      api.tick(0.1); api.renderWorld();
+      const advancedEnergyTime = api.getWorldDebug().gates[0].energyTime;
+      api.pauseGame();
+      for (let i = 0; i < 4; i++) win.Function("draw(0.032)")();
+      check("active portal flow advances while paused renders freeze its simulation time",
+        advancedEnergyTime > initialEnergyTime && api.getWorldDebug().gates.every((gate) => gate.energyTime === advancedEnergyTime));
+      let finiteEnergy = true;
+      for (const age of [NaN, Infinity]) {
+        win.Function("age", "state.routeChoice.gates[0].age = age;")(age);
+        api.renderWorld();
+        const gate = api.getWorldDebug().gates[0];
+        finiteEnergy &&= gate.energyTime === 0 &&
+          [gate.energyTime, gate.energyOpacity, gate.innerRotation, gate.apertureRotation].every(Number.isFinite);
+      }
+      check("nonfinite portal age cannot corrupt flow opacity or mechanical rotations", finiteEnergy);
+
+      api.setLanguage("en");
+      for (const [yaw, pitch] of [[Math.PI * 5 / 6, Math.PI / 6], [-Math.PI * 5 / 6, -Math.PI / 6]]) {
+        api.startGame(); api.pauseGame();
+        api.setPlayerPosition(30000, 30000, 30000, yaw, pitch);
+        api.beginRouteChoice(); api.renderWorld();
+        check(`mixed heading keeps long English gate labels above the entrance at yaw ${yaw}`,
+          api.getWorldDebug().gates.every((gate) =>
+            Math.abs(gate.labelScreenPosition[0] - gate.screenPosition[0]) < 0.000001 &&
+            gate.labelScreenPosition[1] - gate.screenPosition[1] > 0.1));
+      }
+      api.setLanguage("zh");
+
       // The flight leaves cores inside the pickup cull radius.
       api.startGame();
 
@@ -725,6 +1040,21 @@
           saucerShip.parts.rightWing.x > 0 &&
           Math.abs(saucerShip.parts.leftWing.x + saucerShip.parts.rightWing.x) < 0.01
       );
+      const saucerFlamesAlignWithOutlets = saucerShip.flames.length === 2 && saucerShip.flameDirections?.length === 2 &&
+        saucerShip.flames.every((flame, index) => {
+        const tail = flame.x < 0 ? saucerShip.parts.leftTail : saucerShip.parts.rightTail;
+        const direction = saucerShip.flameDirections[index];
+        const radius = Math.hypot(tail.x, tail.z);
+        const radialX = tail.x / radius, radialZ = tail.z / radius;
+        const dx = flame.x - tail.x, dz = flame.z - tail.z;
+        const outward = dx * radialX + dz * radialZ;
+        const crossTrack = Math.abs(dx * radialZ - dz * radialX);
+        const directionOutward = direction.x * radialX + direction.z * radialZ;
+        return crossTrack < 1 && outward > 13 && outward < 18 && directionOutward > 0.99;
+      }) && saucerShip.flames.some((flame) => flame.x < 0) && saucerShip.flames.some((flame) => flame.x > 0) &&
+        Math.abs(saucerShip.flames[0].x + saucerShip.flames[1].x) < 0.01 &&
+        Math.abs(saucerShip.flames[0].z - saucerShip.flames[1].z) < 0.01;
+      check("saucer exhaust flames align with and extend from their rear nacelle outlets", saucerFlamesAlignWithOutlets);
       api.selectSkin("default");
 
       const THREE = await win.Function("return import('three')")();
@@ -848,6 +1178,86 @@
       api.clearAsteroids();
       api.pauseGame();
       api.selectColor("blue");
+      const skinPreviews = [...win.document.querySelectorAll(".skin-preview")];
+      const previewApi = win.starRingShowcase;
+      const canvasCount = win.document.querySelectorAll("canvas").length;
+      const pixelDifference = (first, second) => {
+        let changed = 0;
+        for (let i = 0; i < first.length; i += 4) {
+          if (Math.max(Math.abs(first[i] - second[i]), Math.abs(first[i + 1] - second[i + 1]),
+            Math.abs(first[i + 2] - second[i + 2])) > 20) changed += 1;
+        }
+        return changed;
+      };
+      const previewPixels = () => skinPreviews.map((canvas) =>
+        canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data);
+      const clearPreviews = () => skinPreviews.forEach((canvas) =>
+        canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height));
+      const populatedPreviews = () => previewPixels().every((pixels) => {
+        let visible = 0;
+        for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) visible += 1;
+        return visible > 20;
+      });
+      let shipPreviewsWork = false;
+      if (skinPreviews.length === 3 && typeof previewApi?.renderShipPreviews === "function") {
+        const renderPreviews = previewApi.renderShipPreviews;
+        const stage = win.document.getElementById("stage");
+        const hiddenStage = stage.clientWidth === 0 && stage.clientHeight === 0;
+        const rendered = hiddenStage && renderPreviews.call(previewApi, skinPreviews, 0x62e4ff);
+        const blue = previewPixels();
+        let appColorRendered = false;
+        previewApi.renderShipPreviews = function (canvases, color) {
+          appColorRendered = renderPreviews.call(this, canvases, color);
+          return appColorRendered;
+        };
+        api.selectColor("red");
+        const red = previewPixels();
+        previewApi.renderShipPreviews = renderPreviews;
+        previewApi.renderShipPreviews = () => false;
+        clearPreviews();
+        api.selectColor("green");
+        const fallback = previewPixels();
+        check("unavailable 3D previews populate initially blank cards with the 2D fallback", populatedPreviews());
+        const settingsButton = win.document.getElementById("settings-button");
+        const closeSettingsButton = win.document.getElementById("settings-close-button");
+        previewApi.renderShipPreviews = undefined;
+        clearPreviews();
+        settingsButton.click();
+        const earlyFallback = populatedPreviews();
+        closeSettingsButton.click();
+        let reopenedWith3D = false;
+        previewApi.renderShipPreviews = function (canvases, color) {
+          reopenedWith3D = renderPreviews.call(this, canvases, color);
+          return reopenedWith3D;
+        };
+        clearPreviews();
+        settingsButton.click();
+        const latePreviewsPopulated = populatedPreviews();
+        closeSettingsButton.click();
+        previewApi.renderShipPreviews = renderPreviews;
+        check("reopening settings after showcase readiness replaces fallback with populated 3D previews",
+          earlyFallback && reopenedWith3D && latePreviewsPopulated);
+        api.selectColor("blue");
+        shipPreviewsWork = rendered && blue.every((pixels) => {
+          let visible = 0;
+          for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) visible += 1;
+          return visible > 50;
+        }) && blue.every((pixels, index) => blue.slice(index + 1).every((other) => pixelDifference(pixels, other) > 200)) &&
+          appColorRendered && blue.some((pixels, index) => pixelDifference(pixels, red[index]) > 0) &&
+          fallback.every((pixels) => {
+            let visible = 0;
+            for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) visible += 1;
+            return visible > 20;
+          }) && win.document.querySelectorAll("canvas").length === canvasCount;
+      }
+      check("settings preview renders three distinct game ships, follows color, and falls back without another canvas",
+        shipPreviewsWork);
+      check("settings ship previews retain enough source pixels for enlarged high-density cards",
+        skinPreviews.length === 3 && skinPreviews.every((canvas) => {
+          const bounds = canvas.getBoundingClientRect();
+          return bounds.width > 0 && bounds.height > 0 &&
+            canvas.width >= Math.ceil(bounds.width * 2) && canvas.height >= Math.ceil(bounds.height * 2);
+        }));
       for (const skin of ["delta", "saucer", "default"]) {
         api.selectSkin(skin);
         api.renderWorld();
@@ -1070,15 +1480,24 @@
         fullscreenButton.getAttribute("aria-pressed") === "false";
       const settingsPanel = landingDoc.querySelector(".settings-panel");
       const settingsStyle = settingsPanel ? showcaseWin.getComputedStyle(settingsPanel) : null;
-      const settingsLayered = Boolean(settingsPanel && settingsStyle) &&
+      const shadowBlur = settingsStyle ? [...settingsStyle.boxShadow.matchAll(/-?[\d.]+px\s+-?[\d.]+px\s+([\d.]+)px/g)]
+        .reduce((maximum, match) => Math.max(maximum, Number.parseFloat(match[1])), 0) : Infinity;
+      const settingsLightweight = Boolean(settingsPanel && settingsStyle) &&
         Number.parseFloat(settingsStyle.borderRadius) >= 16 &&
         settingsStyle.boxShadow !== "none" &&
+        shadowBlur <= 48 &&
         landingDoc.querySelectorAll(".settings-section").length === 5 &&
         landingDoc.querySelector(".toggle-btn.active")?.getAttribute("aria-pressed") === "true";
       check(
-        "settings panel has a layered HUD treatment",
-        settingsLayered
+        "settings panel keeps its structure with a lighter visual treatment",
+        settingsLightweight
       );
+      const previousSettingsScroll = settingsPanel.scrollTop;
+      settingsPanel.scrollTop = settingsPanel.scrollHeight;
+      check("settings hides its scrollbar while all content remains scrollable without horizontal overflow",
+        settingsStyle.scrollbarWidth === "none" &&
+          settingsPanel.scrollTop > 0 && settingsPanel.scrollWidth <= settingsPanel.clientWidth);
+      settingsPanel.scrollTop = previousSettingsScroll;
       let fullscreenToggleWorks = fullscreenButton?.hidden === true;
       if (fullscreenSupported) {
         await showcase.toggleFullscreen();

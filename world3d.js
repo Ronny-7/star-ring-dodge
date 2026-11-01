@@ -26,6 +26,7 @@ let camera = null;
 let starField = null;
 let worldSize = null;
 let shipGroup = null;
+let shieldMesh = null;
 let sunLight = null;
 let rimLight = null;
 let currentShipColor = 0x8fe6ff;
@@ -264,9 +265,10 @@ function buildStarField(count) {
     positions[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * radius;
 
     const warm = Math.random();
-    colors[i * 3] = 0.75 + warm * 0.25;
-    colors[i * 3 + 1] = 0.8 + warm * 0.18;
-    colors[i * 3 + 2] = 1;
+    const brightness = 0.08 + Math.pow(Math.random(), 5) * 0.92;
+    colors[i * 3] = brightness * (0.67 + warm * 0.33);
+    colors[i * 3 + 1] = brightness * (0.78 + warm * 0.12);
+    colors[i * 3 + 2] = brightness * (1 - warm * 0.35);
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -290,7 +292,7 @@ function tintShip(group, color) {
   group.userData.applyLivery(color);
 }
 
-function addFlame(group, x, y, z, radius, length) {
+function addFlame(group, x, y, z, radius, length, direction) {
   const material = new THREE.MeshBasicMaterial({
     color: 0xffffff,
     transparent: true,
@@ -299,8 +301,8 @@ function addFlame(group, x, y, z, radius, length) {
     depthWrite: false
   });
   const flame = new THREE.Mesh(new THREE.ConeGeometry(radius, length, 10, 1, true), material);
-  flame.rotation.x = -Math.PI / 2;
-  flame.position.set(x, y, z - length / 2);
+  flame.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+  flame.position.set(x, y, z).addScaledVector(direction, length / 2);
   group.add(flame);
   group.userData.flames.push(flame);
   return flame;
@@ -324,9 +326,9 @@ function buildShip(color, skin = "default") {
       hullTexture: makeHullTexture()
     });
     for (const side of [-1, 1]) {
-      const flame = addFlame(saucer, side * 25, -1, -61, 3, 15);
-      flame.rotation.y = -side * Math.PI / 8;
-      flame.position.x += side * Math.sin(Math.PI / 8) * 7.5;
+      const direction = new THREE.Vector3(side * Math.sin(Math.PI / 8), 0, -Math.cos(Math.PI / 8));
+      const nozzleRadius = 51.5 + 6.25;
+      addFlame(saucer, direction.x * nozzleRadius, -0.5, direction.z * nozzleRadius, 3, 15, direction);
     }
     saucer.scale.setScalar(1.6);
     return saucer;
@@ -573,13 +575,39 @@ function getDebugReport() {
     elite: eliteDebugReport(),
     pickups: pickupDebugReport(),
     world: worldSize ? { ...worldSize } : null,
+    shield: shieldMesh ? {
+      active: shieldMesh.visible,
+      position: shieldMesh.position.toArray(),
+      radius: shieldMesh.scale.x,
+      geometryId: shieldMesh.geometry.uuid,
+      materialId: shieldMesh.material.uuid
+    } : null,
+    lighting: {
+      exposure: renderer?.toneMappingExposure,
+      environment: Boolean(scene?.environment),
+      environmentIntensity: scene?.environmentIntensity,
+      starCount: starField?.geometry.attributes.position.count ?? 0
+    },
     fence: false,
     environment: spaceEnvironment ? {
       ...spaceEnvironment.getDebugReport(),
       fogDensity: scene.fog.density,
       hazeBoost: regionMechanicSource?.hazeBoost || 0
     } : null,
-    gates: lastGates,
+    gates: lastGates.map((gate, index) => {
+      const group = sceneObjects.gates.children[index];
+      const { film, inner, aperture, sprite } = group.userData.gate;
+      return {
+        ...gate,
+        normal: new THREE.Vector3(0, 0, 1).applyQuaternion(group.getWorldQuaternion(new THREE.Quaternion())).toArray(),
+        screenPosition: group.getWorldPosition(new THREE.Vector3()).project(camera).toArray(),
+        labelScreenPosition: sprite.getWorldPosition(new THREE.Vector3()).project(camera).toArray(),
+        energyTime: film.uniforms?.time?.value ?? null,
+        energyOpacity: film.uniforms?.opacity?.value ?? film.opacity,
+        innerRotation: inner.rotation.z,
+        apertureRotation: aperture.rotation.z
+      };
+    }),
     region: {
       vortices: sceneObjects.region.children.length,
       vortexNormals: sceneObjects.region.children.map((group) => new THREE.Vector3(0, 0, 1)
@@ -597,6 +625,8 @@ function getDebugReport() {
     flame.getWorldPosition(position);
     return roundVector(shipGroup.worldToLocal(position));
   });
+  const flameDirections = (flames || []).map((flame) =>
+    roundVector(new THREE.Vector3(0, 1, 0).applyQuaternion(flame.quaternion)));
 
   return {
     ...base,
@@ -615,6 +645,7 @@ function getDebugReport() {
       engineColor: "#" + materials.engine.color.getHexString(),
       detail: fighter.detail || null,
       flames: flamePositions,
+      flameDirections,
       flameCount: flames.length,
       navLights: navLights || [],
       textureCount: (ownTextures || []).length
@@ -632,17 +663,20 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.55;
+  renderer.toneMappingExposure = 1.3;
 
   fighterEnvironment = createStudioEnvironment(renderer);
 
   scene = new THREE.Scene();
+  scene.environment = fighterEnvironment;
+  scene.environmentIntensity = 0.35;
   baseFogDensity = tuning.fogDensity3d || 0.00016;
   scene.fog = new THREE.FogExp2(0x03060f, baseFogDensity);
 
   camera = new THREE.PerspectiveCamera(tuning.fovDegrees || 62, 1, 1, 6000);
 
-  sunLight = new THREE.DirectionalLight(0xfff3e0, 3.1);
+  sunLight = new THREE.DirectionalLight(0xfff3e0, 2.8);
+  const sunlightDirection = new THREE.Vector3();
   sunLight.position.set(-600, 900, -400);
   sunLight.castShadow = true;
   sunLight.shadow.mapSize.set(2048, 2048);
@@ -658,16 +692,16 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
   sunLight.shadow.bias = -0.0015;
   scene.add(sunLight);
 
-  rimLight = new THREE.DirectionalLight(0x62e4ff, 1.5);
+  rimLight = new THREE.DirectionalLight(0x62e4ff, 1.3);
   rimLight.position.set(700, -200, 600);
   scene.add(rimLight);
 
   // Fill from the opposite side so shadows never go fully black.
-  const fill = new THREE.DirectionalLight(0x8fa6d8, 0.9);
+  const fill = new THREE.DirectionalLight(0x8fa6d8, 0.7);
   fill.position.set(500, 400, 800);
   scene.add(fill);
 
-  scene.add(new THREE.AmbientLight(0x3a4a70, 1.8));
+  scene.add(new THREE.AmbientLight(0x3a4a70, 1.35));
   regionPulseLight = new THREE.PointLight(0x7a7eff, 0, 1200, 2);
   scene.add(regionPulseLight);
 
@@ -689,6 +723,51 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
   currentSkin = skin;
   shipGroup = buildShip(color, skin);
   scene.add(shipGroup);
+
+  shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), new THREE.ShaderMaterial({
+    uniforms: {
+      ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
+      color: { value: new THREE.Color(0x8affd1) },
+      opacity: { value: 0.9 }
+    },
+    vertexShader: `
+      varying vec3 vShieldNormal;
+      varying vec3 vShieldView;
+      #include <fog_pars_vertex>
+      void main() {
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        vShieldNormal = normalize(normalMatrix * normal);
+        vShieldView = -mvPosition.xyz;
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float opacity;
+      varying vec3 vShieldNormal;
+      varying vec3 vShieldView;
+      #include <fog_pars_fragment>
+      void main() {
+        float rim = pow(1.0 - clamp(dot(normalize(vShieldNormal), normalize(vShieldView)), 0.0, 1.0), 3.0);
+        gl_FragColor = vec4(color, (0.008 + rim * 0.55) * opacity);
+        #include <colorspace_fragment>
+        #include <fog_fragment>
+      }
+    `,
+    fog: true, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, toneMapped: false
+  }));
+  shieldMesh.visible = false;
+  scene.add(shieldMesh);
+  const shieldOffset = new THREE.Vector3();
+  function fitShieldToShip() {
+    shipGroup.updateWorldMatrix(true, true);
+    const sphere = new THREE.Box3().setFromObject(shipGroup.userData.hullRoot).getBoundingSphere(new THREE.Sphere());
+    shieldMesh.scale.setScalar(sphere.radius + 12);
+    shieldOffset.copy(sphere.center);
+  }
+  fitShieldToShip();
 
   scene.add(sceneObjects.gates);
   scene.add(sceneObjects.region);
@@ -712,6 +791,7 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       disposeObject(shipGroup);
       shipGroup = buildShip(currentShipColor, name);
       scene.add(shipGroup);
+      fitShieldToShip();
     },
     getDebugReport,
     syncGates,
@@ -727,6 +807,9 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       // starboard (-x local) wing.
       shipGroup.position.set(state.player.x, state.player.y, state.player.z);
       shipGroup.rotation.set(-state.player.pitch, -state.player.yaw, state.player.roll, "YXZ");
+      shieldMesh.visible = state.shieldCharges > 0;
+      shieldMesh.position.copy(shieldOffset).applyQuaternion(shipGroup.quaternion).add(shipGroup.position);
+      shieldMesh.material.uniforms.opacity.value = 0.9 + Math.sin(state.pulseTime * 3) * 0.1;
       if (shipGroup.userData.glow) {
         shipGroup.userData.glow.intensity = 60 + state.player.thrust * 100;
       }
@@ -763,11 +846,13 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       );
       regionPulseLight.position.copy(camera.position);
 
-      spaceEnvironment?.update(camera, state.player, dt);
       starField.position.copy(camera.position);
       sunLight.position.set(camera.position.x - 600, camera.position.y + 900, camera.position.z - 400);
       sunLight.target.position.set(state.player.x, state.player.y, state.player.z);
       sunLight.target.updateMatrixWorld();
+      sunlightDirection.subVectors(sunLight.position, sunLight.target.position).normalize();
+      const activeDt = state.running && !state.paused && !state.gameOver ? dt : 0;
+      spaceEnvironment?.update(camera, state.player, activeDt, sunlightDirection);
 
       syncDynamic(state);
       syncRegionMechanic(state.regionMechanic);
@@ -783,6 +868,7 @@ export function createWorld({ world, tuning, skin = "default", color = 0x8fe6ff 
       clearRegionMechanic();
       for (const [asteroid, mesh] of [...sceneObjects.rocks]) releaseRock(asteroid, mesh);
       disposeObject(scene);
+      shieldMesh = null;
       starField?.material?.map?.dispose();
       spaceEnvironment?.dispose();
       spaceEnvironment = null;
@@ -1002,27 +1088,63 @@ function disposeGateGroup(group) {
 
 // A warp gate is a piece of hardware, not a hoop: an armoured outer ring with
 // segment blocks, a rotating inner ring with chevrons, and a faint aperture.
-function createGateVisual() {
+export function createGateVisual() {
   const group = new THREE.Group();
-  const shell = new THREE.MeshStandardMaterial({ metalness: 0.65, roughness: 0.35, emissiveIntensity: 0.35 });
-  const trim = new THREE.MeshStandardMaterial({ metalness: 0.8, roughness: 0.25 });
+  const shell = new THREE.MeshStandardMaterial({ color: 0x8b969b, metalness: 0.72, roughness: 0.42, emissiveIntensity: 0.25 });
+  const trim = new THREE.MeshStandardMaterial({ color: 0x59656a, metalness: 0.8, roughness: 0.35 });
   const glow = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, toneMapped: false });
-  const film = new THREE.MeshBasicMaterial({
-    transparent: true, opacity: 0.055, side: THREE.DoubleSide,
+  const film = new THREE.ShaderMaterial({
+    uniforms: {
+      ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
+      color: { value: new THREE.Color(0xffffff) },
+      time: { value: 0 },
+      opacity: { value: 0.18 }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      #include <fog_pars_vertex>
+      void main() {
+        vUv = uv;
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float time;
+      uniform float opacity;
+      varying vec2 vUv;
+      #include <fog_pars_fragment>
+      void main() {
+        vec2 p = vUv * 2.0 - 1.0;
+        float radius = length(p);
+        float angle = radius > 0.0001 ? atan(p.y, p.x) : 0.0;
+        float ripple = pow(0.5 + 0.5 * sin(radius * 34.0 - time * 2.0 + sin(angle * 3.0 + time * 0.6)), 5.0);
+        float spiral = pow(0.5 + 0.5 * sin(angle * 3.0 + radius * 18.0 - time * 1.4), 12.0);
+        float fade = smoothstep(0.05, 0.3, radius) * (1.0 - smoothstep(0.92, 1.0, radius));
+        float strength = (0.05 + ripple * 0.45 + spiral * 0.7) * fade;
+        gl_FragColor = vec4(color * (0.55 + strength * 0.65), strength * opacity);
+        #include <colorspace_fragment>
+        #include <fog_fragment>
+      }
+    `,
+    fog: true, transparent: true, side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false
   });
 
   const outer = new THREE.Mesh(new THREE.TorusGeometry(52, 3.6, 8, 48), shell);
+  outer.geometry.scale(1, 1, 1.8);
   group.add(outer);
 
   const segments = new THREE.Group();
   for (let i = 0; i < 8; i += 1) {
     const angle = (i / 8) * Math.PI * 2;
-    const segment = new THREE.Mesh(new THREE.BoxGeometry(15, 7.5, 8), shell);
+    const segment = new THREE.Mesh(new THREE.BoxGeometry(15, 7.5, 14), shell);
     segment.position.set(Math.cos(angle) * 52, Math.sin(angle) * 52, 0);
     segment.rotation.z = angle;
     segments.add(segment);
-    const vent = new THREE.Mesh(new THREE.BoxGeometry(9, 1.1, 8.4), glow);
+    const vent = new THREE.Mesh(new THREE.BoxGeometry(9, 1.1, 14.4), glow);
     vent.position.set(Math.cos(angle) * 52, Math.sin(angle) * 52, 0);
     vent.rotation.z = angle;
     segments.add(vent);
@@ -1030,6 +1152,7 @@ function createGateVisual() {
   group.add(segments);
 
   const inner = new THREE.Group();
+  inner.position.z = -2.5;
   inner.add(new THREE.Mesh(new THREE.TorusGeometry(41, 1.5, 6, 48), glow));
   for (let i = 0; i < 4; i += 1) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
@@ -1045,6 +1168,7 @@ function createGateVisual() {
   group.add(inner);
 
   const aperture = new THREE.Mesh(new THREE.CircleGeometry(39, 48), film);
+  aperture.position.z = 1.6;
   group.add(aperture);
 
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
@@ -1074,17 +1198,25 @@ function syncGates(gates) {
       sceneObjects.gates.add(group);
     }
     const { segments, inner, aperture, sprite, shell, trim, glow, film } = group.userData.gate;
-    shell.color.set(`rgb(${gate.tint})`);
-    shell.emissive.set(`rgb(${gate.tint})`).multiplyScalar(0.55);
-    trim.color.set(`rgb(${gate.tint})`).lerp(new THREE.Color(0xffffff), 0.45);
+    const normal = gate.normal;
+    const length = normal && Number.isFinite(normal.x) && Number.isFinite(normal.y) && Number.isFinite(normal.z)
+      ? Math.hypot(normal.x, normal.y, normal.z) : 0;
+    const direction = new THREE.Vector3(0, 0, 1);
+    if (Number.isFinite(length) && length > 0) direction.set(normal.x / length, normal.y / length, normal.z / length);
+    group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+    // Keep the billboard above the entrance in screen space, independent of the fixed hardware pose.
+    sprite.position.set(0, 90, 0).applyQuaternion(camera.quaternion).applyQuaternion(group.quaternion.clone().invert());
+    shell.emissive.set(`rgb(${gate.tint})`).multiplyScalar(0.08);
     glow.color.set(`rgb(${gate.tint})`).lerp(new THREE.Color(0xffffff), 0.2);
-    film.color.set(`rgb(${gate.tint})`);
+    film.uniforms.color.value.copy(glow.color);
     // The inner assembly turns; the armoured shell stays put so the gate reads
     // as a fixed structure you fly through.
-    inner.rotation.z = gate.age || 0;
-    aperture.rotation.z = -(gate.age || 0) * 0.35;
-    film.opacity = 0.045 + Math.sin((gate.age || 0) * 1.6) * 0.012;
-    segments.rotation.z = Math.sin((gate.age || 0) * 0.4) * 0.02;
+    const age = Number.isFinite(gate.age) ? gate.age : 0;
+    inner.rotation.z = age;
+    aperture.rotation.z = -age * 0.35;
+    film.uniforms.time.value = age;
+    film.uniforms.opacity.value = 0.18 + Math.sin(age * 1.6) * 0.025;
+    segments.rotation.z = Math.sin(age * 0.4) * 0.02;
     const texture = gateLabelTexture(gate);
     if (sprite.material.map !== texture) {
       sprite.material.map = texture;

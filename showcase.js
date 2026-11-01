@@ -293,6 +293,74 @@ function initialize() {
     };
   }
 
+  function renderShipPreviews(canvases, nextColor) {
+    const validColor = Number.isFinite(nextColor) || (typeof nextColor === "string" && nextColor.trim().length > 0);
+    if (!Array.isArray(canvases) || canvases.length !== ships.length || !validColor ||
+        canvases.some((canvas) => !canvas.getContext("2d")) ||
+        ships.some((ship) => typeof ship.userData.applyLivery !== "function")) return false;
+
+    const size = 256;
+    const target = new THREE.WebGLRenderTarget(size, size, { depthBuffer: true, stencilBuffer: false });
+    target.texture.colorSpace = THREE.SRGBColorSpace;
+    const pixels = new Uint8Array(size * size * 4);
+    const previousTarget = renderer.getRenderTarget();
+    const previousClearColor = renderer.getClearColor(new THREE.Color()).clone();
+    const previousClearAlpha = renderer.getClearAlpha();
+    const previousAutoClear = renderer.autoClear;
+    const previousRootVisibility = [shipRoot.visible, rewardsRoot.visible, rocksRoot.visible];
+    const previousVisibility = ships.map((ship) => ship.visible);
+    const previousRotations = ships.map((ship) => ship.rotation.clone());
+
+    try {
+      ships.forEach((ship) => ship.userData.applyLivery(nextColor));
+      shipRoot.visible = true;
+      rewardsRoot.visible = false;
+      rocksRoot.visible = false;
+      renderer.setRenderTarget(target);
+      renderer.setClearColor(0x000000, 0);
+      renderer.autoClear = true;
+
+      const previewCamera = new THREE.PerspectiveCamera(34, 1, 0.1, 3000);
+      const viewDirection = new THREE.Vector3(0.3, 0.45, 1).normalize();
+      ships.forEach((ship, index) => {
+        ships.forEach((other, otherIndex) => { other.visible = index === otherIndex; });
+        ship.rotation.set(0.6, 0, 0);
+        ship.updateWorldMatrix(true, true);
+        const sphere = new THREE.Box3().setFromObject(ship).getBoundingSphere(new THREE.Sphere());
+        const distance = sphere.radius / Math.sin(THREE.MathUtils.degToRad(previewCamera.fov / 2)) * 1.12;
+        previewCamera.position.copy(sphere.center).addScaledVector(viewDirection, distance);
+        previewCamera.lookAt(sphere.center);
+        previewCamera.updateProjectionMatrix();
+        renderer.render(scene, previewCamera);
+        renderer.readRenderTargetPixels(target, 0, 0, size, size, pixels);
+
+        canvases[index].width = size;
+        canvases[index].height = size;
+        const context = canvases[index].getContext("2d");
+        const image = context.createImageData(size, size);
+        for (let y = 0; y < size; y += 1) {
+          const source = (size - 1 - y) * size * 4;
+          image.data.set(pixels.subarray(source, source + size * 4), y * size * 4);
+        }
+        context.putImageData(image, 0, 0);
+      });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      ships.forEach((ship, index) => {
+        ship.userData.applyLivery(color);
+        ship.visible = previousVisibility[index];
+        ship.rotation.copy(previousRotations[index]);
+      });
+      [shipRoot.visible, rewardsRoot.visible, rocksRoot.visible] = previousRootVisibility;
+      renderer.setRenderTarget(previousTarget);
+      renderer.setClearColor(previousClearColor, previousClearAlpha);
+      renderer.autoClear = previousAutoClear;
+      target.dispose();
+    }
+  }
+
   function orbitBy(dx, dy) {
     orbit.yaw -= dx * ORBIT_SPEED;
     orbit.pitch = THREE.MathUtils.clamp(orbit.pitch + dy * ORBIT_SPEED, -MAX_TILT, MAX_TILT);
@@ -528,7 +596,9 @@ function initialize() {
 
   resize();
   selectView("all");
-  window.starRingShowcase = { getDebugReport, selectView, selectModel, clearFocus, orbitBy, zoomBy, toggleFullscreen };
+  window.starRingShowcase = {
+    getDebugReport, selectView, selectModel, clearFocus, orbitBy, zoomBy, toggleFullscreen, renderShipPreviews
+  };
   window.starRingShowcaseReady = true;
   if (!reducedMotion) requestAnimationFrame(animate);
 }

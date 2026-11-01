@@ -756,6 +756,7 @@ function openSettings() {
   if (!settingsOverlay.classList.contains("hidden")) return;
   settingsReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : settingsButton;
   settingsOverlay.classList.remove("hidden");
+  renderSkinPreviews();
   settingsOverlay.setAttribute("aria-hidden", "false");
   settingsButton.setAttribute("aria-expanded", "true");
   applyLanguageToDOM();
@@ -822,6 +823,9 @@ const SKIN_SHAPES = {
 
 function renderSkinPreviews() {
   const col = COLORS[activeColor];
+  const previews = Array.from(document.querySelectorAll(".skin-preview"));
+  if (window.starRingShowcase?.renderShipPreviews?.(previews, col.mid)) return;
+
   document.querySelectorAll(".skin-preview").forEach((preview) => {
     const skinName = preview.closest(".skin-card").dataset.skin;
     const pctx = preview.getContext("2d");
@@ -1069,7 +1073,7 @@ function updateRegionFlow(dt) {
   if (state.regionTimer >= tuning.routeChoiceInterval) beginRouteChoice();
 }
 
-function makeRouteGate(regionId, x, y, z) {
+function makeRouteGate(regionId, x, y, z, normal = { x: 0, y: 0, z: 1 }) {
   const region = regions[regionId];
   const margin = getTuningValue("routeGateMargin", 120);
   return {
@@ -1077,6 +1081,7 @@ function makeRouteGate(regionId, x, y, z) {
     x: clamp(x, margin, state.world.width - margin),
     y: clamp(y, margin, state.world.height - margin),
     z: clamp(z, margin, state.world.depth - margin),
+    normal: { ...normal },
     age: 0,
     label: region ? regionDisplayName(region) : regionId,
     tint: region ? region.tint : "98,228,255"
@@ -1100,8 +1105,8 @@ function beginRouteChoice() {
   state.routeChoice.timer = tuning.routeChoiceDuration;
   state.routeChoice.bannerTimer = 2.5;
   state.routeChoice.gates = [
-    makeRouteGate(picks[0], baseX - right.x * 260, baseY + 40, baseZ - right.z * 260),
-    makeRouteGate(picks[1], baseX + right.x * 260, baseY - 40, baseZ + right.z * 260)
+    makeRouteGate(picks[0], baseX - right.x * 260, baseY + 40, baseZ - right.z * 260, forward),
+    makeRouteGate(picks[1], baseX + right.x * 260, baseY - 40, baseZ + right.z * 260, forward)
   ];
   playSound("pickup");
 }
